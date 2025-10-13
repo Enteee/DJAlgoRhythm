@@ -232,40 +232,6 @@ dev-status: ## Show development environment status
 	@echo "Docker: $(shell docker --version 2>/dev/null || echo 'not found')"
 	@echo "Docker Compose: $(shell docker-compose --version 2>/dev/null || echo 'not found')"
 
-# Environment targets
-env-example: ## Create .env.example file
-	@echo "Creating .env.example..."
-	@cat > .env.example << 'EOF'
-# WhatDj v2 Configuration
-# Copy this file to .env and fill in your values
-
-# WhatsApp Configuration (Required)
-WHATDJ_WHATSAPP_GROUP_JID=120363123456789@g.us
-WHATDJ_WHATSAPP_DEVICE_NAME=WhatDj
-
-# Spotify Configuration (Required)
-WHATDJ_SPOTIFY_CLIENT_ID=your_spotify_client_id
-WHATDJ_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-WHATDJ_SPOTIFY_PLAYLIST_ID=your_playlist_id
-WHATDJ_SPOTIFY_REDIRECT_URL=http://localhost:8080/callback
-
-# LLM Configuration (Optional)
-WHATDJ_LLM_PROVIDER=none
-WHATDJ_LLM_API_KEY=
-WHATDJ_LLM_MODEL=
-WHATDJ_LLM_THRESHOLD=0.65
-
-# Server Configuration
-WHATDJ_SERVER_PORT=8080
-WHATDJ_LOG_LEVEL=info
-WHATDJ_CONFIRM_TIMEOUT=120
-
-# File Paths
-WHATDJ_WHATSAPP_SESSION_PATH=./whatsapp_session.db
-WHATDJ_SPOTIFY_TOKEN_PATH=./spotify_token.json
-EOF
-	@echo "Created .env.example - copy to .env and configure"
-
 # CI/CD helpers
 ci-deps: ## Install CI dependencies
 	@echo "Installing CI dependencies..."
