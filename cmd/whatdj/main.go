@@ -16,12 +16,14 @@ import (
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
+	"whatdj/internal/chat"
+	"whatdj/internal/chat/telegram"
+	"whatdj/internal/chat/whatsapp"
 	"whatdj/internal/core"
 	httpserver "whatdj/internal/http"
 	"whatdj/internal/llm"
 	"whatdj/internal/spotify"
 	"whatdj/internal/store"
-	"whatdj/internal/whatsapp"
 )
 
 var (
@@ -32,8 +34,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "whatdj",
-	Short: "WhatDj v2 - Live WhatsApp → Spotify DJ",
-	Long: `WhatDj v2 is a production-grade service that listens to WhatsApp group messages
+	Short: "WhatDj v2 - Live Chat → Spotify DJ",
+	Long: `WhatDj v2 is a production-grade service that listens to chat messages (Telegram/WhatsApp)
 and automatically adds requested tracks to a Spotify playlist with AI disambiguation.`,
 	RunE: runWhatDj,
 }
@@ -50,8 +52,13 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .env)")
 	rootCmd.PersistentFlags().String("log-level", "info", "log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().Bool("whatsapp-enabled", false, "Enable WhatsApp integration")
 	rootCmd.PersistentFlags().String("whatsapp-group-jid", "", "WhatsApp group JID")
 	rootCmd.PersistentFlags().String("whatsapp-device-name", "WhatDj", "WhatsApp device name")
+	rootCmd.PersistentFlags().Bool("telegram-enabled", true, "Enable Telegram integration")
+	rootCmd.PersistentFlags().String("telegram-bot-token", "", "Telegram bot token")
+	rootCmd.PersistentFlags().Int64("telegram-group-id", 0, "Telegram group ID")
+	rootCmd.PersistentFlags().String("telegram-group-name", "", "Telegram group name")
 	rootCmd.PersistentFlags().String("spotify-client-id", "", "Spotify client ID")
 	rootCmd.PersistentFlags().String("spotify-client-secret", "", "Spotify client secret")
 	rootCmd.PersistentFlags().String("spotify-playlist-id", "", "Spotify playlist ID")
@@ -94,12 +101,22 @@ func initConfig() {
 func buildConfig() *core.Config {
 	cfg := core.DefaultConfig()
 
+	cfg.WhatsApp.Enabled = viper.GetBool("whatsapp-enabled")
 	cfg.WhatsApp.GroupJID = viper.GetString("whatsapp-group-jid")
 	cfg.WhatsApp.GroupName = viper.GetString("whatsapp-group-name")
 	cfg.WhatsApp.DeviceName = viper.GetString("whatsapp-device-name")
 	cfg.WhatsApp.SessionPath = viper.GetString("whatsapp-session-path")
 	if cfg.WhatsApp.SessionPath == "" {
 		cfg.WhatsApp.SessionPath = "./whatsapp_session.db"
+	}
+
+	cfg.Telegram.Enabled = viper.GetBool("telegram-enabled")
+	cfg.Telegram.BotToken = viper.GetString("telegram-bot-token")
+	cfg.Telegram.GroupID = viper.GetInt64("telegram-group-id")
+	cfg.Telegram.GroupName = viper.GetString("telegram-group-name")
+	cfg.Telegram.ReactionSupport = viper.GetBool("telegram-reaction-support")
+	if !viper.IsSet("telegram-reaction-support") {
+		cfg.Telegram.ReactionSupport = true // default to true
 	}
 
 	cfg.Spotify.ClientID = viper.GetString("spotify-client-id")
@@ -172,7 +189,9 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 	logger.Info("Starting WhatDj v2",
 		zap.String("version", "2.0.0"),
 		zap.String("llm_provider", config.LLM.Provider),
-		zap.String("spotify_playlist", config.Spotify.PlaylistID))
+		zap.String("spotify_playlist", config.Spotify.PlaylistID),
+		zap.Bool("telegram_enabled", config.Telegram.Enabled),
+		zap.Bool("whatsapp_enabled", config.WhatsApp.Enabled))
 
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
@@ -180,7 +199,31 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 
 	dedup := store.NewDedupStore(10000, 0.001)
 
-	whatsappClient := whatsapp.NewClient(&config.WhatsApp, logger.Named("whatsapp"))
+	// Create chat frontend based on configuration
+	var frontend chat.Frontend
+	if config.Telegram.Enabled {
+		telegramConfig := &telegram.Config{
+			BotToken:        config.Telegram.BotToken,
+			GroupID:         config.Telegram.GroupID,
+			GroupName:       config.Telegram.GroupName,
+			Enabled:         config.Telegram.Enabled,
+			ReactionSupport: config.Telegram.ReactionSupport,
+		}
+		frontend = telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
+		logger.Info("Using Telegram as primary chat frontend")
+	} else if config.WhatsApp.Enabled {
+		whatsappConfig := &whatsapp.Config{
+			GroupJID:    config.WhatsApp.GroupJID,
+			GroupName:   config.WhatsApp.GroupName,
+			DeviceName:  config.WhatsApp.DeviceName,
+			SessionPath: config.WhatsApp.SessionPath,
+			Enabled:     config.WhatsApp.Enabled,
+		}
+		frontend = whatsapp.NewFrontend(whatsappConfig, logger.Named("whatsapp"))
+		logger.Info("Using WhatsApp as chat frontend")
+	} else {
+		return fmt.Errorf("no chat frontend enabled - enable either Telegram or WhatsApp")
+	}
 
 	spotifyClient := spotify.NewClient(&config.Spotify, logger.Named("spotify"))
 	if err := spotifyClient.Authenticate(ctx); err != nil {
@@ -198,13 +241,13 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 
 	httpServer := httpserver.NewServer(&config.Server, logger.Named("http"))
 
-	orchestrator := core.NewOrchestrator(
+	dispatcher := core.NewDispatcher(
 		config,
-		whatsappClient,
+		frontend,
 		spotifyClient,
 		llmProvider,
 		dedup,
-		logger.Named("orchestrator"),
+		logger.Named("dispatcher"),
 	)
 
 	g, gCtx := errgroup.WithContext(ctx)
@@ -214,7 +257,7 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 	})
 
 	g.Go(func() error {
-		return orchestrator.Start(gCtx)
+		return dispatcher.Start(gCtx)
 	})
 
 	g.Go(func() error {
@@ -244,10 +287,29 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 }
 
 func validateConfig() error {
-	if config.WhatsApp.GroupJID == "" {
-		return fmt.Errorf("WhatsApp group JID is required")
+	// Ensure at least one chat frontend is enabled
+	if !config.Telegram.Enabled && !config.WhatsApp.Enabled {
+		return fmt.Errorf("at least one chat frontend must be enabled (Telegram or WhatsApp)")
 	}
 
+	// Validate Telegram configuration if enabled
+	if config.Telegram.Enabled {
+		if config.Telegram.BotToken == "" {
+			return fmt.Errorf("telegram bot token is required when Telegram is enabled")
+		}
+		if config.Telegram.GroupID == 0 {
+			return fmt.Errorf("telegram group ID is required when Telegram is enabled")
+		}
+	}
+
+	// Validate WhatsApp configuration if enabled
+	if config.WhatsApp.Enabled {
+		if config.WhatsApp.GroupJID == "" {
+			return fmt.Errorf("WhatsApp group JID is required when WhatsApp is enabled")
+		}
+	}
+
+	// Validate Spotify configuration (always required)
 	if config.Spotify.ClientID == "" {
 		return fmt.Errorf("spotify client ID is required")
 	}
@@ -260,6 +322,7 @@ func validateConfig() error {
 		return fmt.Errorf("spotify playlist ID is required")
 	}
 
+	// Validate LLM configuration if enabled
 	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {
 		if config.LLM.APIKey == "" && config.LLM.Provider != "ollama" {
 			return fmt.Errorf("LLM API key is required for provider: %s", config.LLM.Provider)

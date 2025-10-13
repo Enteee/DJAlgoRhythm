@@ -1,14 +1,15 @@
 # WhatDj v2 🎵
 
-> **Live WhatsApp → Spotify DJ with AI disambiguation**
+> **Live Chat → Spotify DJ with AI disambiguation**
 
-WhatDj v2 is a production-grade Go service that listens to WhatsApp group messages in real time and automatically adds requested tracks to a Spotify playlist. It features AI-powered song disambiguation, user reaction confirmations, and comprehensive duplicate detection.
+WhatDj v2 is a production-grade Go service that listens to chat messages (Telegram/WhatsApp) in real time and automatically adds requested tracks to a Spotify playlist. It features AI-powered song disambiguation, user reaction confirmations, and comprehensive duplicate detection.
 
 ## Features
 
 - 🎵 **Automatic Track Detection** - Recognizes Spotify links, music platform links, and free text
+- 💬 **Multi-Platform Support** - Primary Telegram support with optional WhatsApp integration
 - 🤖 **AI Disambiguation** - Uses OpenAI, Anthropic, or Ollama to identify songs from casual text
-- 👍 **User Confirmations** - React with 👍/👎 to confirm or reject song suggestions
+- 👍 **User Confirmations** - React with 👍/👎 or use inline buttons to confirm/reject song suggestions
 - 🚫 **Duplicate Prevention** - Bloom filter + LRU cache prevents duplicate additions
 - 📊 **Observability** - Prometheus metrics, health checks, and structured logging
 - 🔄 **Resilient** - Automatic retries, graceful shutdown, and error handling
@@ -19,7 +20,8 @@ WhatDj v2 is a production-grade Go service that listens to WhatsApp group messag
 ### Prerequisites
 
 - Go 1.24+
-- WhatsApp account and group
+- **Telegram**: Bot token and group (recommended)
+- **WhatsApp**: Account and group (optional, disabled by default)
 - Spotify Premium account and app credentials
 - (Optional) OpenAI/Anthropic API key for AI features
 
@@ -58,11 +60,29 @@ go mod download
    - Add `https://localhost:8080/callback` to redirect URIs
    - Update `.env` with your credentials
 
-3. **Configure WhatsApp:**
-   - Add your group JID to `.env`
-   - Run the app to get QR code for login
+3. **Configure Telegram (Default):**
+   - Create bot with [@BotFather](https://t.me/botfather)
+   - Add bot to your group and make it admin
+   - Get group chat ID (use [@userinfobot](https://t.me/userinfobot))
+   - Update `.env`:
 
-4. **Configure LLM (Optional):**
+   ```bash
+   WHATDJ_TELEGRAM_ENABLED=true
+   WHATDJ_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+   WHATDJ_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
+   WHATDJ_WHATSAPP_ENABLED=false
+   ```
+
+4. **Configure WhatsApp (Optional):**
+   ⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. Enable at your own risk.
+
+   ```bash
+   WHATDJ_WHATSAPP_ENABLED=true
+   WHATDJ_WHATSAPP_GROUP_JID=120363123456789@g.us
+   WHATDJ_TELEGRAM_ENABLED=false
+   ```
+
+5. **Configure LLM (Optional):**
 
    ```bash
    # For OpenAI
@@ -91,6 +111,43 @@ go run ./cmd/whatdj
 # With custom config
 ./bin/whatdj --config myconfig.env --log-level debug
 ```
+
+## Chat Platform Setup
+
+### Telegram Setup (Recommended)
+
+1. **Create Bot:**
+   - Message [@BotFather](https://t.me/botfather)
+   - Use `/newbot` and follow instructions
+   - Copy the bot token
+
+2. **Setup Group:**
+   - Create a group or use existing one
+   - Add your bot to the group
+   - Make the bot an admin (required for message access)
+
+3. **Get Group ID:**
+   - Add [@userinfobot](https://t.me/userinfobot) to your group
+   - It will show the group ID (negative number like -100xxxxxxxxxx)
+   - Remove the info bot after getting the ID
+
+4. **Configure Bot:**
+   - Enable inline mode (optional): `/setinline` with @BotFather
+   - Set commands (optional): `/setcommands` with @BotFather
+
+### WhatsApp Setup (Optional)
+
+⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. This feature is disabled by default and should only be used for personal/testing purposes.
+
+1. **Get Group JID:**
+   ```bash
+   # Run with debug logging to see group JIDs
+   WHATDJ_WHATSAPP_ENABLED=true WHATDJ_LOG_LEVEL=debug ./bin/whatdj
+   ```
+
+2. **QR Code Login:**
+   - Scan QR code with WhatsApp on your phone
+   - Session will be saved for future use
 
 ## Usage
 
@@ -122,10 +179,14 @@ never gonna give you up rick astley
 
 → **AI disambiguation:** "Did you mean Rick Astley - Never Gonna Give You Up (1987)? React 👍 to confirm."
 
-### Reactions
+### User Interactions
 
-- **👍** - Confirm and add to playlist
-- **👎** - Mark as duplicate or reject suggestion
+#### Telegram
+- **Inline Buttons**: Click "👍 Confirm" or "👎 Not this"
+- **Reactions** (if supported): React with 👍 or 👎 emojis
+
+#### WhatsApp
+- **Reactions**: React with 👍 or 👎 emojis
 
 ### State Machine
 
@@ -143,15 +204,23 @@ never gonna give you up rick astley
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `WHATDJ_WHATSAPP_GROUP_JID` | WhatsApp group JID | - | ✅ |
+| **Chat Platforms** | | | |
+| `WHATDJ_TELEGRAM_ENABLED` | Enable Telegram integration | `true` | ❌ |
+| `WHATDJ_TELEGRAM_BOT_TOKEN` | Telegram bot token | - | ✅ (if enabled) |
+| `WHATDJ_TELEGRAM_GROUP_ID` | Telegram group ID | - | ✅ (if enabled) |
+| `WHATDJ_WHATSAPP_ENABLED` | Enable WhatsApp integration | `false` | ❌ |
+| `WHATDJ_WHATSAPP_GROUP_JID` | WhatsApp group JID | - | ✅ (if enabled) |
+| **Spotify** | | | |
 | `WHATDJ_SPOTIFY_CLIENT_ID` | Spotify app client ID | - | ✅ |
 | `WHATDJ_SPOTIFY_CLIENT_SECRET` | Spotify app secret | - | ✅ |
 | `WHATDJ_SPOTIFY_PLAYLIST_ID` | Target playlist ID | - | ✅ |
+| **LLM** | | | |
 | `WHATDJ_LLM_PROVIDER` | AI provider (openai/anthropic/ollama/none) | `none` | ❌ |
 | `WHATDJ_LLM_API_KEY` | LLM API key | - | ❌ |
 | `WHATDJ_LLM_MODEL` | Model name | Provider default | ❌ |
 | `WHATDJ_LLM_THRESHOLD` | Confidence threshold (0-1) | `0.65` | ❌ |
-| `WHATDJ_CONFIRM_TIMEOUT` | Reaction timeout (seconds) | `120` | ❌ |
+| **General** | | | |
+| `WHATDJ_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
 | `WHATDJ_SERVER_PORT` | HTTP server port | `8080` | ❌ |
 | `WHATDJ_LOG_LEVEL` | Logging level | `info` | ❌ |
 
@@ -163,12 +232,44 @@ whatdj --help
 Flags:
       --config string                  config file (default is .env)
       --log-level string              log level (debug, info, warn, error) (default "info")
+      --telegram-enabled              enable Telegram integration (default true)
+      --telegram-bot-token string     Telegram bot token
+      --telegram-group-id int         Telegram group ID
+      --whatsapp-enabled              enable WhatsApp integration
       --whatsapp-group-jid string     WhatsApp group JID
       --spotify-client-id string      Spotify client ID
       --spotify-playlist-id string    Spotify playlist ID
       --llm-provider string           LLM provider (openai, anthropic, ollama, none) (default "none")
       --server-port int               HTTP server port (default 8080)
       --confirm-timeout int           Confirmation timeout in seconds (default 120)
+```
+
+### Example .env File
+
+```bash
+# Chat Platform (choose one)
+WHATDJ_TELEGRAM_ENABLED=true
+WHATDJ_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+WHATDJ_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
+
+# WhatsApp (disabled by default)
+WHATDJ_WHATSAPP_ENABLED=false
+WHATDJ_WHATSAPP_GROUP_JID=120363123456789@g.us
+
+# Spotify (required)
+WHATDJ_SPOTIFY_CLIENT_ID=your_spotify_client_id
+WHATDJ_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+WHATDJ_SPOTIFY_PLAYLIST_ID=37i9dQZF1DX0XUsuxWHRQd
+
+# LLM (optional)
+WHATDJ_LLM_PROVIDER=openai
+WHATDJ_LLM_API_KEY=sk-...
+WHATDJ_LLM_MODEL=gpt-4o-mini
+
+# General
+WHATDJ_CONFIRM_TIMEOUT_SECS=120
+WHATDJ_SERVER_PORT=8080
+WHATDJ_LOG_LEVEL=info
 ```
 
 ## Development
@@ -178,8 +279,10 @@ Flags:
 ```
 cmd/whatdj/           # Main application
 internal/
-  ├── core/           # Domain types and orchestrator
-  ├── whatsapp/       # WhatsApp client (whatsmeow)
+  ├── chat/           # Unified chat frontend interface
+  │   ├── telegram/   # Telegram Bot API client
+  │   └── whatsapp/   # WhatsApp client (whatsmeow)
+  ├── core/           # Domain types and message dispatcher
   ├── spotify/        # Spotify client (zmb3/spotify)
   ├── llm/            # LLM providers (OpenAI, Anthropic, Ollama)
   ├── store/          # Dedup store (Bloom + LRU)
@@ -238,6 +341,9 @@ go test -cover ./...
 
 # Run tests with race detection
 go test -race ./...
+
+# Test specific package
+go test ./internal/chat/telegram/
 ```
 
 ## API Endpoints
@@ -282,12 +388,23 @@ docker-compose up -d
 - **Secrets**: Use proper secret management (not .env files)
 - **Monitoring**: Set up Prometheus + Grafana dashboards
 - **Logs**: Forward structured logs to your logging system
-- **Backup**: WhatsApp session and Spotify tokens
-- **Scaling**: Single instance recommended (WhatsApp sessions are stateful)
+- **Backup**: Chat frontend sessions and Spotify tokens
+- **Scaling**: Single instance recommended (chat sessions are stateful)
+- **Compliance**: Be aware of chat platform ToS, especially for WhatsApp
 
 ## Troubleshooting
 
 ### Common Issues
+
+**Telegram Bot Setup:**
+
+```bash
+# Check bot token is valid
+curl "https://api.telegram.org/bot<TOKEN>/getMe"
+
+# Verify bot is admin in group
+# Check group ID is correct (negative number)
+```
 
 **WhatsApp QR Code Login:**
 
@@ -313,14 +430,6 @@ docker-compose up -d
 # Check API key is valid
 # Verify model name is correct
 # Monitor rate limits in logs
-```
-
-**Duplicate Detection:**
-
-```bash
-# Check playlist snapshot loading in logs
-# Verify track IDs are being stored correctly
-# Monitor dedup store size metrics
 ```
 
 ### Debug Mode
@@ -355,6 +464,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
+- [go-telegram/bot](https://github.com/go-telegram/bot) - Telegram Bot API client
 - [whatsmeow](https://github.com/tulir/whatsmeow) - WhatsApp Web multi-device client
 - [zmb3/spotify](https://github.com/zmb3/spotify) - Spotify Web API wrapper
 - [OpenAI](https://openai.com/) / [Anthropic](https://anthropic.com/) - AI disambiguation

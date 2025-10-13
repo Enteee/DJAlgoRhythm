@@ -18,6 +18,7 @@ const (
 
 type Config struct {
 	WhatsApp WhatsAppConfig
+	Telegram TelegramConfig
 	Spotify  SpotifyConfig
 	LLM      LLMConfig
 	Server   ServerConfig
@@ -30,6 +31,15 @@ type WhatsAppConfig struct {
 	GroupName   string
 	DeviceName  string
 	SessionPath string
+	Enabled     bool
+}
+
+type TelegramConfig struct {
+	BotToken        string
+	GroupID         int64
+	GroupName       string
+	Enabled         bool
+	ReactionSupport bool
 }
 
 type SpotifyConfig struct {
@@ -72,6 +82,11 @@ func DefaultConfig() *Config {
 		WhatsApp: WhatsAppConfig{
 			DeviceName:  "WhatDj",
 			SessionPath: "./whatsapp_session.db",
+			Enabled:     false, // Disabled by default
+		},
+		Telegram: TelegramConfig{
+			Enabled:         true, // Enabled by default
+			ReactionSupport: true,
 		},
 		Spotify: SpotifyConfig{
 			RedirectURL: "http://127.0.0.1:8080/callback",
