@@ -163,19 +163,20 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]st
 	offset := 0
 
 	for {
-		// Note: GetPlaylistTracks is deprecated but still functional
-		// TODO: Migrate to GetPlaylistItems when ready to support episodes
-		tracks, err := c.client.GetPlaylistTracks(ctx, spotifyPlaylistID,
+		items, err := c.client.GetPlaylistItems(ctx, spotifyPlaylistID,
 			spotify.Limit(limit), spotify.Offset(offset))
 		if err != nil {
-			return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
+			return nil, fmt.Errorf("failed to get playlist items: %w", err)
 		}
 
-		for i := range tracks.Tracks {
-			allTrackIDs = append(allTrackIDs, string(tracks.Tracks[i].Track.ID))
+		for i := range items.Items {
+			// Only process tracks (not episodes or null items)
+			if items.Items[i].Track.Track != nil {
+				allTrackIDs = append(allTrackIDs, string(items.Items[i].Track.Track.ID))
+			}
 		}
 
-		if len(tracks.Tracks) < limit {
+		if len(items.Items) < limit {
 			break
 		}
 
