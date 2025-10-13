@@ -14,7 +14,7 @@ services:
       - WHATDJ_SPOTIFY_CLIENT_ID=${WHATDJ_SPOTIFY_CLIENT_ID}
       - WHATDJ_SPOTIFY_CLIENT_SECRET=${WHATDJ_SPOTIFY_CLIENT_SECRET}
       - WHATDJ_SPOTIFY_PLAYLIST_ID=${WHATDJ_SPOTIFY_PLAYLIST_ID}
-      - WHATDJ_SPOTIFY_REDIRECT_URL=${WHATDJ_SPOTIFY_REDIRECT_URL:-http://localhost:8080/callback}
+      - WHATDJ_SPOTIFY_REDIRECT_URL=${WHATDJ_SPOTIFY_REDIRECT_URL:-http://127.0.0.1:8080/callback}
       - WHATDJ_LLM_PROVIDER=${WHATDJ_LLM_PROVIDER:-none}
       - WHATDJ_LLM_API_KEY=${WHATDJ_LLM_API_KEY}
       - WHATDJ_LLM_MODEL=${WHATDJ_LLM_MODEL}
@@ -30,7 +30,7 @@ services:
       # Persist WhatsApp session and Spotify tokens
       - whatdj_data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3

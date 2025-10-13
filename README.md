@@ -48,13 +48,14 @@ go mod download
 ### Configuration
 
 1. **Copy environment template:**
+
    ```bash
    cp .env.example .env
    ```
 
 2. **Configure Spotify:**
    - Create app at [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-   - Add `http://localhost:8080/callback` to redirect URIs
+   - Add `https://localhost:8080/callback` to redirect URIs
    - Update `.env` with your credentials
 
 3. **Configure WhatsApp:**
@@ -62,6 +63,7 @@ go mod download
    - Run the app to get QR code for login
 
 4. **Configure LLM (Optional):**
+
    ```bash
    # For OpenAI
    WHATDJ_LLM_PROVIDER=openai
@@ -97,21 +99,27 @@ go run ./cmd/whatdj
 WhatDj recognizes three types of messages:
 
 #### 1. Spotify Links
+
 ```
 https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC
 ```
+
 → **Immediate addition** (if not duplicate)
 
 #### 2. Music Platform Links
+
 ```
 https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ```
+
 → **Asks for clarification:** "Which song do you mean by that?"
 
 #### 3. Free Text
+
 ```
 never gonna give you up rick astley
 ```
+
 → **AI disambiguation:** "Did you mean Rick Astley - Never Gonna Give You Up (1987)? React 👍 to confirm."
 
 ### Reactions
@@ -197,6 +205,7 @@ code .
 ```
 
 Included tools:
+
 - Go toolchain with delve debugger
 - golangci-lint for linting
 - Git LFS for large files
@@ -281,6 +290,7 @@ docker-compose up -d
 ### Common Issues
 
 **WhatsApp QR Code Login:**
+
 ```bash
 # Check logs for QR code output
 ./bin/whatdj --log-level debug
@@ -290,6 +300,7 @@ docker-compose up -d
 ```
 
 **Spotify Authentication:**
+
 ```bash
 # Verify redirect URI matches Spotify app settings
 # Check client ID and secret are correct
@@ -297,6 +308,7 @@ docker-compose up -d
 ```
 
 **LLM Errors:**
+
 ```bash
 # Check API key is valid
 # Verify model name is correct
@@ -304,6 +316,7 @@ docker-compose up -d
 ```
 
 **Duplicate Detection:**
+
 ```bash
 # Check playlist snapshot loading in logs
 # Verify track IDs are being stored correctly

@@ -74,7 +74,7 @@ func DefaultConfig() *Config {
 			SessionPath: "./whatsapp_session.db",
 		},
 		Spotify: SpotifyConfig{
-			RedirectURL: "http://localhost:8080/callback",
+			RedirectURL: "http://127.0.0.1:8080/callback",
 			TokenPath:   "./spotify_token.json",
 		},
 		LLM: LLMConfig{
