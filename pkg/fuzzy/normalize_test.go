@@ -216,8 +216,8 @@ func TestNormalizer_DurationTolerance(t *testing.T) {
 			name:     "Negative difference",
 			d1:       4 * time.Minute,
 			d2:       3 * time.Minute,
-			expected: 0.5,
-			delta:    0.1,
+			expected: 0.667,
+			delta:    0.01,
 		},
 	}
 

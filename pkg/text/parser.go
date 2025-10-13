@@ -2,6 +2,7 @@
 package text
 
 import (
+	"errors"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,7 +18,8 @@ const (
 )
 
 var (
-	urlRegex = regexp.MustCompile(`https?://\S+`)
+	urlRegex      = regexp.MustCompile(`https?://\S+`)
+	spotifyURIRegex = regexp.MustCompile(`spotify:\w+:\w+`)
 
 	spotifyDomains = map[string]bool{
 		"open.spotify.com": true,
@@ -58,6 +60,9 @@ func (p *Parser) normalizeText(text string) string {
 	text = strings.TrimSpace(text)
 	text = norm.NFKC.String(text)
 
+	// Replace multiple spaces with single space
+	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
+
 	lines := strings.Split(text, "\n")
 	var normalizedLines []string
 	for _, line := range lines {
@@ -87,8 +92,18 @@ func (p *Parser) extractURLs(text string) []string {
 func (p *Parser) cleanURL(rawURL string) string {
 	rawURL = strings.TrimRight(rawURL, ".,!?;")
 
+	// Check if this looks like a valid URL
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return ""
+	}
+
 	u, err := url.Parse(rawURL)
 	if err != nil {
+		return ""
+	}
+
+	// Additional validation - ensure it has a valid host
+	if u.Host == "" {
 		return ""
 	}
 
@@ -106,7 +121,12 @@ func (p *Parser) cleanURL(rawURL string) string {
 	return u.String()
 }
 
-func (p *Parser) classifyMessage(_ string, urls []string) core.MessageType {
+func (p *Parser) classifyMessage(text string, urls []string) core.MessageType {
+	// Check for Spotify URIs in the text
+	if spotifyURIRegex.MatchString(text) {
+		return core.MessageTypeSpotifyLink
+	}
+
 	for _, url := range urls {
 		if p.isSpotifyURL(url) {
 			return core.MessageTypeSpotifyLink
@@ -166,6 +186,11 @@ func (p *Parser) ExtractSpotifyTrackID(rawURL string) (string, error) {
 		if len(parts) >= MinPartsForTrackInfo {
 			return parts[2], nil
 		}
+	}
+
+	// Check if this looks like a valid URL
+	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
+		return "", errors.New("invalid URL")
 	}
 
 	u, err := url.Parse(rawURL)

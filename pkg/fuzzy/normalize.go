@@ -19,8 +19,9 @@ const (
 
 var (
 	featRegex       = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\)\]]*[\)\]]?\s*`)
-	remixRegex      = regexp.MustCompile(`(?i)\s*[\(\[]?\s*.*remix.*[\)\]]?\s*`)
-	versionRegex    = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(remaster|remastered|deluxe|extended|radio edit|clean|explicit).*[\)\]]?\s*`)
+	remixRegex      = regexp.MustCompile(`(?i)\s*[\(\[][^)\]]*remix[^)\]]*[\)\]]\s*`)
+	versionRegex    = regexp.MustCompile(`(?i)\s*[\(\[][^)\]]*(remaster|remastered|deluxe|extended|radio edit|clean|explicit)[^)\]]*[\)\]]\s*`)
+	hyphenVersionRegex = regexp.MustCompile(`(?i)\s*[-–]\s*(remaster|remastered|deluxe|extended|radio edit|clean|explicit).*$`)
 	punctRegex      = regexp.MustCompile(`[^\p{L}\p{N}\s]+`)
 	whitespaceRegex = regexp.MustCompile(`\s+`)
 )
@@ -43,13 +44,15 @@ func (n *Normalizer) NormalizeArtist(artist string) string {
 }
 
 func (n *Normalizer) NormalizeTitle(title string) string {
-	title = n.basicNormalize(title)
-
+	// Apply regex filters before basic normalization to preserve punctuation
 	title = featRegex.ReplaceAllString(title, "")
 	title = remixRegex.ReplaceAllString(title, "")
 	title = versionRegex.ReplaceAllString(title, "")
+	title = hyphenVersionRegex.ReplaceAllString(title, "")
 
-	title = strings.TrimSpace(title)
+	// Now apply basic normalization
+	title = n.basicNormalize(title)
+
 	return title
 }
 
