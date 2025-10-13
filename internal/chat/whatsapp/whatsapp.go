@@ -305,6 +305,7 @@ func (f *Frontend) handleReceiptEvent(_ *events.Receipt) {
 
 // handleReactionEvent processes reaction events
 // Currently unused but kept for future implementation
+//
 //nolint:unused
 func (f *Frontend) handleReactionEvent(evt *events.Receipt) {
 	// Find matching approval context based on message ID

@@ -18,12 +18,14 @@ const (
 )
 
 var (
-	featRegex       = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\)\]]*[\)\]]?\s*`)
-	remixRegex      = regexp.MustCompile(`(?i)\s*[\(\[][^)\]]*remix[^)\]]*[\)\]]\s*`)
-	versionRegex    = regexp.MustCompile(`(?i)\s*[\(\[][^)\]]*(remaster|remastered|deluxe|extended|radio edit|clean|explicit)[^)\]]*[\)\]]\s*`)
+	featRegex    = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\)\]]*[\)\]]?\s*`)
+	remixRegex   = regexp.MustCompile(`(?i)\s*[\(\[][^)\]]*remix[^)\]]*[\)\]]\s*`)
+	versionRegex = regexp.MustCompile(
+		`(?i)\s*[\(\[][^)\]]*(remaster|remastered|deluxe|extended|radio edit|clean|explicit)[^)\]]*[\)\]]\s*`,
+	)
 	hyphenVersionRegex = regexp.MustCompile(`(?i)\s*[-–]\s*(remaster|remastered|deluxe|extended|radio edit|clean|explicit).*$`)
-	punctRegex      = regexp.MustCompile(`[^\p{L}\p{N}\s]+`)
-	whitespaceRegex = regexp.MustCompile(`\s+`)
+	punctRegex         = regexp.MustCompile(`[^\p{L}\p{N}\s]+`)
+	whitespaceRegex    = regexp.MustCompile(`\s+`)
 )
 
 type Normalizer struct{}

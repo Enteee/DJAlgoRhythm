@@ -106,12 +106,12 @@ func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, e
 	}
 
 	var tracks []core.Track
-	for _, track := range results.Tracks.Tracks {
+	for i := range results.Tracks.Tracks {
 		if len(tracks) >= MaxSearchResults {
 			break
 		}
 
-		coreTrack := c.convertSpotifyTrack(&track)
+		coreTrack := c.convertSpotifyTrack(&results.Tracks.Tracks[i])
 		tracks = append(tracks, coreTrack)
 	}
 
@@ -163,14 +163,16 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]st
 	offset := 0
 
 	for {
+		// Note: GetPlaylistTracks is deprecated but still functional
+		// TODO: Migrate to GetPlaylistItems when ready to support episodes
 		tracks, err := c.client.GetPlaylistTracks(ctx, spotifyPlaylistID,
 			spotify.Limit(limit), spotify.Offset(offset))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
 		}
 
-		for _, item := range tracks.Tracks {
-			allTrackIDs = append(allTrackIDs, string(item.Track.ID))
+		for i := range tracks.Tracks {
+			allTrackIDs = append(allTrackIDs, string(tracks.Tracks[i].Track.ID))
 		}
 
 		if len(tracks.Tracks) < limit {

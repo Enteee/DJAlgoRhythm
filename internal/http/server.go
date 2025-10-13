@@ -14,6 +14,32 @@ import (
 	"whatdj/internal/core"
 )
 
+const homePageHTML = `<!DOCTYPE html>
+<html>
+<head>
+    <title>WhatDj v2</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .header { color: #333; }
+        .endpoint { margin: 10px 0; }
+        .endpoint a { text-decoration: none; color: #0066cc; }
+        .endpoint a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1 class="header">🎵 WhatDj v2</h1>
+    <p>Live WhatsApp → Spotify DJ Service</p>
+
+    <h2>Endpoints</h2>
+    <div class="endpoint">📊 <a href="/metrics">Metrics</a> - Prometheus metrics</div>
+    <div class="endpoint">💚 <a href="/healthz">Health</a> - Health check</div>
+    <div class="endpoint">✅ <a href="/readyz">Ready</a> - Readiness check</div>
+
+    <h2>Status</h2>
+    <p>Service is running and ready to process WhatsApp messages.</p>
+</body>
+</html>`
+
 const (
 	// ShutdownTimeoutSeconds is the timeout for graceful server shutdown
 	ShutdownTimeoutSeconds = 10
@@ -38,6 +64,19 @@ type Metrics struct {
 }
 
 func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
+	metrics := newMetrics()
+	mux := setupRoutes(logger)
+	server := createHTTPServer(config, mux)
+
+	return &Server{
+		config:  config,
+		logger:  logger,
+		server:  server,
+		metrics: metrics,
+	}
+}
+
+func newMetrics() *Metrics {
 	metrics := &Metrics{
 		MessagesTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
@@ -106,6 +145,10 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 		metrics.ActiveSessions,
 	)
 
+	return metrics
+}
+
+func setupRoutes(logger *zap.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -125,51 +168,27 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 	})
 
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/", homeHandler(logger))
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+	return mux
+}
+
+func homeHandler(logger *zap.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-    <title>WhatDj v2</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        .header { color: #333; }
-        .endpoint { margin: 10px 0; }
-        .endpoint a { text-decoration: none; color: #0066cc; }
-        .endpoint a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <h1 class="header">🎵 WhatDj v2</h1>
-    <p>Live WhatsApp → Spotify DJ Service</p>
-
-    <h2>Endpoints</h2>
-    <div class="endpoint">📊 <a href="/metrics">Metrics</a> - Prometheus metrics</div>
-    <div class="endpoint">💚 <a href="/healthz">Health</a> - Health check</div>
-    <div class="endpoint">✅ <a href="/readyz">Ready</a> - Readiness check</div>
-
-    <h2>Status</h2>
-    <p>Service is running and ready to process WhatsApp messages.</p>
-</body>
-</html>`)); err != nil {
+		if _, err := w.Write([]byte(homePageHTML)); err != nil {
 			logger.Warn("Failed to write HTML response", zap.Error(err))
 		}
-	})
+	}
+}
 
-	server := &http.Server{
+func createHTTPServer(config *core.ServerConfig, handler http.Handler) *http.Server {
+	return &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  config.ReadTimeout,
 		WriteTimeout: config.WriteTimeout,
-	}
-
-	return &Server{
-		config:  config,
-		logger:  logger,
-		server:  server,
-		metrics: metrics,
 	}
 }
 

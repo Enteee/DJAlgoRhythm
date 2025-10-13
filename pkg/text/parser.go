@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	urlRegex      = regexp.MustCompile(`https?://\S+`)
+	urlRegex        = regexp.MustCompile(`https?://\S+`)
 	spotifyURIRegex = regexp.MustCompile(`spotify:\w+:\w+`)
 
 	spotifyDomains = map[string]bool{
