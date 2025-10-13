@@ -94,6 +94,7 @@ in
 
   # https://devenv.sh/languages/
   languages.nix.enable = true;
+  languages.go.enable = true;
 
   # https://devenv.sh/git-hooks/
   git-hooks.hooks =
