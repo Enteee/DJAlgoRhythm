@@ -7,3 +7,101 @@ devenv.local.nix
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Go
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Air live reload
+tmp/
+
+# WhatDj specific files
+# Runtime data
+*.db
+*.sqlite
+*.sqlite3
+
+# Tokens and credentials
+*token*.json
+spotify_token.json
+whatsapp_session.db
+
+# Configuration files with secrets
+.env
+.env.local
+.env.production
+*.env
+config.yaml
+config.yml
+config.json
+
+# Logs
+*.log
+logs/
+log/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Monitoring and observability
+prometheus_data/
+grafana_data/
+
+# Development artifacts
+debug
+debug.test
+*.prof
+*.pprof
+
+# Cache directories
+.cache/
+node_modules/
