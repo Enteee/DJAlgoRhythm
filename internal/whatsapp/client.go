@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 
 	// SQLite driver for whatsmeow session storage
 	_ "github.com/mattn/go-sqlite3"
@@ -14,6 +15,8 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"go.uber.org/zap"
+
+	"github.com/mdp/qrterminal/v3"
 
 	"whatdj/internal/core"
 	"whatdj/pkg/text"
@@ -60,7 +63,7 @@ func (c *Client) Start(ctx context.Context) error {
 			if evt.Event == "code" {
 				c.logger.Info("QR code received, please scan with your phone")
 				fmt.Println("QR Code:")
-				fmt.Println(evt.Code)
+				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 			} else {
 				c.logger.Info("Login event", zap.String("event", evt.Event))
 			}
@@ -150,14 +153,18 @@ func (c *Client) SetReactionHandler(handler func(groupJID, senderJID, messageID,
 }
 
 func (c *Client) initDatabase() error {
-	db, err := sql.Open("sqlite3", c.config.SessionPath)
+	dsn := fmt.Sprintf("file:%s?_foreign_keys=on", c.config.SessionPath)
+	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return err
 	}
 
 	container := sqlstore.NewWithDB(db, "sqlite3", nil)
 	c.container = container
-
+	err = container.Upgrade(context.Background())
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
