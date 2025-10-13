@@ -18,10 +18,10 @@ const (
 )
 
 var (
-	featRegex     = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\)\]]*[\)\]]?\s*`)
-	remixRegex    = regexp.MustCompile(`(?i)\s*[\(\[]?\s*.*remix.*[\)\]]?\s*`)
-	versionRegex  = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(remaster|remastered|deluxe|extended|radio edit|clean|explicit).*[\)\]]?\s*`)
-	punctRegex    = regexp.MustCompile(`[^\p{L}\p{N}\s]+`)
+	featRegex       = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(?:feat\.?|ft\.?|featuring)\s+[^\)\]]*[\)\]]?\s*`)
+	remixRegex      = regexp.MustCompile(`(?i)\s*[\(\[]?\s*.*remix.*[\)\]]?\s*`)
+	versionRegex    = regexp.MustCompile(`(?i)\s*[\(\[]?\s*(remaster|remastered|deluxe|extended|radio edit|clean|explicit).*[\)\]]?\s*`)
+	punctRegex      = regexp.MustCompile(`[^\p{L}\p{N}\s]+`)
 	whitespaceRegex = regexp.MustCompile(`\s+`)
 )
 
@@ -135,4 +135,3 @@ func abs(x int64) int64 {
 	}
 	return x
 }
-

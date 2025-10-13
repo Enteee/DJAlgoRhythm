@@ -15,12 +15,12 @@ const (
 )
 
 type Orchestrator struct {
-	config       *Config
-	whatsapp     WhatsAppClient
-	spotify      SpotifyClient
-	llm          LLMProvider
-	dedup        DedupStore
-	logger       *zap.Logger
+	config   *Config
+	whatsapp WhatsAppClient
+	spotify  SpotifyClient
+	llm      LLMProvider
+	dedup    DedupStore
+	logger   *zap.Logger
 
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
@@ -63,7 +63,7 @@ func (o *Orchestrator) Stop(ctx context.Context) error {
 	return o.whatsapp.Stop(ctx)
 }
 
-func (o *Orchestrator) handleMessage(msg InputMessage) {
+func (o *Orchestrator) handleMessage(msg *InputMessage) {
 	ctx := context.Background()
 
 	if msg.GroupJID != o.config.WhatsApp.GroupJID {
@@ -71,7 +71,7 @@ func (o *Orchestrator) handleMessage(msg InputMessage) {
 	}
 
 	msgCtx := &MessageContext{
-		Input:     msg,
+		Input:     *msg,
 		State:     StateDispatch,
 		StartTime: time.Now(),
 		TimeoutAt: time.Now().Add(time.Duration(o.config.App.ConfirmTimeoutSecs) * time.Second),
@@ -186,13 +186,13 @@ func (o *Orchestrator) llmDisambiguate(ctx context.Context, msgCtx *MessageConte
 	best := candidates[0]
 
 	if best.Confidence >= o.config.LLM.Threshold {
-		o.promptThumbsUp(ctx, msgCtx, best)
+		o.promptThumbsUp(ctx, msgCtx, &best)
 	} else {
-		o.clarifyAsk(ctx, msgCtx, best)
+		o.clarifyAsk(ctx, msgCtx, &best)
 	}
 }
 
-func (o *Orchestrator) promptThumbsUp(ctx context.Context, msgCtx *MessageContext, candidate LLMCandidate) {
+func (o *Orchestrator) promptThumbsUp(ctx context.Context, msgCtx *MessageContext, candidate *LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
 
 	text := fmt.Sprintf("Did you mean %s - %s (%d)? React %s to confirm.",
@@ -206,7 +206,7 @@ func (o *Orchestrator) promptThumbsUp(ctx context.Context, msgCtx *MessageContex
 	msgCtx.State = StateWaitThumbs
 }
 
-func (o *Orchestrator) clarifyAsk(ctx context.Context, msgCtx *MessageContext, candidate LLMCandidate) {
+func (o *Orchestrator) clarifyAsk(ctx context.Context, msgCtx *MessageContext, candidate *LLMCandidate) {
 	msgCtx.State = StateClarifyAsk
 
 	text := fmt.Sprintf("Did you mean \"%s - %s\"? If yes, react %s; otherwise reply with the correct name.",
@@ -244,7 +244,7 @@ func (o *Orchestrator) handleThumbsUp(ctx context.Context, msgCtx *MessageContex
 }
 
 func (o *Orchestrator) handleThumbsDown(ctx context.Context, msgCtx *MessageContext) {
-	o.clarifyAsk(ctx, msgCtx, msgCtx.Candidates[0])
+	o.clarifyAsk(ctx, msgCtx, &msgCtx.Candidates[0])
 }
 
 func (o *Orchestrator) addToPlaylist(ctx context.Context, msgCtx *MessageContext, trackID string) {

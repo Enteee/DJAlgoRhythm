@@ -17,13 +17,13 @@ const (
 )
 
 type InputMessage struct {
-	Type        MessageType
-	Text        string
-	URLs        []string
-	GroupJID    string
-	SenderJID   string
-	MessageID   string
-	Timestamp   time.Time
+	Type      MessageType
+	Text      string
+	URLs      []string
+	GroupJID  string
+	SenderJID string
+	MessageID string
+	Timestamp time.Time
 }
 
 type Track struct {
@@ -47,30 +47,43 @@ type MessageState int
 const (
 	// StateReady indicates the orchestrator is ready to process messages
 	StateReady MessageState = iota
+	// StateDispatch indicates message is being dispatched for processing
 	StateDispatch
+	// StateHandleSpotifyLink indicates processing a Spotify link
 	StateHandleSpotifyLink
+	// StateAskWhichSong indicates asking user for song clarification
 	StateAskWhichSong
+	// StateLLMDisambiguate indicates using LLM for song disambiguation
 	StateLLMDisambiguate
+	// StateConfirmationPrompt indicates waiting for user confirmation
 	StateConfirmationPrompt
+	// StateWaitThumbs indicates waiting for thumbs up/down reaction
 	StateWaitThumbs
+	// StateWaitReply indicates waiting for user reply
 	StateWaitReply
+	// StateAddToPlaylist indicates adding track to playlist
 	StateAddToPlaylist
+	// StateReactAdded indicates reacting to successfully added track
 	StateReactAdded
+	// StateReactDuplicate indicates reacting to duplicate track
 	StateReactDuplicate
+	// StateReactError indicates reacting to error condition
 	StateReactError
+	// StateClarifyAsk indicates asking for clarification
 	StateClarifyAsk
+	// StateGiveUp indicates giving up on processing the message
 	StateGiveUp
 )
 
 type MessageContext struct {
-	Input       InputMessage
-	State       MessageState
-	Candidates  []LLMCandidate
-	SelectedID  string
-	Error       error
-	RetryCount  int
-	StartTime   time.Time
-	TimeoutAt   time.Time
+	Input      InputMessage
+	State      MessageState
+	Candidates []LLMCandidate
+	SelectedID string
+	Error      error
+	RetryCount int
+	StartTime  time.Time
+	TimeoutAt  time.Time
 }
 
 type WhatsAppClient interface {
@@ -79,7 +92,7 @@ type WhatsAppClient interface {
 	ReactToMessage(ctx context.Context, groupJID, senderJID, messageID, reaction string) error
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
-	SetMessageHandler(handler func(InputMessage))
+	SetMessageHandler(handler func(*InputMessage))
 	SetReactionHandler(handler func(groupJID, senderJID, messageID, reaction string))
 }
 

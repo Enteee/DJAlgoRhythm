@@ -25,7 +25,7 @@ type Client struct {
 	client          *whatsmeow.Client
 	container       *sqlstore.Container
 	parser          *text.Parser
-	messageHandler  func(core.InputMessage)
+	messageHandler  func(*core.InputMessage)
 	reactionHandler func(groupJID, senderJID, messageID, reaction string)
 }
 
@@ -141,7 +141,7 @@ func (c *Client) ReactToMessage(ctx context.Context, groupJID, senderJID, messag
 	return err
 }
 
-func (c *Client) SetMessageHandler(handler func(core.InputMessage)) {
+func (c *Client) SetMessageHandler(handler func(*core.InputMessage)) {
 	c.messageHandler = handler
 }
 
@@ -218,7 +218,7 @@ func (c *Client) handleMessageEvent(evt *events.Message) {
 	parsed.Timestamp = evt.Info.Timestamp
 
 	if c.messageHandler != nil {
-		c.messageHandler(parsed)
+		c.messageHandler(&parsed)
 	}
 }
 

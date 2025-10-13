@@ -1,3 +1,4 @@
+// Package main provides the WhatDj v2 CLI application entry point.
 package main
 
 import (
@@ -248,15 +249,15 @@ func validateConfig() error {
 	}
 
 	if config.Spotify.ClientID == "" {
-		return fmt.Errorf("Spotify client ID is required")
+		return fmt.Errorf("spotify client ID is required")
 	}
 
 	if config.Spotify.ClientSecret == "" {
-		return fmt.Errorf("Spotify client secret is required")
+		return fmt.Errorf("spotify client secret is required")
 	}
 
 	if config.Spotify.PlaylistID == "" {
-		return fmt.Errorf("Spotify playlist ID is required")
+		return fmt.Errorf("spotify playlist ID is required")
 	}
 
 	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {

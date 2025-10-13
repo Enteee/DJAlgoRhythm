@@ -9,11 +9,11 @@ import (
 )
 
 type DedupStore struct {
-	trackIDs   map[string]struct{}
-	bloom      *bloom.BloomFilter
-	lru        *lru.Cache[string, struct{}]
-	mutex      sync.RWMutex
-	maxTracks  int
+	trackIDs               map[string]struct{}
+	bloom                  *bloom.BloomFilter
+	lru                    *lru.Cache[string, struct{}]
+	mutex                  sync.RWMutex
+	maxTracks              int
 	bloomFalsePositiveRate float64
 }
 
@@ -26,10 +26,10 @@ func NewDedupStore(maxTracks int, bloomFalsePositiveRate float64) *DedupStore {
 	bloom := bloom.NewWithEstimates(uint(maxTracks), bloomFalsePositiveRate)
 
 	return &DedupStore{
-		trackIDs:   make(map[string]struct{}),
-		bloom:      bloom,
-		lru:        lruCache,
-		maxTracks:  maxTracks,
+		trackIDs:               make(map[string]struct{}),
+		bloom:                  bloom,
+		lru:                    lruCache,
+		maxTracks:              maxTracks,
 		bloomFalsePositiveRate: bloomFalsePositiveRate,
 	}
 }

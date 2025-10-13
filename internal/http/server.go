@@ -1,3 +1,4 @@
+// Package http provides HTTP server functionality with Prometheus metrics and health endpoints.
 package http
 
 import (
@@ -13,6 +14,11 @@ import (
 	"whatdj/internal/core"
 )
 
+const (
+	// ShutdownTimeoutSeconds is the timeout for graceful server shutdown
+	ShutdownTimeoutSeconds = 10
+)
+
 type Server struct {
 	config  *core.ServerConfig
 	logger  *zap.Logger
@@ -21,14 +27,14 @@ type Server struct {
 }
 
 type Metrics struct {
-	MessagesTotal *prometheus.CounterVec
-	AddsTotal        *prometheus.CounterVec
-	DuplicatesTotal  prometheus.Counter
-	LLMCallsTotal    *prometheus.CounterVec
-	ErrorsTotal      *prometheus.CounterVec
-	ProcessingTime   *prometheus.HistogramVec
-	PlaylistSize     prometheus.Gauge
-	ActiveSessions   prometheus.Gauge
+	MessagesTotal   *prometheus.CounterVec
+	AddsTotal       *prometheus.CounterVec
+	DuplicatesTotal prometheus.Counter
+	LLMCallsTotal   *prometheus.CounterVec
+	ErrorsTotal     *prometheus.CounterVec
+	ProcessingTime  *prometheus.HistogramVec
+	PlaylistSize    prometheus.Gauge
+	ActiveSessions  prometheus.Gauge
 }
 
 func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
@@ -69,8 +75,8 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 		),
 		ProcessingTime: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
-				Name: "whatdj_processing_duration_seconds",
-				Help: "Time spent processing messages",
+				Name:    "whatdj_processing_duration_seconds",
+				Help:    "Time spent processing messages",
 				Buckets: prometheus.DefBuckets,
 			},
 			[]string{"type"},
@@ -106,7 +112,7 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte(`{"status":"ok","service":"whatdj"}`)); err != nil {
-			// Log error if needed, but don't fail the handler
+			logger.Warn("Failed to write health response", zap.Error(err))
 		}
 	})
 
@@ -114,7 +120,7 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte(`{"status":"ready","service":"whatdj"}`)); err != nil {
-			// Log error if needed, but don't fail the handler
+			logger.Warn("Failed to write ready response", zap.Error(err))
 		}
 	})
 
@@ -148,7 +154,7 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
     <p>Service is running and ready to process WhatsApp messages.</p>
 </body>
 </html>`)); err != nil {
-			// Log error if needed, but don't fail the handler
+			logger.Warn("Failed to write HTML response", zap.Error(err))
 		}
 	})
 
@@ -175,7 +181,7 @@ func (s *Server) Start(ctx context.Context) error {
 		<-ctx.Done()
 		s.logger.Info("Shutting down HTTP server")
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), ShutdownTimeoutSeconds*time.Second)
 		defer cancel()
 
 		if err := s.server.Shutdown(shutdownCtx); err != nil {

@@ -7,13 +7,13 @@ import (
 
 // Default configuration values
 const (
-	DefaultLLMThreshold        = 0.65
-	DefaultMaxCandidates       = 3
-	DefaultServerPort          = 8080
-	DefaultTimeoutSeconds      = 10
-	DefaultConfirmTimeoutSecs  = 120
-	DefaultMaxRetries          = 3
-	DefaultRetryDelaySecs      = 5
+	DefaultLLMThreshold       = 0.65
+	DefaultMaxCandidates      = 3
+	DefaultServerPort         = 8080
+	DefaultTimeoutSeconds     = 10
+	DefaultConfirmTimeoutSecs = 120
+	DefaultMaxRetries         = 3
+	DefaultRetryDelaySecs     = 5
 )
 
 type Config struct {

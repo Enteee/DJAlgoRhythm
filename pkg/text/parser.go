@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"golang.org/x/text/unicode/norm"
 	"whatdj/internal/core"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 const (
@@ -24,13 +25,13 @@ var (
 	}
 
 	nonSpotifyMusicDomains = map[string]bool{
-		"youtube.com":      true,
-		"youtu.be":         true,
-		"music.apple.com":  true,
-		"soundcloud.com":   true,
-		"bandcamp.com":     true,
-		"tiktok.com":       true,
-		"instagram.com":    true,
+		"youtube.com":     true,
+		"youtu.be":        true,
+		"music.apple.com": true,
+		"soundcloud.com":  true,
+		"bandcamp.com":    true,
+		"tiktok.com":      true,
+		"instagram.com":   true,
 	}
 )
 

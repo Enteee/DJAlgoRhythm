@@ -1,3 +1,4 @@
+// Package spotify provides Spotify Web API integration for playlist management and track search.
 package spotify
 
 import (
@@ -25,6 +26,10 @@ const (
 	MinValidYear = 1950
 	// FilePermission is the permission for token files
 	FilePermission = 0600
+	// MaxSearchResults is the maximum number of search results to return
+	MaxSearchResults = 10
+	// ReleaseDateYearLength is the expected length of a release date year string
+	ReleaseDateYearLength = 4
 )
 
 var (
@@ -102,11 +107,11 @@ func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, e
 
 	var tracks []core.Track
 	for _, track := range results.Tracks.Tracks {
-		if len(tracks) >= 10 {
+		if len(tracks) >= MaxSearchResults {
 			break
 		}
 
-		coreTrack := c.convertSpotifyTrack(track)
+		coreTrack := c.convertSpotifyTrack(&track)
 		tracks = append(tracks, coreTrack)
 	}
 
@@ -123,7 +128,7 @@ func (c *Client) GetTrack(ctx context.Context, trackID string) (*core.Track, err
 		return nil, fmt.Errorf("failed to get track: %w", err)
 	}
 
-	coreTrack := c.convertSpotifyTrack(*track)
+	coreTrack := c.convertSpotifyTrack(track)
 	return &coreTrack, nil
 }
 
@@ -212,7 +217,7 @@ func (c *Client) ExtractTrackID(rawURL string) (string, error) {
 	return "", fmt.Errorf("no track ID found in URL")
 }
 
-func (c *Client) convertSpotifyTrack(track spotify.FullTrack) core.Track {
+func (c *Client) convertSpotifyTrack(track *spotify.FullTrack) core.Track {
 	var artists []string
 	for _, artist := range track.Artists {
 		artists = append(artists, artist.Name)
@@ -220,7 +225,7 @@ func (c *Client) convertSpotifyTrack(track spotify.FullTrack) core.Track {
 
 	var year int
 	if track.Album.ReleaseDate != "" {
-		if len(track.Album.ReleaseDate) >= 4 {
+		if len(track.Album.ReleaseDate) >= ReleaseDateYearLength {
 			if _, err := fmt.Sscanf(track.Album.ReleaseDate[:4], "%d", &year); err != nil {
 				year = 0
 			}
@@ -249,7 +254,7 @@ func (c *Client) rankTracks(tracks []core.Track, originalQuery string) []core.Tr
 	var scored []scoredTrack
 
 	for _, track := range tracks {
-		score := c.calculateRelevanceScore(track, normalizedQuery)
+		score := c.calculateRelevanceScore(&track, normalizedQuery)
 		scored = append(scored, scoredTrack{track: track, score: score})
 	}
 
@@ -269,7 +274,7 @@ func (c *Client) rankTracks(tracks []core.Track, originalQuery string) []core.Tr
 	return rankedTracks
 }
 
-func (c *Client) calculateRelevanceScore(track core.Track, normalizedQuery string) float64 {
+func (c *Client) calculateRelevanceScore(track *core.Track, normalizedQuery string) float64 {
 	normalizedTitle := c.normalizer.NormalizeTitle(track.Title)
 	normalizedArtist := c.normalizer.NormalizeArtist(track.Artist)
 
@@ -310,8 +315,8 @@ func (c *Client) startOAuthFlow(ctx context.Context) error {
 		return fmt.Errorf("failed to exchange code for token: %w", err)
 	}
 
-	if err := c.saveToken(token); err != nil {
-		c.logger.Warn("Failed to save token", zap.Error(err))
+	if saveErr := c.saveToken(token); saveErr != nil {
+		c.logger.Warn("Failed to save token", zap.Error(saveErr))
 	}
 
 	client := spotify.New(c.auth.Client(ctx, token))

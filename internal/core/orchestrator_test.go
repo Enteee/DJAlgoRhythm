@@ -12,9 +12,9 @@ import (
 // Mock implementations for testing
 
 type mockWhatsAppClient struct {
-	sentMessages []string
-	sentReactions []string
-	messageHandler func(InputMessage)
+	sentMessages    []string
+	sentReactions   []string
+	messageHandler  func(*InputMessage)
 	reactionHandler func(groupJID, senderJID, messageID, reaction string)
 }
 
@@ -28,7 +28,7 @@ func (m *mockWhatsAppClient) ReplyToMessage(_ context.Context, _, _, text string
 	return nil
 }
 
-func (m *mockWhatsAppClient) ReactToMessage(_ context.Context, groupJID, senderJID, messageID, reaction string) error {
+func (m *mockWhatsAppClient) ReactToMessage(_ context.Context, _, _, _, reaction string) error {
 	m.sentReactions = append(m.sentReactions, reaction)
 	return nil
 }
@@ -41,7 +41,7 @@ func (m *mockWhatsAppClient) Stop(_ context.Context) error {
 	return nil
 }
 
-func (m *mockWhatsAppClient) SetMessageHandler(handler func(InputMessage)) {
+func (m *mockWhatsAppClient) SetMessageHandler(handler func(*InputMessage)) {
 	m.messageHandler = handler
 }
 
@@ -50,10 +50,10 @@ func (m *mockWhatsAppClient) SetReactionHandler(handler func(groupJID, senderJID
 }
 
 type mockSpotifyClient struct {
-	tracks        map[string]*Track
+	tracks         map[string]*Track
 	playlistTracks []string
-	addedTracks   []string
-	searchResults map[string][]Track
+	addedTracks    []string
+	searchResults  map[string][]Track
 }
 
 func (m *mockSpotifyClient) SearchTrack(_ context.Context, query string) ([]Track, error) {
@@ -70,12 +70,12 @@ func (m *mockSpotifyClient) GetTrack(_ context.Context, trackID string) (*Track,
 	return &Track{ID: trackID, Title: "Unknown", Artist: "Unknown"}, nil
 }
 
-func (m *mockSpotifyClient) AddToPlaylist(_ context.Context, playlistID, trackID string) error {
+func (m *mockSpotifyClient) AddToPlaylist(_ context.Context, _, trackID string) error {
 	m.addedTracks = append(m.addedTracks, trackID)
 	return nil
 }
 
-func (m *mockSpotifyClient) GetPlaylistTracks(_ context.Context, playlistID string) ([]string, error) {
+func (m *mockSpotifyClient) GetPlaylistTracks(_ context.Context, _ string) ([]string, error) {
 	return m.playlistTracks, nil
 }
 
@@ -90,11 +90,11 @@ type mockLLMProvider struct {
 	candidates []LLMCandidate
 }
 
-func (m *mockLLMProvider) RankCandidates(_ context.Context, text string) ([]LLMCandidate, error) {
+func (m *mockLLMProvider) RankCandidates(_ context.Context, _ string) ([]LLMCandidate, error) {
 	return m.candidates, nil
 }
 
-func (m *mockLLMProvider) ExtractSongInfo(_ context.Context, text string) (*Track, error) {
+func (m *mockLLMProvider) ExtractSongInfo(_ context.Context, _ string) (*Track, error) {
 	if len(m.candidates) > 0 {
 		return &m.candidates[0].Track, nil
 	}
@@ -162,7 +162,7 @@ func TestOrchestrator_HandleSpotifyLink(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	orchestrator.handleMessage(msg)
+	orchestrator.handleMessage(&msg)
 
 	// Give it a moment to process
 	time.Sleep(100 * time.Millisecond)
@@ -212,7 +212,7 @@ func TestOrchestrator_HandleDuplicate(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	orchestrator.handleMessage(msg)
+	orchestrator.handleMessage(&msg)
 
 	// Give it a moment to process
 	time.Sleep(100 * time.Millisecond)
@@ -273,7 +273,7 @@ func TestOrchestrator_HandleLLMDisambiguation(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	orchestrator.handleMessage(msg)
+	orchestrator.handleMessage(&msg)
 
 	// Give it a moment to process
 	time.Sleep(100 * time.Millisecond)
@@ -314,7 +314,7 @@ func TestOrchestrator_HandleNonSpotifyLink(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	orchestrator.handleMessage(msg)
+	orchestrator.handleMessage(&msg)
 
 	// Give it a moment to process
 	time.Sleep(100 * time.Millisecond)
@@ -353,7 +353,7 @@ func TestOrchestrator_IgnoreWrongGroup(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	orchestrator.handleMessage(msg)
+	orchestrator.handleMessage(&msg)
 
 	// Give it a moment to process
 	time.Sleep(100 * time.Millisecond)
@@ -403,7 +403,6 @@ func BenchmarkOrchestrator_HandleSpotifyLink(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		msg.MessageID = fmt.Sprintf("msg%d", i)
-		orchestrator.handleMessage(msg)
+		orchestrator.handleMessage(&msg)
 	}
 }
-

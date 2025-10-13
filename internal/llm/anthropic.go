@@ -1,3 +1,4 @@
+// Package llm provides LLM (Large Language Model) integration for song disambiguation.
 package llm
 
 import (
@@ -19,7 +20,7 @@ type AnthropicClient struct {
 
 func NewAnthropicClient(config *core.LLMConfig, logger *zap.Logger) (*AnthropicClient, error) {
 	if config.APIKey == "" {
-		return nil, fmt.Errorf("Anthropic API key is required")
+		return nil, fmt.Errorf("anthropic API key is required")
 	}
 
 	var opts []option.RequestOption
@@ -38,9 +39,9 @@ func NewAnthropicClient(config *core.LLMConfig, logger *zap.Logger) (*AnthropicC
 	}, nil
 }
 
-func (a *AnthropicClient) RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error) {
+func (a *AnthropicClient) RankCandidates(_ context.Context, _ string) ([]core.LLMCandidate, error) {
 	// TODO: Implement Anthropic integration when API is stable
-	return nil, fmt.Errorf("Anthropic integration not yet implemented")
+	return nil, fmt.Errorf("anthropic integration not yet implemented")
 }
 
 func (a *AnthropicClient) ExtractSongInfo(ctx context.Context, text string) (*core.Track, error) {

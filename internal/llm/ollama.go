@@ -13,6 +13,15 @@ import (
 	"whatdj/internal/core"
 )
 
+const (
+	// OllamaTimeoutSeconds is the default timeout for Ollama API calls
+	OllamaTimeoutSeconds = 60
+	// DefaultTemperature is the default temperature for LLM generation
+	DefaultTemperature = 0.3
+	// DefaultMaxTokens is the default maximum tokens to generate
+	DefaultMaxTokens = 500
+)
+
 type OllamaClient struct {
 	config     *core.LLMConfig
 	logger     *zap.Logger
@@ -21,10 +30,10 @@ type OllamaClient struct {
 }
 
 type OllamaRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
-	Format string `json:"format,omitempty"`
+	Model   string                 `json:"model"`
+	Prompt  string                 `json:"prompt"`
+	Stream  bool                   `json:"stream"`
+	Format  string                 `json:"format,omitempty"`
 	Options map[string]interface{} `json:"options,omitempty"`
 }
 
@@ -40,7 +49,7 @@ func NewOllamaClient(config *core.LLMConfig, logger *zap.Logger) (*OllamaClient,
 	}
 
 	httpClient := &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: OllamaTimeoutSeconds * time.Second,
 	}
 
 	return &OllamaClient{
@@ -89,8 +98,8 @@ Respond with valid JSON only.`, text)
 		Stream: false,
 		Format: "json",
 		Options: map[string]interface{}{
-			"temperature": 0.3,
-			"num_predict": 500,
+			"temperature": DefaultTemperature,
+			"num_predict": DefaultMaxTokens,
 		},
 	}
 
@@ -108,12 +117,12 @@ Respond with valid JSON only.`, text)
 
 	resp, err := o.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Ollama API call failed: %w", err)
+		return nil, fmt.Errorf("ollama API call failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Ollama API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("ollama API returned status %d", resp.StatusCode)
 	}
 
 	var ollamaResp OllamaResponse

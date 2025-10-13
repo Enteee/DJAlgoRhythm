@@ -12,16 +12,16 @@ import (
 type Provider struct {
 	config *core.LLMConfig
 	logger *zap.Logger
-	client LLMClient
+	client Client
 }
 
-type LLMClient interface {
+type Client interface {
 	RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error)
 	ExtractSongInfo(ctx context.Context, text string) (*core.Track, error)
 }
 
 func NewProvider(config *core.LLMConfig, logger *zap.Logger) (*Provider, error) {
-	var client LLMClient
+	var client Client
 	var err error
 
 	switch config.Provider {
@@ -71,10 +71,10 @@ func (p *Provider) ExtractSongInfo(ctx context.Context, text string) (*core.Trac
 
 type NoOpClient struct{}
 
-func (n *NoOpClient) RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error) {
+func (n *NoOpClient) RankCandidates(_ context.Context, _ string) ([]core.LLMCandidate, error) {
 	return nil, fmt.Errorf("LLM provider not configured")
 }
 
-func (n *NoOpClient) ExtractSongInfo(ctx context.Context, text string) (*core.Track, error) {
+func (n *NoOpClient) ExtractSongInfo(_ context.Context, _ string) (*core.Track, error) {
 	return nil, fmt.Errorf("LLM provider not configured")
 }

@@ -49,7 +49,7 @@ func NewOpenAIClient(config *core.LLMConfig, logger *zap.Logger) (*OpenAIClient,
 	}, nil
 }
 
-func (o *OpenAIClient) RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error) {
+func (o *OpenAIClient) RankCandidates(_ context.Context, _ string) ([]core.LLMCandidate, error) {
 	// TODO: Implement OpenAI integration when API is stable
 	return nil, fmt.Errorf("OpenAI integration not yet implemented")
 }
