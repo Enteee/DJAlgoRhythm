@@ -166,7 +166,7 @@ func (o *Orchestrator) llmDisambiguate(ctx context.Context, msgCtx *MessageConte
 	msgCtx.State = StateLLMDisambiguate
 
 	if o.llm == nil {
-		o.replyError(ctx, msgCtx, "I couldn't guess. Could you type the song and artist?")
+		o.replyError(ctx, msgCtx, "I couldn't guess. Could you send me a spotify link to the song?")
 		return
 	}
 
