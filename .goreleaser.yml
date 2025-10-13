@@ -1,0 +1,137 @@
+version: 2
+
+project_name: whatdj
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: whatdj
+    main: ./cmd/whatdj
+    binary: whatdj
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.buildTime={{.Date}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: whatdj
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - .env.example
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance improvements'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: Others
+      order: 999
+
+dockers:
+  - image_templates:
+      - "whatdj/whatdj:{{ .Tag }}"
+      - "whatdj/whatdj:v{{ .Major }}"
+      - "whatdj/whatdj:v{{ .Major }}.{{ .Minor }}"
+      - "whatdj/whatdj:latest"
+      - "ghcr.io/whatdj/whatdj:{{ .Tag }}"
+      - "ghcr.io/whatdj/whatdj:v{{ .Major }}"
+      - "ghcr.io/whatdj/whatdj:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/whatdj/whatdj:latest"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+
+release:
+  github:
+    owner: whatdj
+    name: whatdj
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## WhatDj {{ .Tag }} Release 🎵
+
+    This release includes the following changes:
+
+  footer: |
+    ## Installation
+
+    ### Binary Download
+    Download the appropriate binary for your platform from the assets below.
+
+    ### Docker
+    ```bash
+    docker pull whatdj/whatdj:{{ .Tag }}
+    ```
+
+    ### Go Install
+    ```bash
+    go install github.com/whatdj/whatdj/cmd/whatdj@{{ .Tag }}
+    ```
+
+    ## Checksums
+    All binary checksums are available in `checksums.txt`.
+
+    ---
+    **Full Changelog**: https://github.com/whatdj/whatdj/compare/{{ .PreviousTag }}...{{ .Tag }}

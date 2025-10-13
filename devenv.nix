@@ -74,9 +74,8 @@ in
               bbenoist.nix
               mkhl.direnv
 
-              gitlab.gitlab-workflow
-
               davidanson.vscode-markdownlint
+              vscode-extensions.golang.go
 
               jebbs.plantuml
             ]
