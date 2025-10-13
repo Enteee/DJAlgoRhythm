@@ -1,7 +1,19 @@
+// Package core provides the main business logic and configuration for WhatDj.
 package core
 
 import (
 	"time"
+)
+
+// Default configuration values
+const (
+	DefaultLLMThreshold        = 0.65
+	DefaultMaxCandidates       = 3
+	DefaultServerPort          = 8080
+	DefaultTimeoutSeconds      = 10
+	DefaultConfirmTimeoutSecs  = 120
+	DefaultMaxRetries          = 3
+	DefaultRetryDelaySecs      = 5
 )
 
 type Config struct {
@@ -68,23 +80,23 @@ func DefaultConfig() *Config {
 		LLM: LLMConfig{
 			Provider:      "none",
 			Model:         "",
-			Threshold:     0.65,
-			MaxCandidates: 3,
+			Threshold:     DefaultLLMThreshold,
+			MaxCandidates: DefaultMaxCandidates,
 		},
 		Server: ServerConfig{
 			Host:         "0.0.0.0",
-			Port:         8080,
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 10 * time.Second,
+			Port:         DefaultServerPort,
+			ReadTimeout:  DefaultTimeoutSeconds * time.Second,
+			WriteTimeout: DefaultTimeoutSeconds * time.Second,
 		},
 		Log: LogConfig{
 			Level:  "info",
 			Format: "json",
 		},
 		App: AppConfig{
-			ConfirmTimeoutSecs: 120,
-			MaxRetries:         3,
-			RetryDelaySecs:     5,
+			ConfirmTimeoutSecs: DefaultConfirmTimeoutSecs,
+			MaxRetries:         DefaultMaxRetries,
+			RetryDelaySecs:     DefaultRetryDelaySecs,
 		},
 	}
 }

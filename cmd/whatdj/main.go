@@ -60,7 +60,10 @@ func init() {
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
 	rootCmd.PersistentFlags().Int("confirm-timeout", 120, "Confirmation timeout in seconds")
 
-	viper.BindPFlags(rootCmd.PersistentFlags())
+	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to bind flags: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func initConfig() {
@@ -148,18 +151,20 @@ func buildLogger(level string) *zap.Logger {
 		zapLevel = zapcore.InfoLevel
 	}
 
-	config := zap.NewProductionConfig()
-	config.Level = zap.NewAtomicLevelAt(zapLevel)
+	cfg := zap.NewProductionConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zapLevel)
 
-	logger, err := config.Build()
+	builtLogger, err := cfg.Build()
 	if err != nil {
 		panic(fmt.Sprintf("Failed to build logger: %v", err))
 	}
 
-	return logger
+	return builtLogger
 }
 
-func runWhatDj(cmd *cobra.Command, args []string) error {
+const noneProvider = "none"
+
+func runWhatDj(_ *cobra.Command, _ []string) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -182,7 +187,7 @@ func runWhatDj(cmd *cobra.Command, args []string) error {
 	}
 
 	var llmProvider core.LLMProvider
-	if config.LLM.Provider != "none" && config.LLM.Provider != "" {
+	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {
 		provider, err := llm.NewProvider(&config.LLM, logger.Named("llm"))
 		if err != nil {
 			return fmt.Errorf("failed to create LLM provider: %w", err)
@@ -254,7 +259,7 @@ func validateConfig() error {
 		return fmt.Errorf("Spotify playlist ID is required")
 	}
 
-	if config.LLM.Provider != "none" && config.LLM.Provider != "" {
+	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {
 		if config.LLM.APIKey == "" && config.LLM.Provider != "ollama" {
 			return fmt.Errorf("LLM API key is required for provider: %s", config.LLM.Provider)
 		}

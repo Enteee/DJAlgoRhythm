@@ -20,6 +20,13 @@ import (
 	"whatdj/pkg/fuzzy"
 )
 
+const (
+	// MinValidYear represents the minimum reasonable year for music tracks
+	MinValidYear = 1950
+	// FilePermission is the permission for token files
+	FilePermission = 0600
+)
+
 var (
 	spotifyTrackRegex = regexp.MustCompile(`(?:https?://)?(?:open\.)?spotify\.com/track/([a-zA-Z0-9]+)`)
 	spotifyURIRegex   = regexp.MustCompile(`spotify:track:([a-zA-Z0-9]+)`)
@@ -275,7 +282,7 @@ func (c *Client) calculateRelevanceScore(track core.Track, normalizedQuery strin
 
 	score := titleWeight*titleSimilarity + combinedWeight*combinedSimilarity
 
-	if track.Year > 1950 {
+	if track.Year > MinValidYear {
 		score += 0.1
 	}
 
@@ -347,5 +354,5 @@ func (c *Client) saveToken(token *oauth2.Token) error {
 		return err
 	}
 
-	return os.WriteFile(c.config.TokenPath, data, 0600)
+	return os.WriteFile(c.config.TokenPath, data, FilePermission)
 }

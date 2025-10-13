@@ -1,19 +1,18 @@
+// Package whatsapp provides WhatsApp client integration using whatsmeow library.
 package whatsapp
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
+	// SQLite driver for whatsmeow session storage
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow"
-	waProto "go.mau.fi/whatsmeow/binary/proto"
-	"go.mau.fi/whatsmeow/store"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	waLog "github.com/rs/zerolog"
 	"go.uber.org/zap"
 
 	"whatdj/internal/core"
@@ -76,7 +75,7 @@ func (c *Client) Start(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) Stop(ctx context.Context) error {
+func (c *Client) Stop(_ context.Context) error {
 	c.logger.Info("Stopping WhatsApp client")
 
 	if c.client != nil {
@@ -84,7 +83,9 @@ func (c *Client) Stop(ctx context.Context) error {
 	}
 
 	if c.container != nil {
-		c.container.Close()
+		if err := c.container.Close(); err != nil {
+			c.logger.Warn("Failed to close whatsapp container", zap.Error(err))
+		}
 	}
 
 	return nil
@@ -96,7 +97,7 @@ func (c *Client) SendMessage(ctx context.Context, groupJID, text string) error {
 		return fmt.Errorf("invalid group JID: %w", err)
 	}
 
-	msg := &waProto.Message{
+	msg := &waE2E.Message{
 		Conversation: &text,
 	}
 
@@ -110,10 +111,10 @@ func (c *Client) ReplyToMessage(ctx context.Context, groupJID, messageID, text s
 		return fmt.Errorf("invalid group JID: %w", err)
 	}
 
-	msg := &waProto.Message{
-		ExtendedTextMessage: &waProto.ExtendedTextMessage{
+	msg := &waE2E.Message{
+		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 			Text: &text,
-			ContextInfo: &waProto.ContextInfo{
+			ContextInfo: &waE2E.ContextInfo{
 				StanzaID:    &messageID,
 				Participant: &[]string{jid.String()}[0],
 			},
@@ -154,7 +155,7 @@ func (c *Client) initDatabase() error {
 		return err
 	}
 
-	container := sqlstore.NewWithDB(db, "sqlite3", waLog.Nop())
+	container := sqlstore.NewWithDB(db, "sqlite3", nil)
 	c.container = container
 
 	return nil
@@ -166,7 +167,7 @@ func (c *Client) initClient() error {
 		return err
 	}
 
-	client := whatsmeow.NewClient(deviceStore, waLog.Nop())
+	client := whatsmeow.NewClient(deviceStore, nil)
 	c.client = client
 	return nil
 }
@@ -221,11 +222,11 @@ func (c *Client) handleMessageEvent(evt *events.Message) {
 	}
 }
 
-func (c *Client) handleReceiptEvent(evt *events.Receipt) {
+func (c *Client) handleReceiptEvent(_ *events.Receipt) {
 	// Handle receipt events - reaction handling would need different approach in newer whatsmeow
 }
 
-func (c *Client) extractMessageText(msg *waProto.Message) string {
+func (c *Client) extractMessageText(msg *waE2E.Message) string {
 	if msg.Conversation != nil {
 		return *msg.Conversation
 	}

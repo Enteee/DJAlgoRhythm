@@ -1,3 +1,4 @@
+// Package store provides deduplication storage using Bloom filters and LRU cache.
 package store
 
 import (
@@ -19,6 +20,9 @@ type DedupStore struct {
 func NewDedupStore(maxTracks int, bloomFalsePositiveRate float64) *DedupStore {
 	lruCache, _ := lru.New[string, struct{}](maxTracks)
 
+	if maxTracks < 0 || maxTracks > int(^uint(0)>>1) {
+		panic("maxTracks value out of range for uint conversion")
+	}
 	bloom := bloom.NewWithEstimates(uint(maxTracks), bloomFalsePositiveRate)
 
 	return &DedupStore{
@@ -92,6 +96,9 @@ func (ds *DedupStore) Clear() {
 
 func (ds *DedupStore) clear() {
 	ds.trackIDs = make(map[string]struct{})
+	if ds.maxTracks < 0 || ds.maxTracks > int(^uint(0)>>1) {
+		panic("maxTracks value out of range for uint conversion")
+	}
 	ds.bloom = bloom.NewWithEstimates(uint(ds.maxTracks), ds.bloomFalsePositiveRate)
 	ds.lru.Purge()
 }

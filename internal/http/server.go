@@ -21,7 +21,7 @@ type Server struct {
 }
 
 type Metrics struct {
-	MessagesTotal    *prometheus.CounterVec
+	MessagesTotal *prometheus.CounterVec
 	AddsTotal        *prometheus.CounterVec
 	DuplicatesTotal  prometheus.Counter
 	LLMCallsTotal    *prometheus.CounterVec
@@ -102,24 +102,28 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok","service":"whatdj"}`))
+		if _, err := w.Write([]byte(`{"status":"ok","service":"whatdj"}`)); err != nil {
+			// Log error if needed, but don't fail the handler
+		}
 	})
 
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ready","service":"whatdj"}`))
+		if _, err := w.Write([]byte(`{"status":"ready","service":"whatdj"}`)); err != nil {
+			// Log error if needed, but don't fail the handler
+		}
 	})
 
 	mux.Handle("/metrics", promhttp.Handler())
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<!DOCTYPE html>
+		if _, err := w.Write([]byte(`<!DOCTYPE html>
 <html>
 <head>
     <title>WhatDj v2</title>
@@ -143,7 +147,9 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
     <h2>Status</h2>
     <p>Service is running and ready to process WhatsApp messages.</p>
 </body>
-</html>`))
+</html>`)); err != nil {
+			// Log error if needed, but don't fail the handler
+		}
 	})
 
 	server := &http.Server{

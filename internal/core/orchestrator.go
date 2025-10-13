@@ -9,6 +9,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	thumbsUpReaction   = "👍"
+	thumbsDownReaction = "👎"
+)
+
 type Orchestrator struct {
 	config       *Config
 	whatsapp     WhatsAppClient
@@ -98,7 +103,7 @@ func (o *Orchestrator) handleReaction(groupJID, senderJID, messageID, reaction s
 
 	ctx := context.Background()
 
-	if reaction == "👍" && time.Now().Before(msgCtx.TimeoutAt) {
+	if reaction == thumbsUpReaction && time.Now().Before(msgCtx.TimeoutAt) {
 		go o.handleThumbsUp(ctx, msgCtx)
 	} else {
 		go o.handleThumbsDown(ctx, msgCtx)
@@ -190,8 +195,8 @@ func (o *Orchestrator) llmDisambiguate(ctx context.Context, msgCtx *MessageConte
 func (o *Orchestrator) promptThumbsUp(ctx context.Context, msgCtx *MessageContext, candidate LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
 
-	text := fmt.Sprintf("Did you mean %s - %s (%d)? React 👍 to confirm.",
-		candidate.Track.Artist, candidate.Track.Title, candidate.Track.Year)
+	text := fmt.Sprintf("Did you mean %s - %s (%d)? React %s to confirm.",
+		candidate.Track.Artist, candidate.Track.Title, candidate.Track.Year, thumbsUpReaction)
 
 	if err := o.whatsapp.ReplyToMessage(ctx, msgCtx.Input.GroupJID, msgCtx.Input.MessageID, text); err != nil {
 		o.logger.Error("Failed to prompt thumbs up", zap.Error(err))
@@ -204,8 +209,8 @@ func (o *Orchestrator) promptThumbsUp(ctx context.Context, msgCtx *MessageContex
 func (o *Orchestrator) clarifyAsk(ctx context.Context, msgCtx *MessageContext, candidate LLMCandidate) {
 	msgCtx.State = StateClarifyAsk
 
-	text := fmt.Sprintf("Did you mean \"%s - %s\"? If yes, react 👍; otherwise reply with the correct name.",
-		candidate.Track.Artist, candidate.Track.Title)
+	text := fmt.Sprintf("Did you mean \"%s - %s\"? If yes, react %s; otherwise reply with the correct name.",
+		candidate.Track.Artist, candidate.Track.Title, thumbsUpReaction)
 
 	if err := o.whatsapp.ReplyToMessage(ctx, msgCtx.Input.GroupJID, msgCtx.Input.MessageID, text); err != nil {
 		o.logger.Error("Failed to clarify ask", zap.Error(err))
@@ -277,7 +282,8 @@ func (o *Orchestrator) reactAdded(ctx context.Context, msgCtx *MessageContext, t
 		track = &Track{ID: trackID, Title: "Unknown", Artist: "Unknown"}
 	}
 
-	if err := o.whatsapp.ReactToMessage(ctx, msgCtx.Input.GroupJID, msgCtx.Input.SenderJID, msgCtx.Input.MessageID, "👍"); err != nil {
+	if err := o.whatsapp.ReactToMessage(
+		ctx, msgCtx.Input.GroupJID, msgCtx.Input.SenderJID, msgCtx.Input.MessageID, thumbsUpReaction); err != nil {
 		o.logger.Error("Failed to react with thumbs up", zap.Error(err))
 	}
 
@@ -290,7 +296,8 @@ func (o *Orchestrator) reactAdded(ctx context.Context, msgCtx *MessageContext, t
 func (o *Orchestrator) reactDuplicate(ctx context.Context, msgCtx *MessageContext) {
 	msgCtx.State = StateReactDuplicate
 
-	if err := o.whatsapp.ReactToMessage(ctx, msgCtx.Input.GroupJID, msgCtx.Input.SenderJID, msgCtx.Input.MessageID, "👎"); err != nil {
+	if err := o.whatsapp.ReactToMessage(
+		ctx, msgCtx.Input.GroupJID, msgCtx.Input.SenderJID, msgCtx.Input.MessageID, thumbsDownReaction); err != nil {
 		o.logger.Error("Failed to react with thumbs down", zap.Error(err))
 	}
 

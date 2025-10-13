@@ -8,8 +8,11 @@ import (
 type MessageType int
 
 const (
+	// MessageTypeSpotifyLink represents a message containing a Spotify track URL
 	MessageTypeSpotifyLink MessageType = iota
+	// MessageTypeNonSpotifyLink represents a message containing a non-Spotify music URL
 	MessageTypeNonSpotifyLink
+	// MessageTypeFreeText represents a free-form text message about music
 	MessageTypeFreeText
 )
 
@@ -42,6 +45,7 @@ type LLMCandidate struct {
 type MessageState int
 
 const (
+	// StateReady indicates the orchestrator is ready to process messages
 	StateReady MessageState = iota
 	StateDispatch
 	StateHandleSpotifyLink

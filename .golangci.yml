@@ -2,19 +2,12 @@ run:
   timeout: 5m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - bin
-    - vendor
-    - .devenv
-  skip-files:
-    - ".*\\.pb\\.go$"
-    - ".*_gen\\.go$"
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true
 
 linters-settings:
@@ -24,7 +17,10 @@ linters-settings:
     lines: 100
     statements: 50
   gci:
-    local-prefixes: whatdj
+    sections:
+      - standard
+      - default
+      - prefix(whatdj)
   goconst:
     min-len: 2
     min-occurrences: 2
@@ -45,14 +41,13 @@ linters-settings:
     min-complexity: 15
   goimports:
     local-prefixes: whatdj
-  golint:
-    min-confidence: 0
-  gomnd:
+  mnd:
     settings:
       mnd:
         checks: argument,case,condition,operation,return,assign
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
     settings:
       printf:
         funcs:
@@ -76,22 +71,18 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
-    - depguard
+    - copyloopvar
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
     - exhaustive
     - funlen
-    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
     - gofmt
     - goimports
-    - golint
-    - gomnd
+    - mnd
     - goprintffuncname
     - gosec
     - gosimple
@@ -102,21 +93,28 @@ linters:
     - nakedret
     - noctx
     - nolintlint
+    - revive
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
 
 issues:
+  exclude-dirs:
+    - bin
+    - vendor
+    - .devenv
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*_gen\\.go$"
+  uniq-by-line: true
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
+        - mnd
         - funlen
         - goconst
         - gocyclo
@@ -126,7 +124,7 @@ issues:
 
     - path: cmd/
       linters:
-        - gomnd
+        - mnd
 
     - path: internal/
       text: "weak cryptographic primitive"

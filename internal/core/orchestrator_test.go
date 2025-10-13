@@ -18,26 +18,26 @@ type mockWhatsAppClient struct {
 	reactionHandler func(groupJID, senderJID, messageID, reaction string)
 }
 
-func (m *mockWhatsAppClient) SendMessage(ctx context.Context, groupJID, text string) error {
+func (m *mockWhatsAppClient) SendMessage(_ context.Context, _, text string) error {
 	m.sentMessages = append(m.sentMessages, text)
 	return nil
 }
 
-func (m *mockWhatsAppClient) ReplyToMessage(ctx context.Context, groupJID, messageID, text string) error {
+func (m *mockWhatsAppClient) ReplyToMessage(_ context.Context, _, _, text string) error {
 	m.sentMessages = append(m.sentMessages, text)
 	return nil
 }
 
-func (m *mockWhatsAppClient) ReactToMessage(ctx context.Context, groupJID, senderJID, messageID, reaction string) error {
+func (m *mockWhatsAppClient) ReactToMessage(_ context.Context, groupJID, senderJID, messageID, reaction string) error {
 	m.sentReactions = append(m.sentReactions, reaction)
 	return nil
 }
 
-func (m *mockWhatsAppClient) Start(ctx context.Context) error {
+func (m *mockWhatsAppClient) Start(_ context.Context) error {
 	return nil
 }
 
-func (m *mockWhatsAppClient) Stop(ctx context.Context) error {
+func (m *mockWhatsAppClient) Stop(_ context.Context) error {
 	return nil
 }
 
@@ -56,26 +56,26 @@ type mockSpotifyClient struct {
 	searchResults map[string][]Track
 }
 
-func (m *mockSpotifyClient) SearchTrack(ctx context.Context, query string) ([]Track, error) {
+func (m *mockSpotifyClient) SearchTrack(_ context.Context, query string) ([]Track, error) {
 	if results, exists := m.searchResults[query]; exists {
 		return results, nil
 	}
 	return []Track{}, nil
 }
 
-func (m *mockSpotifyClient) GetTrack(ctx context.Context, trackID string) (*Track, error) {
+func (m *mockSpotifyClient) GetTrack(_ context.Context, trackID string) (*Track, error) {
 	if track, exists := m.tracks[trackID]; exists {
 		return track, nil
 	}
 	return &Track{ID: trackID, Title: "Unknown", Artist: "Unknown"}, nil
 }
 
-func (m *mockSpotifyClient) AddToPlaylist(ctx context.Context, playlistID, trackID string) error {
+func (m *mockSpotifyClient) AddToPlaylist(_ context.Context, playlistID, trackID string) error {
 	m.addedTracks = append(m.addedTracks, trackID)
 	return nil
 }
 
-func (m *mockSpotifyClient) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
+func (m *mockSpotifyClient) GetPlaylistTracks(_ context.Context, playlistID string) ([]string, error) {
 	return m.playlistTracks, nil
 }
 
@@ -90,11 +90,11 @@ type mockLLMProvider struct {
 	candidates []LLMCandidate
 }
 
-func (m *mockLLMProvider) RankCandidates(ctx context.Context, text string) ([]LLMCandidate, error) {
+func (m *mockLLMProvider) RankCandidates(_ context.Context, text string) ([]LLMCandidate, error) {
 	return m.candidates, nil
 }
 
-func (m *mockLLMProvider) ExtractSongInfo(ctx context.Context, text string) (*Track, error) {
+func (m *mockLLMProvider) ExtractSongInfo(_ context.Context, text string) (*Track, error) {
 	if len(m.candidates) > 0 {
 		return &m.candidates[0].Track, nil
 	}

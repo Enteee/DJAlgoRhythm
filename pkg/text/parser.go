@@ -1,3 +1,4 @@
+// Package text provides text parsing and URL classification for WhatsApp messages.
 package text
 
 import (
@@ -9,8 +10,13 @@ import (
 	"whatdj/internal/core"
 )
 
+const (
+	// MinPartsForTrackInfo represents the minimum number of parts needed for track info
+	MinPartsForTrackInfo = 3
+)
+
 var (
-	urlRegex = regexp.MustCompile(`https?://[^\s]+`)
+	urlRegex = regexp.MustCompile(`https?://\S+`)
 
 	spotifyDomains = map[string]bool{
 		"open.spotify.com": true,
@@ -99,7 +105,7 @@ func (p *Parser) cleanURL(rawURL string) string {
 	return u.String()
 }
 
-func (p *Parser) classifyMessage(text string, urls []string) core.MessageType {
+func (p *Parser) classifyMessage(_ string, urls []string) core.MessageType {
 	for _, url := range urls {
 		if p.isSpotifyURL(url) {
 			return core.MessageTypeSpotifyLink
@@ -156,7 +162,7 @@ func (p *Parser) isMusicURL(rawURL string) bool {
 func (p *Parser) ExtractSpotifyTrackID(rawURL string) (string, error) {
 	if strings.HasPrefix(rawURL, "spotify:track:") {
 		parts := strings.Split(rawURL, ":")
-		if len(parts) >= 3 {
+		if len(parts) >= MinPartsForTrackInfo {
 			return parts[2], nil
 		}
 	}
