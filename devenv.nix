@@ -66,6 +66,10 @@ in
     # won't be available in the cicd pipeline
     #
     ++ (pkgs.lib.optionals (!config.env.cicd) [
+      # Telegram
+      telegram-desktop
+
+      # IDE
       (
         vscode-with-extensions.override {
           vscodeExtensions =
