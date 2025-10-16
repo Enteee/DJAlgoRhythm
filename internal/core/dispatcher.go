@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"whatdj/internal/chat"
+	"whatdj/internal/i18n"
 )
 
 const (
@@ -19,12 +20,13 @@ const (
 
 // Dispatcher handles messages from any chat frontend using the unified interface
 type Dispatcher struct {
-	config   *Config
-	frontend chat.Frontend
-	spotify  SpotifyClient
-	llm      LLMProvider
-	dedup    DedupStore
-	logger   *zap.Logger
+	config    *Config
+	frontend  chat.Frontend
+	spotify   SpotifyClient
+	llm       LLMProvider
+	dedup     DedupStore
+	logger    *zap.Logger
+	localizer *i18n.Localizer
 
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
@@ -46,6 +48,7 @@ func NewDispatcher(
 		llm:             llm,
 		dedup:           dedup,
 		logger:          logger,
+		localizer:       i18n.NewLocalizer("ch_be"), // Default to English for now
 		messageContexts: make(map[string]*MessageContext),
 	}
 }
@@ -141,7 +144,7 @@ func (d *Dispatcher) handleSpotifyLink(ctx context.Context, msgCtx *MessageConte
 	}
 
 	if trackID == "" {
-		d.replyError(ctx, msgCtx, originalMsg, "Couldn't extract Spotify track ID from the link")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.extract_track_id"))
 		return
 	}
 
@@ -157,7 +160,7 @@ func (d *Dispatcher) handleSpotifyLink(ctx context.Context, msgCtx *MessageConte
 func (d *Dispatcher) askWhichSong(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	msgCtx.State = StateAskWhichSong
 
-	_, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, "Which song do you mean by that?")
+	_, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, d.localizer.T("prompt.which_song"))
 	if err != nil {
 		d.logger.Error("Failed to ask which song", zap.Error(err))
 	}
@@ -168,7 +171,7 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 	msgCtx.State = StateLLMDisambiguate
 
 	if d.llm == nil {
-		d.replyError(ctx, msgCtx, originalMsg, "I couldn't guess. Could you send me a spotify link to the song?")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.llm.no_provider"))
 		return
 	}
 
@@ -179,7 +182,7 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 	initialSpotifyTracks, err := d.spotify.SearchTrack(ctx, msgCtx.Input.Text)
 	if err != nil {
 		d.logger.Error("Initial Spotify search failed", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, "I couldn't search Spotify. Please try again.")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.search_failed"))
 		return
 	}
 
@@ -203,7 +206,7 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 			// Fallback to Spotify results without LLM ranking
 			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
 		} else {
-			d.replyError(ctx, msgCtx, originalMsg, "I couldn't understand. Could you be more specific?")
+			d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.llm.understand"))
 		}
 		return
 	}
@@ -213,7 +216,7 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 		if len(initialSpotifyTracks) > 0 {
 			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
 		} else {
-			d.replyError(ctx, msgCtx, originalMsg, "I couldn't find any songs. Could you be more specific?")
+			d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.llm.no_songs"))
 		}
 		return
 	}
@@ -268,7 +271,7 @@ func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *Messag
 
 	if len(allSpotifyTracks) == 0 {
 		d.logger.Error("No Spotify tracks found for any ranked candidates")
-		d.replyError(ctx, msgCtx, originalMsg, "Couldn't find matching songs on Spotify. Could you be more specific?")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.no_matches"))
 		return
 	}
 
@@ -447,22 +450,29 @@ func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *Message
 	originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
 
-	prompt := fmt.Sprintf("🎵 Found: **%s - %s**", candidate.Track.Artist, candidate.Track.Title)
+	// Build format components
+	albumPart := ""
 	if candidate.Track.Album != "" {
-		prompt += fmt.Sprintf(" (Album: %s)", candidate.Track.Album)
+		albumPart = d.localizer.T("format.album", candidate.Track.Album)
 	}
+
+	yearPart := ""
 	if candidate.Track.Year > 0 {
-		prompt += fmt.Sprintf(" (%d)", candidate.Track.Year)
+		yearPart = d.localizer.T("format.year", candidate.Track.Year)
 	}
+
+	urlPart := ""
 	if candidate.Track.URL != "" {
-		prompt += fmt.Sprintf("\n🔗 %s", candidate.Track.URL)
+		urlPart = d.localizer.T("format.url", candidate.Track.URL)
 	}
-	prompt += "\n\nIs this what you're looking for?"
+
+	prompt := d.localizer.T("prompt.enhanced_approval",
+		candidate.Track.Artist, candidate.Track.Title, albumPart, yearPart, urlPart)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Failed to get enhanced approval", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
 		return
 	}
 
@@ -476,7 +486,7 @@ func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *Message
 // handleEnhancedApproval processes approval for enhanced candidates
 func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	if len(msgCtx.Candidates) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
 		return
 	}
 
@@ -486,7 +496,7 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 	// Try to find the exact track ID from our previous search
 	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
 	if err != nil || len(tracks) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, "Couldn't find on Spotify—mind clarifying?")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.not_found"))
 		return
 	}
 
@@ -516,19 +526,24 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
 
-	prompt := fmt.Sprintf("Did you mean **%s - %s**", candidate.Track.Artist, candidate.Track.Title)
+	// Build format components
+	yearPart := ""
 	if candidate.Track.Year > 0 {
-		prompt += fmt.Sprintf(" (%d)", candidate.Track.Year)
+		yearPart = d.localizer.T("format.year", candidate.Track.Year)
 	}
+
+	urlPart := ""
 	if candidate.Track.URL != "" {
-		prompt += fmt.Sprintf("\n🔗 %s", candidate.Track.URL)
+		urlPart = d.localizer.T("format.url", candidate.Track.URL)
 	}
-	prompt += "?"
+
+	prompt := d.localizer.T("prompt.basic_approval",
+		candidate.Track.Artist, candidate.Track.Title, yearPart, urlPart)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Failed to get approval", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
 		return
 	}
 
@@ -543,12 +558,12 @@ func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext,
 func (d *Dispatcher) clarifyAsk(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateClarifyAsk
 
-	prompt := fmt.Sprintf("Did you mean **%s - %s**? If not, please clarify.", candidate.Track.Artist, candidate.Track.Title)
+	prompt := d.localizer.T("prompt.clarification", candidate.Track.Artist, candidate.Track.Title)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Failed to get clarification", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
 		return
 	}
 
@@ -562,7 +577,7 @@ func (d *Dispatcher) clarifyAsk(ctx context.Context, msgCtx *MessageContext, ori
 // handleApproval processes user approval
 func (d *Dispatcher) handleApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	if len(msgCtx.Candidates) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
 		return
 	}
 
@@ -570,7 +585,7 @@ func (d *Dispatcher) handleApproval(ctx context.Context, msgCtx *MessageContext,
 
 	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
 	if err != nil || len(tracks) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, "Couldn't find on Spotify—mind clarifying?")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.not_found"))
 		return
 	}
 
@@ -629,7 +644,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 
 	// Send notification to user that admin approval is required
 	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-		"⏳ Admin approval required. Waiting for group admin approval..."); err != nil {
+		d.localizer.T("admin.approval_required")); err != nil {
 		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
 	}
 
@@ -640,7 +655,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 		approved, err := telegramFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmTimeoutSecs)
 		if err != nil {
 			d.logger.Error("Admin approval failed", zap.Error(err))
-			d.reactError(ctx, msgCtx, originalMsg, "Admin approval process failed")
+			d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
 			return
 		}
 
@@ -651,7 +666,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 
 			// Notify user of approval
 			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-				"✅ Admin approved! Adding to playlist..."); err != nil {
+				d.localizer.T("admin.approved")); err != nil {
 				d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
 			}
 
@@ -663,7 +678,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 
 			// Notify user of denial
 			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-				"❌ Admin denied the song request."); err != nil {
+				d.localizer.T("admin.denied")); err != nil {
 				d.logger.Error("Failed to notify user about admin denial", zap.Error(err))
 			}
 		}
@@ -685,7 +700,7 @@ func (d *Dispatcher) executePlaylistAdd(ctx context.Context, msgCtx *MessageCont
 				zap.Error(err))
 
 			if retry == d.config.App.MaxRetries-1 {
-				d.reactError(ctx, msgCtx, originalMsg, "Failed to add track to playlist")
+				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
 				return
 			}
 
@@ -715,7 +730,7 @@ func (d *Dispatcher) reactAdded(ctx context.Context, msgCtx *MessageContext, ori
 	}
 
 	// Reply with track info
-	replyText := fmt.Sprintf("Added: %s - %s (%s)", track.Artist, track.Title, track.URL)
+	replyText := d.localizer.T("success.track_added", track.Artist, track.Title, track.URL)
 	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, replyText); err != nil {
 		d.logger.Error("Failed to reply with added confirmation", zap.Error(err))
 	}
@@ -731,7 +746,7 @@ func (d *Dispatcher) reactDuplicate(ctx context.Context, msgCtx *MessageContext,
 	}
 
 	// Reply with duplicate message
-	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, "Already in playlist."); err != nil {
+	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, d.localizer.T("success.duplicate")); err != nil {
 		d.logger.Error("Failed to reply with duplicate message", zap.Error(err))
 	}
 }

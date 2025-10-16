@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"whatdj/internal/chat"
+	"whatdj/internal/i18n"
 	"whatdj/pkg/text"
 )
 
@@ -33,10 +34,11 @@ type Config struct {
 
 // Frontend implements the chat.Frontend interface for Telegram
 type Frontend struct {
-	config *Config
-	logger *zap.Logger
-	bot    *bot.Bot
-	parser *text.Parser
+	config    *Config
+	logger    *zap.Logger
+	bot       *bot.Bot
+	parser    *text.Parser
+	localizer *i18n.Localizer
 
 	// Message handling
 	messageHandler func(*chat.Message)
@@ -76,6 +78,7 @@ func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
 		config:                config,
 		logger:                logger,
 		parser:                text.NewParser(),
+		localizer:             i18n.NewLocalizer("ch_be"), // Default to English for now
 		pendingApprovals:      make(map[string]*approvalContext),
 		pendingAdminApprovals: make(map[string]*adminApprovalContext),
 	}
@@ -250,11 +253,11 @@ func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prom
 	keyboard := [][]models.InlineKeyboardButton{
 		{
 			{
-				Text:         "👍 Confirm",
+				Text:         f.localizer.T("button.confirm"),
 				CallbackData: "confirm_" + approvalKey,
 			},
 			{
-				Text:         "👎 Not this",
+				Text:         f.localizer.T("button.not_this"),
 				CallbackData: "reject_" + approvalKey,
 			},
 		},
@@ -376,7 +379,7 @@ func (f *Frontend) handleApprovalCallback(ctx context.Context, b *bot.Bot, updat
 		// Approval context not found or expired
 		if _, ansErr := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
-			Text:            "This prompt has expired.",
+			Text:            f.localizer.T("callback.prompt_expired"),
 		}); ansErr != nil {
 			f.logger.Debug("Failed to answer callback query", zap.Error(ansErr))
 		}
@@ -387,7 +390,7 @@ func (f *Frontend) handleApprovalCallback(ctx context.Context, b *bot.Bot, updat
 	if update.CallbackQuery.From.ID != approval.originUserID {
 		if _, ansErr := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
-			Text:            "Only the original sender can respond to this.",
+			Text:            f.localizer.T("callback.sender_only"),
 		}); ansErr != nil {
 			f.logger.Debug("Failed to answer callback query", zap.Error(ansErr))
 		}
@@ -399,9 +402,9 @@ func (f *Frontend) handleApprovalCallback(ctx context.Context, b *bot.Bot, updat
 	case approval.approved <- approved:
 		var responseText string
 		if approved {
-			responseText = "✅ Confirmed"
+			responseText = f.localizer.T("callback.approved")
 		} else {
-			responseText = "❌ Rejected"
+			responseText = f.localizer.T("callback.denied")
 		}
 
 		if _, ansErr := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -413,7 +416,7 @@ func (f *Frontend) handleApprovalCallback(ctx context.Context, b *bot.Bot, updat
 	case <-approval.cancelCtx.Done():
 		if _, ansErr := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 			CallbackQueryID: update.CallbackQuery.ID,
-			Text:            "This prompt has expired.",
+			Text:            f.localizer.T("callback.prompt_expired"),
 		}); ansErr != nil {
 			f.logger.Debug("Failed to answer callback query", zap.Error(ansErr))
 		}
@@ -581,11 +584,7 @@ func (f *Frontend) AwaitAdminApproval(ctx context.Context, origin *chat.Message,
 // sendAdminApprovalRequests sends DM approval requests to all group admins
 func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int64,
 	approvalKey string, approval *adminApprovalContext) error {
-	prompt := fmt.Sprintf("🎵 *Admin Approval Required*\n\n"+
-		"User: %s\n"+
-		"Song: %s\n"+
-		"Link: %s\n\n"+
-		"Do you approve adding this song to the playlist?",
+	prompt := f.localizer.T("admin.approval_prompt",
 		approval.originUserName,
 		approval.songInfo,
 		approval.songURL)
@@ -593,11 +592,11 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 	keyboard := [][]models.InlineKeyboardButton{
 		{
 			{
-				Text:         "✅ Approve",
+				Text:         f.localizer.T("admin.button_approve"),
 				CallbackData: "admin_approve_" + approvalKey,
 			},
 			{
-				Text:         "❌ Deny",
+				Text:         f.localizer.T("admin.button_deny"),
 				CallbackData: "admin_deny_" + approvalKey,
 			},
 		},
@@ -708,7 +707,7 @@ func (f *Frontend) isUserAdmin(userID int64, adminList []int64) bool {
 func (f *Frontend) answerExpiredCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {
 	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: callbackQueryID,
-		Text:            "This approval request has expired.",
+		Text:            f.localizer.T("callback.expired"),
 	}); err != nil {
 		f.logger.Debug("Failed to answer callback query", zap.Error(err))
 	}
@@ -717,7 +716,7 @@ func (f *Frontend) answerExpiredCallback(ctx context.Context, b *bot.Bot, callba
 func (f *Frontend) answerUnauthorizedCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {
 	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: callbackQueryID,
-		Text:            "Only group administrators can respond to this.",
+		Text:            f.localizer.T("callback.unauthorized"),
 	}); err != nil {
 		f.logger.Debug("Failed to answer callback query", zap.Error(err))
 	}
