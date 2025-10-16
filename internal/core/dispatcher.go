@@ -48,7 +48,7 @@ func NewDispatcher(
 		llm:             llm,
 		dedup:           dedup,
 		logger:          logger,
-		localizer:       i18n.NewLocalizer("ch_be"), // Default to English for now
+		localizer:       i18n.NewLocalizer(i18n.DefaultLanguage),
 		messageContexts: make(map[string]*MessageContext),
 	}
 }

@@ -30,9 +30,11 @@ var englishMessages = map[string]string{
 	"admin.approval_required": "⏳ Admin approval required. Waiting for group admin approval...",
 	"admin.approved":          "✅ Admin approved! Adding to playlist...",
 	"admin.denied":            "❌ Admin denied the song request.",
-	"admin.approval_prompt":   "🎵 *Admin Approval Required*\n\nUser: %s\nSong: %s\nLink: %s\n\nDo you approve adding this song to the playlist?",
-	"admin.button_approve":    "✅ Approve",
-	"admin.button_deny":       "❌ Deny",
+	"admin.approval_prompt": "🎵 *Admin Approval Required*\n\n" +
+		"User: %s\nSong: %s\nLink: %s\n\n" +
+		"Do you approve adding this song to the playlist?",
+	"admin.button_approve": "✅ Approve",
+	"admin.button_deny":    "❌ Deny",
 
 	// Success messages
 	"success.track_added": "Added: %s - %s (%s)",

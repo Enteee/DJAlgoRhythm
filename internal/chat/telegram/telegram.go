@@ -77,7 +77,7 @@ func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
 		config:                config,
 		logger:                logger,
 		parser:                text.NewParser(),
-		localizer:             i18n.NewLocalizer("ch_be"), // Default to English for now
+		localizer:             i18n.NewLocalizer(i18n.DefaultLanguage),
 		pendingApprovals:      make(map[string]*approvalContext),
 		pendingAdminApprovals: make(map[string]*adminApprovalContext),
 	}
