@@ -111,7 +111,7 @@ type SpotifyClient interface {
 type LLMProvider interface {
 	RankCandidates(ctx context.Context, text string) ([]LLMCandidate, error)
 	ExtractSongInfo(ctx context.Context, text string) (*Track, error)
-	IsMusicRequest(ctx context.Context, text string) (bool, error)
+	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 }
 
 type DedupStore interface {

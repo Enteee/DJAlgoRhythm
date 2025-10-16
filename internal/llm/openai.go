@@ -199,20 +199,20 @@ func (o *OpenAIClient) ExtractSongInfo(ctx context.Context, text string) (*core.
 	return track, nil
 }
 
-type MusicRequestResponse struct {
-	IsMusicRequest bool    `json:"is_music_request"`
-	Confidence     float64 `json:"confidence"`
-	Reasoning      string  `json:"reasoning,omitempty"`
+type ChatterDetectionResponse struct {
+	IsNotMusicRequest bool    `json:"is_not_music_request"`
+	Confidence        float64 `json:"confidence"`
+	Reasoning         string  `json:"reasoning,omitempty"`
 }
 
-func (o *OpenAIClient) IsMusicRequest(ctx context.Context, text string) (bool, error) {
+func (o *OpenAIClient) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	if strings.TrimSpace(text) == "" {
-		return false, fmt.Errorf("empty text provided")
+		return true, fmt.Errorf("empty text provided")
 	}
 
-	prompt := o.buildMusicRequestPrompt()
+	prompt := o.buildChatterDetectionPrompt()
 
-	o.logger.Debug("Calling OpenAI for music request detection",
+	o.logger.Debug("Calling OpenAI for chatter detection",
 		zap.String("text", text),
 		zap.String("model", o.config.Model))
 
@@ -237,7 +237,7 @@ func (o *OpenAIClient) IsMusicRequest(ctx context.Context, text string) (bool, e
 	content := resp.Choices[0].Message.Content
 	o.logger.Debug("OpenAI response received", zap.String("content", content))
 
-	var response MusicRequestResponse
+	var response ChatterDetectionResponse
 	if err := json.Unmarshal([]byte(content), &response); err != nil {
 		o.logger.Error("Failed to parse OpenAI response",
 			zap.Error(err),
@@ -245,12 +245,12 @@ func (o *OpenAIClient) IsMusicRequest(ctx context.Context, text string) (bool, e
 		return false, fmt.Errorf("failed to parse OpenAI response: %w", err)
 	}
 
-	o.logger.Debug("Music request detection completed",
-		zap.Bool("is_music_request", response.IsMusicRequest),
+	o.logger.Debug("Chatter detection completed",
+		zap.Bool("is_not_music_request", response.IsNotMusicRequest),
 		zap.Float64("confidence", response.Confidence),
 		zap.String("reasoning", response.Reasoning))
 
-	return response.IsMusicRequest, nil
+	return response.IsNotMusicRequest, nil
 }
 
 func (o *OpenAIClient) getModel() shared.ChatModel {
@@ -333,45 +333,54 @@ Examples of when to set found=false:
 - "What's that song that goes 'na na na'?" (too vague)`
 }
 
-func (o *OpenAIClient) buildMusicRequestPrompt() string {
-	return `You are a music bot assistant helping to identify if a message is a music/song request.
+func (o *OpenAIClient) buildChatterDetectionPrompt() string {
+	return `You are a music bot assistant helping to filter out general chat from actual music requests.
 
-Your task is to determine if the user's message is requesting a song to be added to a playlist, or if it's just general chat.
+Your task is to identify if a message is CLEARLY general chatter/conversation that should be ignored by a music bot.
 
 Respond with a JSON object in this exact format:
 {
-  "is_music_request": true/false,
+  "is_not_music_request": true/false,
   "confidence": 0.85,
   "reasoning": "Brief explanation of the decision"
 }
 
 Rules:
 1. confidence should be between 0.0 and 1.0
-2. Set is_music_request to true only if the user wants a specific song added/played
-3. Be conservative - if unclear, set to false
-4. Consider context clues like "play", "add", "put on", song titles, artist names
-5. Ignore general music discussion that isn't requesting a specific song
+2. Set is_not_music_request to TRUE for obvious general chat/conversation
+3. Set is_not_music_request to FALSE if there's ANY possibility it could be music-related
+4. When in doubt, return FALSE (let the music bot process it)
+5. Be VERY conservative - only filter out obvious non-music chatter
 
-Examples of is_music_request = TRUE:
-- "Play Bohemian Rhapsody by Queen"
-- "Add some Taylor Swift"
-- "Put on that new song by Drake"
-- "Can you play Yesterday by The Beatles?"
-- "I want to hear some Radiohead"
-- spotify.com/track/xyz (sharing a link)
-- "Play that song that goes 'hey jude'"
-
-Examples of is_music_request = FALSE:
+Examples of is_not_music_request = TRUE (FILTER OUT):
 - "Hello everyone"
+- "Good morning!"
 - "How's everyone doing?"
-- "I love music"
-- "What's your favorite band?"
-- "I went to a concert yesterday"
-- "The weather is nice today"
-- "Music is great"
-- "I like rock music" (too general)
-- "What are you listening to?" (asking, not requesting)
-- Random conversation not about music
+- "What's the weather like?"
+- "Anyone going to lunch?"
+- "LOL that's funny"
+- "Thanks for the help"
+- "See you later"
+- "Happy birthday!"
+- "How was your weekend?"
+- "I'm tired"
+- "Working late today"
+- Random emoji-only messages like "😂😂😂"
+- Pure greetings and social conversation
 
-Be very strict: only return true if the user is clearly requesting a specific song to be played/added.`
+Examples of is_not_music_request = FALSE (LET THROUGH):
+- "Play Bohemian Rhapsody"
+- "Add some Taylor Swift"
+- "I love this song"
+- "What song is this?"
+- "Great music choice"
+- "This reminds me of..."
+- "I saw them in concert"
+- "What's your favorite album?"
+- spotify.com/track/xyz
+- Any mention of songs, artists, albums, music
+- Anything even remotely music-related
+- Ambiguous messages that could be music requests
+
+IMPORTANT: When uncertain, always return FALSE. Better to process a non-music message than to miss a music request.`
 }

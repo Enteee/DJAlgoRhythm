@@ -18,7 +18,7 @@ type Provider struct {
 type Client interface {
 	RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error)
 	ExtractSongInfo(ctx context.Context, text string) (*core.Track, error)
-	IsMusicRequest(ctx context.Context, text string) (bool, error)
+	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 }
 
 func NewProvider(config *core.LLMConfig, logger *zap.Logger) (*Provider, error) {
@@ -70,8 +70,8 @@ func (p *Provider) ExtractSongInfo(ctx context.Context, text string) (*core.Trac
 	return p.client.ExtractSongInfo(ctx, text)
 }
 
-func (p *Provider) IsMusicRequest(ctx context.Context, text string) (bool, error) {
-	return p.client.IsMusicRequest(ctx, text)
+func (p *Provider) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
+	return p.client.IsNotMusicRequest(ctx, text)
 }
 
 type NoOpClient struct{}
@@ -84,7 +84,7 @@ func (n *NoOpClient) ExtractSongInfo(_ context.Context, _ string) (*core.Track, 
 	return nil, fmt.Errorf("LLM provider not configured")
 }
 
-func (n *NoOpClient) IsMusicRequest(_ context.Context, _ string) (bool, error) {
-	// When no LLM provider is configured, default to true to maintain existing behavior
-	return true, nil
+func (n *NoOpClient) IsNotMusicRequest(_ context.Context, _ string) (bool, error) {
+	// When no LLM provider is configured, don't filter anything (return false)
+	return false, nil
 }

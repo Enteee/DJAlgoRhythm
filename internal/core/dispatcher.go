@@ -117,9 +117,9 @@ func (d *Dispatcher) processMessage(ctx context.Context, msgCtx *MessageContext,
 	case MessageTypeNonSpotifyLink:
 		d.askWhichSong(ctx, msgCtx, originalMsg)
 	case MessageTypeFreeText:
-		// Filter out non-music requests
-		if !d.isMusicRequest(ctx, msgCtx.Input.Text) {
-			d.logger.Debug("Message filtered out as non-music request",
+		// Filter out obvious chatter
+		if d.isNotMusicRequest(ctx, msgCtx.Input.Text) {
+			d.logger.Debug("Message filtered out as chatter",
 				zap.String("text", msgCtx.Input.Text))
 			return
 		}
@@ -797,46 +797,49 @@ func (d *Dispatcher) convertToInputMessage(msg *chat.Message) InputMessage {
 	}
 }
 
-// isMusicRequest checks if a message is a music request using LLM or fallback heuristics
-func (d *Dispatcher) isMusicRequest(ctx context.Context, text string) bool {
+// isNotMusicRequest checks if a message is chatter that should be filtered out
+func (d *Dispatcher) isNotMusicRequest(ctx context.Context, text string) bool {
 	// If no LLM provider is available, use simple heuristics
 	if d.llm == nil {
-		return d.isLikelyMusicRequest(text)
+		return d.isLikelyChatter(text)
 	}
 
-	// Use LLM to determine if this is a music request
-	isMusicRequest, err := d.llm.IsMusicRequest(ctx, text)
+	// Use LLM to determine if this is chatter
+	isNotMusicRequest, err := d.llm.IsNotMusicRequest(ctx, text)
 	if err != nil {
-		d.logger.Warn("LLM music request detection failed, using fallback",
+		d.logger.Warn("LLM chatter detection failed, using fallback",
 			zap.Error(err),
 			zap.String("text", text))
-		return d.isLikelyMusicRequest(text)
+		return d.isLikelyChatter(text)
 	}
 
-	return isMusicRequest
+	return isNotMusicRequest
 }
 
-// isLikelyMusicRequest provides a simple heuristic fallback for music request detection
-func (d *Dispatcher) isLikelyMusicRequest(text string) bool {
-	musicKeywords := []string{
-		"play", "add", "song", "music", "artist", "album", "track",
-		"spotify", "youtube", "listen", "hear", "put on", "queue",
+// isLikelyChatter provides a simple heuristic fallback for chatter detection
+func (d *Dispatcher) isLikelyChatter(text string) bool {
+	chatterKeywords := []string{
+		"hello", "hi", "hey", "good morning", "good afternoon", "good evening", "good night",
+		"how are you", "how's everyone", "what's up", "weather", "lunch", "dinner", "work",
+		"tired", "busy", "weekend", "holiday", "birthday", "thanks", "thank you", "lol",
+		"haha", "see you", "bye", "goodbye", "later",
 	}
 
 	textLower := strings.ToLower(text)
 
-	// Check for music keywords
-	for _, keyword := range musicKeywords {
+	// Check for obvious chatter patterns
+	for _, keyword := range chatterKeywords {
 		if strings.Contains(textLower, keyword) {
 			return true
 		}
 	}
 
-	// Check for spotify/youtube URLs
-	if strings.Contains(textLower, "spotify.com") || strings.Contains(textLower, "youtube.com") {
+	const minMessageLength = 3
+	// If very short and no obvious music indicators, likely chatter
+	if len(strings.TrimSpace(text)) < minMessageLength {
 		return true
 	}
 
-	// Default to false for non-music content
+	// Default to false (let through) to avoid filtering music requests
 	return false
 }
