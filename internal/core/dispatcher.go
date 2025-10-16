@@ -156,7 +156,7 @@ func (d *Dispatcher) askWhichSong(ctx context.Context, msgCtx *MessageContext, o
 	}
 }
 
-// llmDisambiguate uses LLM to disambiguate song requests
+// llmDisambiguate uses enhanced three-stage LLM disambiguation with Spotify search
 func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	msgCtx.State = StateLLMDisambiguate
 
@@ -165,26 +165,260 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 		return
 	}
 
-	candidates, err := d.llm.RankCandidates(ctx, msgCtx.Input.Text)
+	// Stage 1: Initial Spotify search using user input directly
+	d.logger.Debug("Stage 1: Performing initial Spotify search",
+		zap.String("text", msgCtx.Input.Text))
+
+	initialSpotifyTracks, err := d.spotify.SearchTrack(ctx, msgCtx.Input.Text)
 	if err != nil {
-		d.logger.Error("LLM disambiguation failed", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, "I couldn't guess. Could you type the song and artist?")
+		d.logger.Error("Initial Spotify search failed", zap.Error(err))
+		d.replyError(ctx, msgCtx, originalMsg, "I couldn't search Spotify. Please try again.")
 		return
 	}
 
-	if len(candidates) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, "I couldn't guess. Could you type the song and artist?")
+	d.logger.Info("Stage 1 complete: Found Spotify tracks",
+		zap.Int("count", len(initialSpotifyTracks)))
+
+	// Stage 2: LLM ranking of Spotify results with user context (or extraction if no results)
+	var rankedCandidates []LLMCandidate
+
+	if len(initialSpotifyTracks) > 0 {
+		d.logger.Debug("Stage 2: LLM ranking of Spotify results")
+		spotifyContext := d.buildSpotifyContextForLLM(initialSpotifyTracks, msgCtx.Input.Text)
+		rankedCandidates, err = d.llm.RankCandidates(ctx, spotifyContext)
+	} else {
+		d.logger.Debug("Stage 2: No initial Spotify results, using LLM extraction")
+		rankedCandidates, err = d.llm.RankCandidates(ctx, msgCtx.Input.Text)
+	}
+	if err != nil {
+		d.logger.Error("LLM ranking failed", zap.Error(err))
+		if len(initialSpotifyTracks) > 0 {
+			// Fallback to Spotify results without LLM ranking
+			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
+		} else {
+			d.replyError(ctx, msgCtx, originalMsg, "I couldn't understand. Could you be more specific?")
+		}
 		return
+	}
+
+	if len(rankedCandidates) == 0 {
+		d.logger.Warn("LLM returned no ranked candidates")
+		if len(initialSpotifyTracks) > 0 {
+			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
+		} else {
+			d.replyError(ctx, msgCtx, originalMsg, "I couldn't find any songs. Could you be more specific?")
+		}
+		return
+	}
+
+	d.logger.Info("Stage 2 complete: LLM ranked Spotify results",
+		zap.Int("count", len(rankedCandidates)),
+		zap.String("top_candidate", fmt.Sprintf("%s - %s",
+			rankedCandidates[0].Track.Artist, rankedCandidates[0].Track.Title)))
+
+	// Stage 3: Enhanced disambiguation with more targeted Spotify search
+	d.enhancedLLMDisambiguate(ctx, msgCtx, originalMsg, rankedCandidates)
+}
+
+// enhancedLLMDisambiguate performs Stage 3: targeted Spotify search and final LLM ranking
+func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *MessageContext,
+	originalMsg *chat.Message, rankedCandidates []LLMCandidate) {
+	msgCtx.State = StateEnhancedLLMDisambiguate
+
+	// Stage 3a: Targeted Spotify search with LLM-ranked candidates
+	d.logger.Debug("Stage 3a: Targeted Spotify search with ranked candidates")
+
+	const maxRankedCandidates = 3 // Limit API calls
+	var allSpotifyTracks []Track
+	for i, candidate := range rankedCandidates {
+		if i >= maxRankedCandidates {
+			break
+		}
+
+		searchQuery := fmt.Sprintf("%s %s", candidate.Track.Artist, candidate.Track.Title)
+		d.logger.Debug("Searching Spotify",
+			zap.String("query", searchQuery),
+			zap.Float64("confidence", candidate.Confidence))
+
+		tracks, err := d.spotify.SearchTrack(ctx, searchQuery)
+		if err != nil {
+			d.logger.Warn("Spotify search failed for candidate",
+				zap.String("query", searchQuery),
+				zap.Error(err))
+			continue
+		}
+
+		// Take top results from this search
+		maxResults := 3
+		if len(tracks) < maxResults {
+			maxResults = len(tracks)
+		}
+
+		for j := 0; j < maxResults; j++ {
+			allSpotifyTracks = append(allSpotifyTracks, tracks[j])
+		}
+	}
+
+	if len(allSpotifyTracks) == 0 {
+		d.logger.Error("No Spotify tracks found for any ranked candidates")
+		d.replyError(ctx, msgCtx, originalMsg, "Couldn't find matching songs on Spotify. Could you be more specific?")
+		return
+	}
+
+	d.logger.Info("Stage 3a complete: Found targeted Spotify tracks",
+		zap.Int("count", len(allSpotifyTracks)))
+
+	// Stage 3b: Final LLM ranking of targeted Spotify results
+	d.logger.Debug("Stage 3b: Final LLM ranking of targeted results")
+
+	spotifyContext := d.buildSpotifyContextForLLM(allSpotifyTracks, msgCtx.Input.Text)
+	finalCandidates, err := d.llm.RankCandidates(ctx, spotifyContext)
+	if err != nil {
+		d.logger.Error("Final LLM ranking failed", zap.Error(err))
+		// Fallback to targeted Spotify search results
+		d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, allSpotifyTracks)
+		return
+	}
+
+	if len(finalCandidates) == 0 {
+		d.logger.Warn("Final LLM returned no candidates, using targeted Spotify results")
+		d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, allSpotifyTracks)
+		return
+	}
+
+	d.logger.Info("Stage 3b complete: Final ranking finished",
+		zap.Int("final_candidates", len(finalCandidates)),
+		zap.String("top_result", fmt.Sprintf("%s - %s",
+			finalCandidates[0].Track.Artist, finalCandidates[0].Track.Title)))
+
+	// Store enhanced candidates and proceed with user approval
+	msgCtx.Candidates = finalCandidates
+	best := finalCandidates[0]
+
+	if best.Confidence >= d.config.LLM.Threshold {
+		d.promptEnhancedApproval(ctx, msgCtx, originalMsg, &best)
+	} else {
+		d.clarifyAsk(ctx, msgCtx, originalMsg, &best)
+	}
+}
+
+// buildSpotifyContextForLLM creates enhanced context for LLM re-ranking
+func (d *Dispatcher) buildSpotifyContextForLLM(tracks []Track, originalText string) string {
+	context := fmt.Sprintf("User said: %q\n\nAvailable songs from Spotify:\n", originalText)
+
+	for i, track := range tracks {
+		context += fmt.Sprintf("%d. %s - %s", i+1, track.Artist, track.Title)
+		if track.Album != "" {
+			context += fmt.Sprintf(" (Album: %s)", track.Album)
+		}
+		if track.Year > 0 {
+			context += fmt.Sprintf(" (%d)", track.Year)
+		}
+		context += "\n"
+	}
+
+	context += "\nPlease rank these songs based on how well they match what the user is looking for."
+	return context
+}
+
+// fallbackToSpotifyResults handles fallback when enhanced LLM fails
+func (d *Dispatcher) fallbackToSpotifyResults(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, tracks []Track) {
+	const (
+		baseConfidence      = 0.7
+		confidenceDecrement = 0.1
+		minConfidence       = 0.3
+	)
+
+	// Convert Spotify tracks to LLM candidates with moderate confidence
+	var candidates []LLMCandidate
+	for i, track := range tracks {
+		confidence := baseConfidence - float64(i)*confidenceDecrement
+		if confidence < minConfidence {
+			confidence = minConfidence
+		}
+
+		candidates = append(candidates, LLMCandidate{
+			Track:      track,
+			Confidence: confidence,
+			Reasoning:  "Spotify search result",
+		})
 	}
 
 	msgCtx.Candidates = candidates
 	best := candidates[0]
 
-	if best.Confidence >= d.config.LLM.Threshold {
-		d.promptApproval(ctx, msgCtx, originalMsg, &best)
-	} else {
-		d.clarifyAsk(ctx, msgCtx, originalMsg, &best)
+	// Use regular approval flow since these are search results
+	d.promptApproval(ctx, msgCtx, originalMsg, &best)
+}
+
+// promptEnhancedApproval asks for user approval with enhanced context
+func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *MessageContext,
+	originalMsg *chat.Message, candidate *LLMCandidate) {
+	msgCtx.State = StateConfirmationPrompt
+
+	prompt := fmt.Sprintf("🎵 Found: **%s - %s**", candidate.Track.Artist, candidate.Track.Title)
+	if candidate.Track.Album != "" {
+		prompt += fmt.Sprintf(" (Album: %s)", candidate.Track.Album)
 	}
+	if candidate.Track.Year > 0 {
+		prompt += fmt.Sprintf(" (%d)", candidate.Track.Year)
+	}
+	if candidate.Track.URL != "" {
+		prompt += fmt.Sprintf("\n🔗 %s", candidate.Track.URL)
+	}
+	prompt += "\n\nIs this what you're looking for?"
+
+	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
+	if err != nil {
+		d.logger.Error("Failed to get enhanced approval", zap.Error(err))
+		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		return
+	}
+
+	if approved {
+		d.handleEnhancedApproval(ctx, msgCtx, originalMsg)
+	} else {
+		d.handleRejection(ctx, msgCtx, originalMsg)
+	}
+}
+
+// handleEnhancedApproval processes approval for enhanced candidates
+func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
+	if len(msgCtx.Candidates) == 0 {
+		d.replyError(ctx, msgCtx, originalMsg, "Something went wrong. Please try again.")
+		return
+	}
+
+	best := msgCtx.Candidates[0]
+
+	// For enhanced candidates, we already have validated Spotify data
+	// Try to find the exact track ID from our previous search
+	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
+	if err != nil || len(tracks) == 0 {
+		d.replyError(ctx, msgCtx, originalMsg, "Couldn't find on Spotify—mind clarifying?")
+		return
+	}
+
+	// Find the best matching track (should be the same as our enhanced result)
+	var trackID string
+	for _, track := range tracks {
+		if track.Artist == best.Track.Artist && track.Title == best.Track.Title {
+			trackID = track.ID
+			break
+		}
+	}
+
+	// Fallback to first result if exact match not found
+	if trackID == "" {
+		trackID = tracks[0].ID
+	}
+
+	if d.dedup.Has(trackID) {
+		d.reactDuplicate(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
 }
 
 // promptApproval asks for user approval with high confidence

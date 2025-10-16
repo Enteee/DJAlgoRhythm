@@ -55,6 +55,8 @@ const (
 	StateAskWhichSong
 	// StateLLMDisambiguate indicates using LLM for song disambiguation
 	StateLLMDisambiguate
+	// StateEnhancedLLMDisambiguate indicates using enhanced LLM disambiguation with Spotify search
+	StateEnhancedLLMDisambiguate
 	// StateConfirmationPrompt indicates waiting for user confirmation
 	StateConfirmationPrompt
 	// StateWaitThumbs indicates waiting for thumbs up/down reaction
