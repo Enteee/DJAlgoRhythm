@@ -199,6 +199,60 @@ func (o *OpenAIClient) ExtractSongInfo(ctx context.Context, text string) (*core.
 	return track, nil
 }
 
+type MusicRequestResponse struct {
+	IsMusicRequest bool    `json:"is_music_request"`
+	Confidence     float64 `json:"confidence"`
+	Reasoning      string  `json:"reasoning,omitempty"`
+}
+
+func (o *OpenAIClient) IsMusicRequest(ctx context.Context, text string) (bool, error) {
+	if strings.TrimSpace(text) == "" {
+		return false, fmt.Errorf("empty text provided")
+	}
+
+	prompt := o.buildMusicRequestPrompt()
+
+	o.logger.Debug("Calling OpenAI for music request detection",
+		zap.String("text", text),
+		zap.String("model", o.config.Model))
+
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(prompt),
+			openai.UserMessage(text),
+		},
+		Model:       o.getModel(),
+		Temperature: openai.Float(defaultTemperature),
+		MaxTokens:   openai.Int(maxTokensExtraction),
+	})
+	if err != nil {
+		o.logger.Error("OpenAI API call failed", zap.Error(err))
+		return false, fmt.Errorf("OpenAI API call failed: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return false, fmt.Errorf("no response from OpenAI")
+	}
+
+	content := resp.Choices[0].Message.Content
+	o.logger.Debug("OpenAI response received", zap.String("content", content))
+
+	var response MusicRequestResponse
+	if err := json.Unmarshal([]byte(content), &response); err != nil {
+		o.logger.Error("Failed to parse OpenAI response",
+			zap.Error(err),
+			zap.String("content", content))
+		return false, fmt.Errorf("failed to parse OpenAI response: %w", err)
+	}
+
+	o.logger.Debug("Music request detection completed",
+		zap.Bool("is_music_request", response.IsMusicRequest),
+		zap.Float64("confidence", response.Confidence),
+		zap.String("reasoning", response.Reasoning))
+
+	return response.IsMusicRequest, nil
+}
+
 func (o *OpenAIClient) getModel() shared.ChatModel {
 	if o.config.Model != "" {
 		return o.config.Model
@@ -277,4 +331,47 @@ Examples of when to set found=false:
 - "Play some music"
 - "I like rock music"
 - "What's that song that goes 'na na na'?" (too vague)`
+}
+
+func (o *OpenAIClient) buildMusicRequestPrompt() string {
+	return `You are a music bot assistant helping to identify if a message is a music/song request.
+
+Your task is to determine if the user's message is requesting a song to be added to a playlist, or if it's just general chat.
+
+Respond with a JSON object in this exact format:
+{
+  "is_music_request": true/false,
+  "confidence": 0.85,
+  "reasoning": "Brief explanation of the decision"
+}
+
+Rules:
+1. confidence should be between 0.0 and 1.0
+2. Set is_music_request to true only if the user wants a specific song added/played
+3. Be conservative - if unclear, set to false
+4. Consider context clues like "play", "add", "put on", song titles, artist names
+5. Ignore general music discussion that isn't requesting a specific song
+
+Examples of is_music_request = TRUE:
+- "Play Bohemian Rhapsody by Queen"
+- "Add some Taylor Swift"
+- "Put on that new song by Drake"
+- "Can you play Yesterday by The Beatles?"
+- "I want to hear some Radiohead"
+- spotify.com/track/xyz (sharing a link)
+- "Play that song that goes 'hey jude'"
+
+Examples of is_music_request = FALSE:
+- "Hello everyone"
+- "How's everyone doing?"
+- "I love music"
+- "What's your favorite band?"
+- "I went to a concert yesterday"
+- "The weather is nice today"
+- "Music is great"
+- "I like rock music" (too general)
+- "What are you listening to?" (asking, not requesting)
+- Random conversation not about music
+
+Be very strict: only return true if the user is clearly requesting a specific song to be played/added.`
 }

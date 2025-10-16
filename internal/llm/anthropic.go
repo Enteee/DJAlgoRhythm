@@ -4,6 +4,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -55,4 +56,24 @@ func (a *AnthropicClient) ExtractSongInfo(ctx context.Context, text string) (*co
 	}
 
 	return &candidates[0].Track, nil
+}
+
+func (a *AnthropicClient) IsMusicRequest(_ context.Context, text string) (bool, error) {
+	// For now, default to true to maintain existing behavior
+	// This is a basic implementation that could be enhanced with actual Anthropic API calls
+	a.logger.Debug("Anthropic music request detection (basic implementation)",
+		zap.String("text", text))
+
+	// Simple heuristic: if it contains common music keywords, treat as music request
+	musicKeywords := []string{"play", "add", "song", "music", "artist", "album", "track", "spotify", "youtube"}
+	textLower := strings.ToLower(text)
+
+	for _, keyword := range musicKeywords {
+		if strings.Contains(textLower, keyword) {
+			return true, nil
+		}
+	}
+
+	// Default to false for non-music content
+	return false, nil
 }

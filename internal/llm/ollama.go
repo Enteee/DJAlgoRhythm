@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -170,4 +171,24 @@ func (o *OllamaClient) ExtractSongInfo(ctx context.Context, text string) (*core.
 	}
 
 	return &candidates[0].Track, nil
+}
+
+func (o *OllamaClient) IsMusicRequest(_ context.Context, text string) (bool, error) {
+	// For now, use simple heuristic approach like Anthropic
+	// This could be enhanced to use actual Ollama API calls
+	o.logger.Debug("Ollama music request detection (basic implementation)",
+		zap.String("text", text))
+
+	// Simple heuristic: if it contains common music keywords, treat as music request
+	musicKeywords := []string{"play", "add", "song", "music", "artist", "album", "track", "spotify", "youtube"}
+	textLower := strings.ToLower(text)
+
+	for _, keyword := range musicKeywords {
+		if strings.Contains(textLower, keyword) {
+			return true, nil
+		}
+	}
+
+	// Default to false for non-music content
+	return false, nil
 }

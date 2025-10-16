@@ -117,6 +117,12 @@ func (d *Dispatcher) processMessage(ctx context.Context, msgCtx *MessageContext,
 	case MessageTypeNonSpotifyLink:
 		d.askWhichSong(ctx, msgCtx, originalMsg)
 	case MessageTypeFreeText:
+		// Filter out non-music requests
+		if !d.isMusicRequest(ctx, msgCtx.Input.Text) {
+			d.logger.Debug("Message filtered out as non-music request",
+				zap.String("text", msgCtx.Input.Text))
+			return
+		}
 		d.llmDisambiguate(ctx, msgCtx, originalMsg)
 	}
 }
@@ -789,4 +795,48 @@ func (d *Dispatcher) convertToInputMessage(msg *chat.Message) InputMessage {
 		MessageID: msg.ID,
 		Timestamp: time.Now(), // Original timestamp not available in chat.Message
 	}
+}
+
+// isMusicRequest checks if a message is a music request using LLM or fallback heuristics
+func (d *Dispatcher) isMusicRequest(ctx context.Context, text string) bool {
+	// If no LLM provider is available, use simple heuristics
+	if d.llm == nil {
+		return d.isLikelyMusicRequest(text)
+	}
+
+	// Use LLM to determine if this is a music request
+	isMusicRequest, err := d.llm.IsMusicRequest(ctx, text)
+	if err != nil {
+		d.logger.Warn("LLM music request detection failed, using fallback",
+			zap.Error(err),
+			zap.String("text", text))
+		return d.isLikelyMusicRequest(text)
+	}
+
+	return isMusicRequest
+}
+
+// isLikelyMusicRequest provides a simple heuristic fallback for music request detection
+func (d *Dispatcher) isLikelyMusicRequest(text string) bool {
+	musicKeywords := []string{
+		"play", "add", "song", "music", "artist", "album", "track",
+		"spotify", "youtube", "listen", "hear", "put on", "queue",
+	}
+
+	textLower := strings.ToLower(text)
+
+	// Check for music keywords
+	for _, keyword := range musicKeywords {
+		if strings.Contains(textLower, keyword) {
+			return true
+		}
+	}
+
+	// Check for spotify/youtube URLs
+	if strings.Contains(textLower, "spotify.com") || strings.Contains(textLower, "youtube.com") {
+		return true
+	}
+
+	// Default to false for non-music content
+	return false
 }
