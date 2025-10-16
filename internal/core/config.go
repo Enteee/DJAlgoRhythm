@@ -7,13 +7,14 @@ import (
 
 // Default configuration values
 const (
-	DefaultLLMThreshold       = 0.65
-	DefaultMaxCandidates      = 3
-	DefaultServerPort         = 8080
-	DefaultTimeoutSeconds     = 10
-	DefaultConfirmTimeoutSecs = 120
-	DefaultMaxRetries         = 3
-	DefaultRetryDelaySecs     = 5
+	DefaultLLMThreshold            = 0.65
+	DefaultMaxCandidates           = 3
+	DefaultServerPort              = 8080
+	DefaultTimeoutSeconds          = 10
+	DefaultConfirmTimeoutSecs      = 120
+	DefaultConfirmAdminTimeoutSecs = 3600
+	DefaultMaxRetries              = 3
+	DefaultRetryDelaySecs          = 5
 )
 
 type Config struct {
@@ -71,9 +72,10 @@ type LogConfig struct {
 }
 
 type AppConfig struct {
-	ConfirmTimeoutSecs int
-	MaxRetries         int
-	RetryDelaySecs     int
+	ConfirmTimeoutSecs      int
+	ConfirmAdminTimeoutSecs int
+	MaxRetries              int
+	RetryDelaySecs          int
 }
 
 func DefaultConfig() *Config {
@@ -108,9 +110,10 @@ func DefaultConfig() *Config {
 			Format: "json",
 		},
 		App: AppConfig{
-			ConfirmTimeoutSecs: DefaultConfirmTimeoutSecs,
-			MaxRetries:         DefaultMaxRetries,
-			RetryDelaySecs:     DefaultRetryDelaySecs,
+			ConfirmTimeoutSecs:      DefaultConfirmTimeoutSecs,
+			ConfirmAdminTimeoutSecs: DefaultConfirmAdminTimeoutSecs,
+			MaxRetries:              DefaultMaxRetries,
+			RetryDelaySecs:          DefaultRetryDelaySecs,
 		},
 	}
 }

@@ -27,9 +27,9 @@ var berneseGermanMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis de Gruppen-Admin zueseit...",
+	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis dr Gruppen-Admin zueseit...",
 	"admin.approved":          "✅ Admin hets guet geheisse! Wird zur Playlist zuegfüegt...",
-	"admin.denied":            "❌ Admin het s Lied abglehnt.",
+	"admin.denied":            "❌ Admin het z'Lied abglehnt.",
 	"admin.approval_prompt":   "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\nWottsch das Lied zur Playlist hinzuefüege?",
 	"admin.button_approve":    "✅ Isch ok",
 	"admin.button_deny":       "❌ Ablehnä",

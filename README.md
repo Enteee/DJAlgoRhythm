@@ -140,6 +140,7 @@ go run ./cmd/whatdj
 ⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. This feature is disabled by default and should only be used for personal/testing purposes.
 
 1. **Get Group JID:**
+
    ```bash
    # Run with debug logging to see group JIDs
    WHATDJ_WHATSAPP_ENABLED=true WHATDJ_LOG_LEVEL=debug ./bin/whatdj
@@ -182,10 +183,12 @@ never gonna give you up rick astley
 ### User Interactions
 
 #### Telegram
+
 - **Inline Buttons**: Click "👍 Confirm" or "👎 Not this"
 - **Reactions** (if supported): React with 👍 or 👎 emojis
 
 #### WhatsApp
+
 - **Reactions**: React with 👍 or 👎 emojis
 
 ### State Machine
@@ -221,6 +224,7 @@ never gonna give you up rick astley
 | `WHATDJ_LLM_THRESHOLD` | Confidence threshold (0-1) | `0.65` | ❌ |
 | **General** | | | |
 | `WHATDJ_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
+| `WHATDJ_CONFIRM_ADMIN_TIMEOUT_SECS` | Reaction timeout for admins (seconds) | `3600` | ❌ |
 | `WHATDJ_SERVER_PORT` | HTTP server port | `8080` | ❌ |
 | `WHATDJ_LOG_LEVEL` | Logging level | `info` | ❌ |
 

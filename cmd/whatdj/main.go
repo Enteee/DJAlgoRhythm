@@ -66,7 +66,8 @@ func init() {
 	rootCmd.PersistentFlags().String("llm-model", "", "LLM model name")
 	rootCmd.PersistentFlags().String("llm-api-key", "", "LLM API key")
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
-	rootCmd.PersistentFlags().Int("confirm-timeout", 120, "Confirmation timeout in seconds")
+	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
+	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
 
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind flags: %v\n", err)
@@ -144,7 +145,8 @@ func buildConfig() *core.Config {
 
 	cfg.Log.Level = viper.GetString("log-level")
 
-	cfg.App.ConfirmTimeoutSecs = viper.GetInt("confirm-timeout")
+	cfg.App.ConfirmTimeoutSecs = viper.GetInt("confirm-timeout-secs")
+	cfg.App.ConfirmAdminTimeoutSecs = viper.GetInt("confirm-admin-timeout-secs")
 	cfg.App.MaxRetries = viper.GetInt("max-retries")
 	if cfg.App.MaxRetries == 0 {
 		cfg.App.MaxRetries = 3

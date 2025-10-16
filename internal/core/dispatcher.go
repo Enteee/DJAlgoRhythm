@@ -652,7 +652,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	if telegramFrontend, ok := d.frontend.(interface {
 		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
 	}); ok {
-		approved, err := telegramFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmTimeoutSecs)
+		approved, err := telegramFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
 		if err != nil {
 			d.logger.Error("Admin approval failed", zap.Error(err))
 			d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
