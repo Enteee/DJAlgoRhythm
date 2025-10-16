@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/subosito/gotenv"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
@@ -65,6 +66,7 @@ func init() {
 	rootCmd.PersistentFlags().String("llm-provider", "none", "LLM provider (openai, anthropic, ollama, none)")
 	rootCmd.PersistentFlags().String("llm-model", "", "LLM model name")
 	rootCmd.PersistentFlags().String("llm-api-key", "", "LLM API key")
+	rootCmd.PersistentFlags().String("server-host", "0.0.0.0", "HTTP server host")
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
 	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
@@ -77,24 +79,22 @@ func init() {
 }
 
 func initConfig() {
+	// Load .env file explicitly using gotenv
+	envFile := ".env"
 	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		viper.AddConfigPath(".")
-		viper.SetConfigName(".env")
-		viper.SetConfigType("env")
+		envFile = cfgFile
+	}
+
+	if err := gotenv.Load(envFile); err != nil {
+		// Don't exit if .env file doesn't exist, just warn
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error loading .env file: %v\n", err)
+		}
 	}
 
 	viper.SetEnvPrefix("WHATDJ")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			fmt.Fprintf(os.Stderr, "Error reading config file: %v\n", err)
-			os.Exit(1)
-		}
-	}
 
 	config = buildConfig()
 	logger = buildLogger(config.Log.Level)
@@ -172,6 +172,15 @@ func buildConfig() *core.Config {
 		fmt.Fprintf(os.Stderr, "Warning: Unsupported language '%s', falling back to '%s'. Supported languages: %s\n",
 			cfg.App.Language, i18n.DefaultLanguage, strings.Join(supportedLanguages, ", "))
 		cfg.App.Language = i18n.DefaultLanguage
+	}
+
+	// Build default redirect URL based on server configuration if not explicitly set
+	if cfg.Spotify.RedirectURL == "" {
+		serverHost := cfg.Server.Host
+		if serverHost == "0.0.0.0" {
+			serverHost = "127.0.0.1" // Use localhost for OAuth callback
+		}
+		cfg.Spotify.RedirectURL = fmt.Sprintf("http://%s:%d/callback", serverHost, cfg.Server.Port)
 	}
 
 	return cfg

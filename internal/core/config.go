@@ -93,7 +93,7 @@ func DefaultConfig() *Config {
 			ReactionSupport: true,
 		},
 		Spotify: SpotifyConfig{
-			RedirectURL: "http://127.0.0.1:8080/callback",
+			RedirectURL: "", // Will be dynamically generated based on server config
 			TokenPath:   "./spotify_token.json",
 		},
 		LLM: LLMConfig{
