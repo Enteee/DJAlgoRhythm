@@ -56,6 +56,6 @@ var englishMessages = map[string]string{
 	"button.not_this": "👎 Not this",
 
 	// Bot status messages
-	"bot.startup":  "🎵 WhatDJ Bot is now online and ready to add music to your playlist!",
-	"bot.shutdown": "🎵 WhatDJ Bot is going offline. See you later!",
+	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!",
+	"bot.shutdown": "🎵 I am going offline. See you later!",
 }

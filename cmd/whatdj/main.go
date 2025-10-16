@@ -28,6 +28,10 @@ import (
 	"whatdj/internal/store"
 )
 
+const (
+	defaultServerHost = "0.0.0.0"
+)
+
 var (
 	cfgFile string
 	config  *core.Config
@@ -66,11 +70,12 @@ func init() {
 	rootCmd.PersistentFlags().String("llm-provider", "none", "LLM provider (openai, anthropic, ollama, none)")
 	rootCmd.PersistentFlags().String("llm-model", "", "LLM model name")
 	rootCmd.PersistentFlags().String("llm-api-key", "", "LLM API key")
-	rootCmd.PersistentFlags().String("server-host", "0.0.0.0", "HTTP server host")
+	rootCmd.PersistentFlags().String("server-host", defaultServerHost, "HTTP server host")
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
 	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
-	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", strings.Join(i18n.GetSupportedLanguages(), ", ")))
+	supportedLangs := strings.Join(i18n.GetSupportedLanguages(), ", ")
+	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", supportedLangs))
 
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind flags: %v\n", err)
@@ -103,6 +108,17 @@ func initConfig() {
 func buildConfig() *core.Config {
 	cfg := core.DefaultConfig()
 
+	configureWhatsApp(cfg)
+	configureTelegram(cfg)
+	configureSpotify(cfg)
+	configureLLM(cfg)
+	configureServer(cfg)
+	configureApp(cfg)
+
+	return cfg
+}
+
+func configureWhatsApp(cfg *core.Config) {
 	cfg.WhatsApp.Enabled = viper.GetBool("whatsapp-enabled")
 	cfg.WhatsApp.GroupJID = viper.GetString("whatsapp-group-jid")
 	cfg.WhatsApp.DeviceName = viper.GetString("whatsapp-device-name")
@@ -110,7 +126,9 @@ func buildConfig() *core.Config {
 	if cfg.WhatsApp.SessionPath == "" {
 		cfg.WhatsApp.SessionPath = "./whatsapp_session.db"
 	}
+}
 
+func configureTelegram(cfg *core.Config) {
 	cfg.Telegram.Enabled = viper.GetBool("telegram-enabled")
 	cfg.Telegram.BotToken = viper.GetString("telegram-bot-token")
 	cfg.Telegram.GroupID = viper.GetInt64("telegram-group-id")
@@ -119,7 +137,9 @@ func buildConfig() *core.Config {
 		cfg.Telegram.ReactionSupport = true // default to true
 	}
 	cfg.Telegram.AdminApproval = viper.GetBool("admin-approval")
+}
 
+func configureSpotify(cfg *core.Config) {
 	cfg.Spotify.ClientID = viper.GetString("spotify-client-id")
 	cfg.Spotify.ClientSecret = viper.GetString("spotify-client-secret")
 	cfg.Spotify.RedirectURL = viper.GetString("spotify-redirect-url")
@@ -129,6 +149,17 @@ func buildConfig() *core.Config {
 		cfg.Spotify.TokenPath = "./spotify_token.json"
 	}
 
+	// Build default redirect URL based on server configuration if not explicitly set
+	if cfg.Spotify.RedirectURL == "" {
+		serverHost := cfg.Server.Host
+		if serverHost == defaultServerHost {
+			serverHost = "127.0.0.1" // Use localhost for OAuth callback
+		}
+		cfg.Spotify.RedirectURL = fmt.Sprintf("http://%s:%d/callback", serverHost, cfg.Server.Port)
+	}
+}
+
+func configureLLM(cfg *core.Config) {
 	cfg.LLM.Provider = viper.GetString("llm-provider")
 	cfg.LLM.Model = viper.GetString("llm-model")
 	cfg.LLM.APIKey = viper.GetString("llm-api-key")
@@ -137,15 +168,18 @@ func buildConfig() *core.Config {
 	if cfg.LLM.Threshold == 0 {
 		cfg.LLM.Threshold = 0.65
 	}
+}
 
+func configureServer(cfg *core.Config) {
 	cfg.Server.Host = viper.GetString("server-host")
 	if cfg.Server.Host == "" {
-		cfg.Server.Host = "0.0.0.0"
+		cfg.Server.Host = defaultServerHost
 	}
 	cfg.Server.Port = viper.GetInt("server-port")
-
 	cfg.Log.Level = viper.GetString("log-level")
+}
 
+func configureApp(cfg *core.Config) {
 	cfg.App.ConfirmTimeoutSecs = viper.GetInt("confirm-timeout-secs")
 	cfg.App.ConfirmAdminTimeoutSecs = viper.GetInt("confirm-admin-timeout-secs")
 	cfg.App.MaxRetries = viper.GetInt("max-retries")
@@ -173,17 +207,6 @@ func buildConfig() *core.Config {
 			cfg.App.Language, i18n.DefaultLanguage, strings.Join(supportedLanguages, ", "))
 		cfg.App.Language = i18n.DefaultLanguage
 	}
-
-	// Build default redirect URL based on server configuration if not explicitly set
-	if cfg.Spotify.RedirectURL == "" {
-		serverHost := cfg.Server.Host
-		if serverHost == "0.0.0.0" {
-			serverHost = "127.0.0.1" // Use localhost for OAuth callback
-		}
-		cfg.Spotify.RedirectURL = fmt.Sprintf("http://%s:%d/callback", serverHost, cfg.Server.Port)
-	}
-
-	return cfg
 }
 
 func buildLogger(level string) *zap.Logger {
