@@ -3,6 +3,8 @@ package core
 
 import (
 	"time"
+
+	"whatdj/internal/i18n"
 )
 
 // Default configuration values
@@ -76,6 +78,7 @@ type AppConfig struct {
 	ConfirmAdminTimeoutSecs int
 	MaxRetries              int
 	RetryDelaySecs          int
+	Language                string // Bot language for user-facing messages
 }
 
 func DefaultConfig() *Config {
@@ -114,6 +117,7 @@ func DefaultConfig() *Config {
 			ConfirmAdminTimeoutSecs: DefaultConfirmAdminTimeoutSecs,
 			MaxRetries:              DefaultMaxRetries,
 			RetryDelaySecs:          DefaultRetryDelaySecs,
+			Language:                i18n.DefaultLanguage, // Default to English
 		},
 	}
 }

@@ -48,7 +48,7 @@ func NewDispatcher(
 		llm:             llm,
 		dedup:           dedup,
 		logger:          logger,
-		localizer:       i18n.NewLocalizer(i18n.DefaultLanguage),
+		localizer:       i18n.NewLocalizer(config.App.Language),
 		messageContexts: make(map[string]*MessageContext),
 	}
 }
@@ -67,13 +67,20 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start chat frontend: %w", err)
 	}
 
+	// Send startup message to the group
+	d.sendStartupMessage(ctx)
+
 	// Begin listening for messages
 	return d.frontend.Listen(ctx, d.handleMessage)
 }
 
 // Stop gracefully shuts down the dispatcher
-func (d *Dispatcher) Stop(_ context.Context) error {
+func (d *Dispatcher) Stop(ctx context.Context) error {
 	d.logger.Info("Stopping message dispatcher")
+
+	// Send shutdown message to the group
+	d.sendShutdownMessage(ctx)
+
 	return nil
 }
 
@@ -114,6 +121,9 @@ func (d *Dispatcher) processMessage(ctx context.Context, msgCtx *MessageContext,
 		zap.String("text", msgCtx.Input.Text),
 	)
 
+	// Add "eyes" reaction to show the message is being processed
+	d.reactProcessing(ctx, originalMsg)
+
 	switch msgCtx.Input.Type {
 	case MessageTypeSpotifyLink:
 		d.handleSpotifyLink(ctx, msgCtx, originalMsg)
@@ -124,6 +134,7 @@ func (d *Dispatcher) processMessage(ctx context.Context, msgCtx *MessageContext,
 		if d.isNotMusicRequest(ctx, msgCtx.Input.Text) {
 			d.logger.Debug("Message filtered out as chatter",
 				zap.String("text", msgCtx.Input.Text))
+			d.reactIgnored(ctx, originalMsg)
 			return
 		}
 		d.llmDisambiguate(ctx, msgCtx, originalMsg)
@@ -857,4 +868,56 @@ func (d *Dispatcher) isLikelyChatter(text string) bool {
 
 	// Default to false (let through) to avoid filtering music requests
 	return false
+}
+
+// sendStartupMessage sends a startup notification to the group
+func (d *Dispatcher) sendStartupMessage(ctx context.Context) {
+	if groupID := d.getGroupID(); groupID != "" {
+		startupMessage := d.localizer.T("bot.startup")
+		if _, err := d.frontend.SendText(ctx, groupID, "", startupMessage); err != nil {
+			d.logger.Debug("Failed to send startup message", zap.Error(err))
+		}
+	}
+}
+
+// sendShutdownMessage sends a shutdown notification to the group
+func (d *Dispatcher) sendShutdownMessage(ctx context.Context) {
+	if groupID := d.getGroupID(); groupID != "" {
+		shutdownMessage := d.localizer.T("bot.shutdown")
+		if _, err := d.frontend.SendText(ctx, groupID, "", shutdownMessage); err != nil {
+			d.logger.Debug("Failed to send shutdown message", zap.Error(err))
+		}
+	}
+}
+
+// getGroupID returns the configured group ID for the active frontend
+func (d *Dispatcher) getGroupID() string {
+	// Use the configuration to determine the group ID based on enabled frontend
+	if d.config.Telegram.Enabled {
+		return fmt.Sprintf("%d", d.config.Telegram.GroupID)
+	}
+
+	if d.config.WhatsApp.Enabled {
+		return d.config.WhatsApp.GroupJID
+	}
+
+	return ""
+}
+
+// reactProcessing adds a "👀" reaction to show the message is being processed
+func (d *Dispatcher) reactProcessing(ctx context.Context, msg *chat.Message) {
+	if err := d.frontend.React(ctx, msg.ChatID, msg.ID, "👀"); err != nil {
+		d.logger.Debug("Failed to add processing reaction", zap.Error(err))
+	}
+}
+
+// reactIgnored adds a random "see/hear/speak no evil" emoji to ignored messages
+func (d *Dispatcher) reactIgnored(ctx context.Context, msg *chat.Message) {
+	// Randomly choose one of the three "no evil" emojis
+	ignoredEmojis := []string{"🙈", "🙉", "🙊"}
+	emoji := ignoredEmojis[len(msg.ID)%len(ignoredEmojis)] // Simple deterministic selection
+
+	if err := d.frontend.React(ctx, msg.ChatID, msg.ID, chat.Reaction(emoji)); err != nil {
+		d.logger.Debug("Failed to add ignored reaction", zap.Error(err))
+	}
 }

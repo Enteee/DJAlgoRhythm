@@ -21,6 +21,7 @@ import (
 	"whatdj/internal/chat/whatsapp"
 	"whatdj/internal/core"
 	httpserver "whatdj/internal/http"
+	"whatdj/internal/i18n"
 	"whatdj/internal/llm"
 	"whatdj/internal/spotify"
 	"whatdj/internal/store"
@@ -58,7 +59,6 @@ func init() {
 	rootCmd.PersistentFlags().Bool("telegram-enabled", true, "Enable Telegram integration")
 	rootCmd.PersistentFlags().String("telegram-bot-token", "", "Telegram bot token")
 	rootCmd.PersistentFlags().Int64("telegram-group-id", 0, "Telegram group ID")
-	rootCmd.PersistentFlags().String("telegram-group-name", "", "Telegram group name")
 	rootCmd.PersistentFlags().String("spotify-client-id", "", "Spotify client ID")
 	rootCmd.PersistentFlags().String("spotify-client-secret", "", "Spotify client secret")
 	rootCmd.PersistentFlags().String("spotify-playlist-id", "", "Spotify playlist ID")
@@ -68,6 +68,7 @@ func init() {
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
 	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
+	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", strings.Join(i18n.GetSupportedLanguages(), ", ")))
 
 	if err := viper.BindPFlags(rootCmd.PersistentFlags()); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to bind flags: %v\n", err)
@@ -150,6 +151,27 @@ func buildConfig() *core.Config {
 	cfg.App.MaxRetries = viper.GetInt("max-retries")
 	if cfg.App.MaxRetries == 0 {
 		cfg.App.MaxRetries = 3
+	}
+
+	// Language configuration with validation
+	cfg.App.Language = viper.GetString("language")
+	if cfg.App.Language == "" {
+		cfg.App.Language = i18n.DefaultLanguage
+	}
+
+	// Validate that the specified language is supported
+	supportedLanguages := i18n.GetSupportedLanguages()
+	isSupported := false
+	for _, lang := range supportedLanguages {
+		if cfg.App.Language == lang {
+			isSupported = true
+			break
+		}
+	}
+	if !isSupported {
+		fmt.Fprintf(os.Stderr, "Warning: Unsupported language '%s', falling back to '%s'. Supported languages: %s\n",
+			cfg.App.Language, i18n.DefaultLanguage, strings.Join(supportedLanguages, ", "))
+		cfg.App.Language = i18n.DefaultLanguage
 	}
 
 	return cfg
@@ -255,10 +277,12 @@ func createChatFrontend() (chat.Frontend, error) {
 			Enabled:         config.Telegram.Enabled,
 			ReactionSupport: config.Telegram.ReactionSupport,
 			AdminApproval:   config.Telegram.AdminApproval,
+			Language:        config.App.Language,
 		}
 		frontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
 		logger.Info("Using Telegram as primary chat frontend",
-			zap.Bool("admin_approval", config.Telegram.AdminApproval))
+			zap.Bool("admin_approval", config.Telegram.AdminApproval),
+			zap.String("language", config.App.Language))
 		return frontend, nil
 	}
 
@@ -268,9 +292,11 @@ func createChatFrontend() (chat.Frontend, error) {
 			DeviceName:  config.WhatsApp.DeviceName,
 			SessionPath: config.WhatsApp.SessionPath,
 			Enabled:     config.WhatsApp.Enabled,
+			Language:    config.App.Language,
 		}
 		frontend := whatsapp.NewFrontend(whatsappConfig, logger.Named("whatsapp"))
-		logger.Info("Using WhatsApp as chat frontend")
+		logger.Info("Using WhatsApp as chat frontend",
+			zap.String("language", config.App.Language))
 		return frontend, nil
 	}
 
@@ -318,7 +344,16 @@ func runServices(ctx context.Context, svcs *services) error {
 
 	if err := g.Wait(); err != nil {
 		logger.Error("WhatDj v2 stopped with error", zap.Error(err))
+		// Still call Stop to send shutdown message
+		if stopErr := svcs.dispatcher.Stop(context.Background()); stopErr != nil {
+			logger.Debug("Failed to stop dispatcher gracefully", zap.Error(stopErr))
+		}
 		return err
+	}
+
+	// Graceful shutdown - call Stop to send shutdown message
+	if err := svcs.dispatcher.Stop(context.Background()); err != nil {
+		logger.Debug("Failed to stop dispatcher gracefully", zap.Error(err))
 	}
 
 	logger.Info("WhatDj v2 stopped gracefully")

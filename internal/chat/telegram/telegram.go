@@ -27,8 +27,9 @@ type Config struct {
 	BotToken        string
 	GroupID         int64 // Chat ID of the group to monitor
 	Enabled         bool
-	ReactionSupport bool // Whether the group supports reactions
-	AdminApproval   bool // Whether admin approval is required for songs
+	ReactionSupport bool   // Whether the group supports reactions
+	AdminApproval   bool   // Whether admin approval is required for songs
+	Language        string // Bot language for user-facing messages
 }
 
 // Frontend implements the chat.Frontend interface for Telegram
@@ -73,11 +74,17 @@ type adminApprovalContext struct {
 
 // NewFrontend creates a new Telegram frontend
 func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
+	// Use configured language, fallback to default if not set
+	language := config.Language
+	if language == "" {
+		language = i18n.DefaultLanguage
+	}
+
 	return &Frontend{
 		config:                config,
 		logger:                logger,
 		parser:                text.NewParser(),
-		localizer:             i18n.NewLocalizer(i18n.DefaultLanguage),
+		localizer:             i18n.NewLocalizer(language),
 		pendingApprovals:      make(map[string]*approvalContext),
 		pendingAdminApprovals: make(map[string]*adminApprovalContext),
 	}

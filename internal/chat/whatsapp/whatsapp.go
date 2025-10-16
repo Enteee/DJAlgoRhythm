@@ -22,6 +22,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 
 	"whatdj/internal/chat"
+	"whatdj/internal/i18n"
 	"whatdj/pkg/text"
 )
 
@@ -31,6 +32,7 @@ type Config struct {
 	DeviceName  string
 	SessionPath string
 	Enabled     bool
+	Language    string // Bot language for user-facing messages
 }
 
 // Frontend implements the chat.Frontend interface for WhatsApp
@@ -40,6 +42,7 @@ type Frontend struct {
 	client    *whatsmeow.Client
 	container *sqlstore.Container
 	parser    *text.Parser
+	localizer *i18n.Localizer
 
 	// Message handling
 	messageHandler func(*chat.Message)
@@ -59,10 +62,17 @@ type approvalContext struct {
 
 // NewFrontend creates a new WhatsApp frontend
 func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
+	// Use configured language, fallback to default if not set
+	language := config.Language
+	if language == "" {
+		language = i18n.DefaultLanguage
+	}
+
 	return &Frontend{
 		config:           config,
 		logger:           logger,
 		parser:           text.NewParser(),
+		localizer:        i18n.NewLocalizer(language),
 		pendingApprovals: make(map[string]*approvalContext),
 	}
 }
