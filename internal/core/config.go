@@ -40,6 +40,7 @@ type TelegramConfig struct {
 	GroupName       string
 	Enabled         bool
 	ReactionSupport bool
+	AdminApproval   bool
 }
 
 type SpotifyConfig struct {

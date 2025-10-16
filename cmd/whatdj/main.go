@@ -118,6 +118,7 @@ func buildConfig() *core.Config {
 	if !viper.IsSet("telegram-reaction-support") {
 		cfg.Telegram.ReactionSupport = true // default to true
 	}
+	cfg.Telegram.AdminApproval = viper.GetBool("admin-approval")
 
 	cfg.Spotify.ClientID = viper.GetString("spotify-client-id")
 	cfg.Spotify.ClientSecret = viper.GetString("spotify-client-secret")
@@ -197,10 +198,56 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
 
+	services, err := initializeServices(ctx)
+	if err != nil {
+		return err
+	}
+
+	return runServices(ctx, services)
+}
+
+type services struct {
+	frontend   chat.Frontend
+	spotify    *spotify.Client
+	llm        core.LLMProvider
+	httpServer *httpserver.Server
+	dispatcher *core.Dispatcher
+	dedup      *store.DedupStore
+}
+
+func initializeServices(ctx context.Context) (*services, error) {
 	dedup := store.NewDedupStore(10000, 0.001)
 
-	// Create chat frontend based on configuration
-	var frontend chat.Frontend
+	frontend, err := createChatFrontend()
+	if err != nil {
+		return nil, err
+	}
+
+	spotifyClient := spotify.NewClient(&config.Spotify, logger.Named("spotify"))
+	if authErr := spotifyClient.Authenticate(ctx); authErr != nil {
+		return nil, fmt.Errorf("failed to authenticate with Spotify: %w", authErr)
+	}
+
+	llmProvider, err := createLLMProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	httpServer := httpserver.NewServer(&config.Server, logger.Named("http"))
+	dispatcher := core.NewDispatcher(config, frontend, spotifyClient, llmProvider, dedup,
+		logger.Named("dispatcher"))
+
+	return &services{
+		frontend:   frontend,
+		spotify:    spotifyClient,
+		llm:        llmProvider,
+		httpServer: httpServer,
+		dispatcher: dispatcher,
+		dedup:      dedup,
+	}, nil
+}
+
+func createChatFrontend() (chat.Frontend, error) {
 	if config.Telegram.Enabled {
 		telegramConfig := &telegram.Config{
 			BotToken:        config.Telegram.BotToken,
@@ -208,10 +255,15 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 			GroupName:       config.Telegram.GroupName,
 			Enabled:         config.Telegram.Enabled,
 			ReactionSupport: config.Telegram.ReactionSupport,
+			AdminApproval:   config.Telegram.AdminApproval,
 		}
-		frontend = telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
-		logger.Info("Using Telegram as primary chat frontend")
-	} else if config.WhatsApp.Enabled {
+		frontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
+		logger.Info("Using Telegram as primary chat frontend",
+			zap.Bool("admin_approval", config.Telegram.AdminApproval))
+		return frontend, nil
+	}
+
+	if config.WhatsApp.Enabled {
 		whatsappConfig := &whatsapp.Config{
 			GroupJID:    config.WhatsApp.GroupJID,
 			GroupName:   config.WhatsApp.GroupName,
@@ -219,45 +271,34 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 			SessionPath: config.WhatsApp.SessionPath,
 			Enabled:     config.WhatsApp.Enabled,
 		}
-		frontend = whatsapp.NewFrontend(whatsappConfig, logger.Named("whatsapp"))
+		frontend := whatsapp.NewFrontend(whatsappConfig, logger.Named("whatsapp"))
 		logger.Info("Using WhatsApp as chat frontend")
-	} else {
-		return fmt.Errorf("no chat frontend enabled - enable either Telegram or WhatsApp")
+		return frontend, nil
 	}
 
-	spotifyClient := spotify.NewClient(&config.Spotify, logger.Named("spotify"))
-	if err := spotifyClient.Authenticate(ctx); err != nil {
-		return fmt.Errorf("failed to authenticate with Spotify: %w", err)
-	}
+	return nil, fmt.Errorf("no chat frontend enabled - enable either Telegram or WhatsApp")
+}
 
-	var llmProvider core.LLMProvider
+func createLLMProvider() (core.LLMProvider, error) {
 	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {
 		provider, err := llm.NewProvider(&config.LLM, logger.Named("llm"))
 		if err != nil {
-			return fmt.Errorf("failed to create LLM provider: %w", err)
+			return nil, fmt.Errorf("failed to create LLM provider: %w", err)
 		}
-		llmProvider = provider
+		return provider, nil
 	}
+	return nil, nil
+}
 
-	httpServer := httpserver.NewServer(&config.Server, logger.Named("http"))
-
-	dispatcher := core.NewDispatcher(
-		config,
-		frontend,
-		spotifyClient,
-		llmProvider,
-		dedup,
-		logger.Named("dispatcher"),
-	)
-
+func runServices(ctx context.Context, svcs *services) error {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return httpServer.Start(gCtx)
+		return svcs.httpServer.Start(gCtx)
 	})
 
 	g.Go(func() error {
-		return dispatcher.Start(gCtx)
+		return svcs.dispatcher.Start(gCtx)
 	})
 
 	g.Go(func() error {
@@ -269,7 +310,7 @@ func runWhatDj(_ *cobra.Command, _ []string) error {
 			case <-gCtx.Done():
 				return nil
 			case <-ticker.C:
-				httpServer.SetPlaylistSize(dedup.Size())
+				svcs.httpServer.SetPlaylistSize(svcs.dedup.Size())
 			}
 		}
 	})

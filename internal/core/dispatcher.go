@@ -259,8 +259,92 @@ func (d *Dispatcher) handleRejection(ctx context.Context, msgCtx *MessageContext
 
 // addToPlaylist adds a track to the Spotify playlist
 func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
-	msgCtx.State = StateAddToPlaylist
 	msgCtx.SelectedID = trackID
+
+	// Check if admin approval is required
+	if d.isAdminApprovalRequired() {
+		d.awaitAdminApproval(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
+
+	d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+}
+
+// isAdminApprovalRequired checks if admin approval is enabled
+func (d *Dispatcher) isAdminApprovalRequired() bool {
+	// Check if the frontend supports admin approval
+	if telegramFrontend, ok := d.frontend.(interface {
+		IsAdminApprovalEnabled() bool
+	}); ok {
+		return telegramFrontend.IsAdminApprovalEnabled()
+	}
+	return false
+}
+
+// awaitAdminApproval requests admin approval before adding to playlist
+func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	msgCtx.State = StateAwaitAdminApproval
+
+	// Get track information for the approval request
+	track, err := d.spotify.GetTrack(ctx, trackID)
+	if err != nil {
+		d.logger.Error("Failed to get track info for admin approval", zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, "Failed to get track information")
+		return
+	}
+
+	songInfo := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+	songURL := track.URL
+
+	// Send notification to user that admin approval is required
+	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
+		"⏳ Admin approval required. Waiting for group admin approval..."); err != nil {
+		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
+	}
+
+	// Request admin approval via Telegram frontend
+	if telegramFrontend, ok := d.frontend.(interface {
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+	}); ok {
+		approved, err := telegramFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmTimeoutSecs)
+		if err != nil {
+			d.logger.Error("Admin approval failed", zap.Error(err))
+			d.reactError(ctx, msgCtx, originalMsg, "Admin approval process failed")
+			return
+		}
+
+		if approved {
+			d.logger.Info("Admin approved song addition",
+				zap.String("user", originalMsg.SenderName),
+				zap.String("song", songInfo))
+
+			// Notify user of approval
+			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
+				"✅ Admin approved! Adding to playlist..."); err != nil {
+				d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
+			}
+
+			d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+		} else {
+			d.logger.Info("Admin denied song addition",
+				zap.String("user", originalMsg.SenderName),
+				zap.String("song", songInfo))
+
+			// Notify user of denial
+			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
+				"❌ Admin denied the song request."); err != nil {
+				d.logger.Error("Failed to notify user about admin denial", zap.Error(err))
+			}
+		}
+	} else {
+		d.logger.Error("Frontend doesn't support admin approval, proceeding without")
+		d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+	}
+}
+
+// executePlaylistAdd performs the actual playlist addition
+func (d *Dispatcher) executePlaylistAdd(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	msgCtx.State = StateAddToPlaylist
 
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
 		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {

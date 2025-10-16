@@ -61,6 +61,8 @@ const (
 	StateWaitThumbs
 	// StateWaitReply indicates waiting for user reply
 	StateWaitReply
+	// StateAwaitAdminApproval indicates waiting for admin approval
+	StateAwaitAdminApproval
 	// StateAddToPlaylist indicates adding track to playlist
 	StateAddToPlaylist
 	// StateReactAdded indicates reacting to successfully added track

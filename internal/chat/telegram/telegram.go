@@ -28,6 +28,7 @@ type Config struct {
 	GroupName       string // Optional: group name for display purposes
 	Enabled         bool
 	ReactionSupport bool // Whether the group supports reactions
+	AdminApproval   bool // Whether admin approval is required for songs
 }
 
 // Frontend implements the chat.Frontend interface for Telegram
@@ -43,6 +44,10 @@ type Frontend struct {
 	// Approval tracking
 	approvalMutex    sync.RWMutex
 	pendingApprovals map[string]*approvalContext
+
+	// Admin approval tracking
+	adminApprovalMutex    sync.RWMutex
+	pendingAdminApprovals map[string]*adminApprovalContext
 }
 
 // approvalContext tracks pending user approvals
@@ -53,13 +58,26 @@ type approvalContext struct {
 	cancelFunc   context.CancelFunc
 }
 
+// adminApprovalContext tracks pending admin approvals
+type adminApprovalContext struct {
+	originUserID   int64
+	originUserName string
+	songInfo       string
+	songURL        string
+	approved       chan bool
+	cancelCtx      context.Context
+	cancelFunc     context.CancelFunc
+	sentToAdmins   []int64
+}
+
 // NewFrontend creates a new Telegram frontend
 func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
 	return &Frontend{
-		config:           config,
-		logger:           logger,
-		parser:           text.NewParser(),
-		pendingApprovals: make(map[string]*approvalContext),
+		config:                config,
+		logger:                logger,
+		parser:                text.NewParser(),
+		pendingApprovals:      make(map[string]*approvalContext),
+		pendingAdminApprovals: make(map[string]*adminApprovalContext),
 	}
 }
 
@@ -77,6 +95,8 @@ func (f *Frontend) Start(ctx context.Context) error {
 		bot.WithDefaultHandler(f.handleUpdate),
 		bot.WithCallbackQueryDataHandler("confirm_", bot.MatchTypePrefix, f.handleConfirmCallback),
 		bot.WithCallbackQueryDataHandler("reject_", bot.MatchTypePrefix, f.handleRejectCallback),
+		bot.WithCallbackQueryDataHandler("admin_approve_", bot.MatchTypePrefix, f.handleAdminApproveCallback),
+		bot.WithCallbackQueryDataHandler("admin_deny_", bot.MatchTypePrefix, f.handleAdminDenyCallback),
 	}
 
 	b, err := bot.New(f.config.BotToken, opts...)
@@ -444,4 +464,322 @@ func (f *Frontend) getUserDisplayName(user *models.User) string {
 	}
 
 	return name
+}
+
+// IsAdminApprovalEnabled returns whether admin approval is enabled
+func (f *Frontend) IsAdminApprovalEnabled() bool {
+	return f.config.AdminApproval && f.config.Enabled
+}
+
+// GetGroupAdmins returns a list of admin user IDs for the configured group
+func (f *Frontend) GetGroupAdmins(ctx context.Context) ([]int64, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	admins, err := f.bot.GetChatAdministrators(ctx, &bot.GetChatAdministratorsParams{
+		ChatID: f.config.GroupID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat administrators: %w", err)
+	}
+
+	var adminIDs []int64
+	for _, admin := range admins {
+		var user *models.User
+
+		// Extract user based on the chat member type
+		switch admin.Type {
+		case models.ChatMemberTypeOwner:
+			if admin.Owner != nil && admin.Owner.User != nil {
+				user = admin.Owner.User
+			}
+		case models.ChatMemberTypeAdministrator:
+			if admin.Administrator != nil {
+				user = &admin.Administrator.User
+			}
+		case models.ChatMemberTypeMember, models.ChatMemberTypeRestricted,
+			models.ChatMemberTypeLeft, models.ChatMemberTypeBanned:
+			// These are not admin types, skip
+			continue
+		}
+
+		// Skip bots from admin list
+		if user != nil && !user.IsBot {
+			adminIDs = append(adminIDs, user.ID)
+		}
+	}
+
+	f.logger.Debug("Retrieved group admins",
+		zap.Int("count", len(adminIDs)),
+		zap.Int64s("admin_ids", adminIDs))
+
+	return adminIDs, nil
+}
+
+// AwaitAdminApproval requests approval from group administrators
+func (f *Frontend) AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error) {
+	if !f.config.Enabled {
+		return false, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	// Get group administrators
+	adminIDs, err := f.GetGroupAdmins(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get group admins: %w", err)
+	}
+
+	if len(adminIDs) == 0 {
+		f.logger.Warn("No group administrators found, auto-approving")
+		return true, nil
+	}
+
+	// Create admin approval context
+	approvalCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	adminApproval := &adminApprovalContext{
+		originUserID:   func() int64 { id, _ := strconv.ParseInt(origin.SenderID, 10, 64); return id }(),
+		originUserName: origin.SenderName,
+		songInfo:       songInfo,
+		songURL:        songURL,
+		approved:       make(chan bool, 1),
+		cancelCtx:      approvalCtx,
+		cancelFunc:     cancel,
+		sentToAdmins:   adminIDs,
+	}
+
+	// Generate unique key for this admin approval
+	approvalKey := fmt.Sprintf("admin_%s_%s_%d", origin.ChatID, origin.ID, time.Now().Unix())
+
+	f.adminApprovalMutex.Lock()
+	f.pendingAdminApprovals[approvalKey] = adminApproval
+	f.adminApprovalMutex.Unlock()
+
+	// Cleanup function
+	defer func() {
+		cancel()
+		f.adminApprovalMutex.Lock()
+		delete(f.pendingAdminApprovals, approvalKey)
+		f.adminApprovalMutex.Unlock()
+	}()
+
+	// Send approval request to all admins
+	if err := f.sendAdminApprovalRequests(ctx, adminIDs, approvalKey, adminApproval); err != nil {
+		return false, fmt.Errorf("failed to send admin approval requests: %w", err)
+	}
+
+	// Wait for approval or timeout
+	select {
+	case approved := <-adminApproval.approved:
+		return approved, nil
+	case <-approvalCtx.Done():
+		f.logger.Info("Admin approval timed out, denying by default",
+			zap.String("approval_key", approvalKey))
+		return false, nil
+	}
+}
+
+// sendAdminApprovalRequests sends DM approval requests to all group admins
+func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int64,
+	approvalKey string, approval *adminApprovalContext) error {
+	prompt := fmt.Sprintf("🎵 *Admin Approval Required*\n\n"+
+		"User: %s\n"+
+		"Song: %s\n"+
+		"Link: %s\n\n"+
+		"Do you approve adding this song to the playlist?",
+		approval.originUserName,
+		approval.songInfo,
+		approval.songURL)
+
+	keyboard := [][]models.InlineKeyboardButton{
+		{
+			{
+				Text:         "✅ Approve",
+				CallbackData: "admin_approve_" + approvalKey,
+			},
+			{
+				Text:         "❌ Deny",
+				CallbackData: "admin_deny_" + approvalKey,
+			},
+		},
+	}
+
+	var errors []error
+	successCount := 0
+
+	for _, adminID := range adminIDs {
+		params := &bot.SendMessageParams{
+			ChatID:      adminID,
+			Text:        prompt,
+			ParseMode:   "Markdown",
+			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: keyboard},
+		}
+
+		_, err := f.bot.SendMessage(ctx, params)
+		if err != nil {
+			f.logger.Warn("Failed to send admin approval request",
+				zap.Int64("admin_id", adminID),
+				zap.Error(err))
+			errors = append(errors, err)
+		} else {
+			successCount++
+			f.logger.Debug("Sent admin approval request",
+				zap.Int64("admin_id", adminID),
+				zap.String("approval_key", approvalKey))
+		}
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("failed to send approval request to any admin")
+	}
+
+	f.logger.Info("Sent admin approval requests",
+		zap.Int("total_admins", len(adminIDs)),
+		zap.Int("successful", successCount),
+		zap.Int("failed", len(errors)))
+
+	return nil
+}
+
+// handleAdminApproveCallback handles admin approval button clicks
+func (f *Frontend) handleAdminApproveCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
+	f.handleAdminApprovalCallback(ctx, b, update, true)
+}
+
+// handleAdminDenyCallback handles admin denial button clicks
+func (f *Frontend) handleAdminDenyCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
+	f.handleAdminApprovalCallback(ctx, b, update, false)
+}
+
+// handleAdminApprovalCallback handles both admin approve and deny callbacks
+func (f *Frontend) handleAdminApprovalCallback(ctx context.Context, b *bot.Bot, update *models.Update, approved bool) {
+	if update.CallbackQuery == nil {
+		return
+	}
+
+	approvalKey := f.extractAdminApprovalKey(update.CallbackQuery.Data, approved)
+	if approvalKey == "" {
+		return
+	}
+
+	approval := f.getAdminApproval(approvalKey)
+	if approval == nil {
+		f.answerExpiredCallback(ctx, b, update.CallbackQuery.ID)
+		return
+	}
+
+	if !f.isUserAdmin(update.CallbackQuery.From.ID, approval.sentToAdmins) {
+		f.answerUnauthorizedCallback(ctx, b, update.CallbackQuery.ID)
+		return
+	}
+
+	f.processAdminDecision(ctx, b, update, approval, approved)
+}
+
+func (f *Frontend) extractAdminApprovalKey(callbackData string, approved bool) string {
+	if approved && strings.HasPrefix(callbackData, "admin_approve_") {
+		return strings.TrimPrefix(callbackData, "admin_approve_")
+	}
+	if !approved && strings.HasPrefix(callbackData, "admin_deny_") {
+		return strings.TrimPrefix(callbackData, "admin_deny_")
+	}
+	return ""
+}
+
+func (f *Frontend) getAdminApproval(approvalKey string) *adminApprovalContext {
+	f.adminApprovalMutex.RLock()
+	approval, exists := f.pendingAdminApprovals[approvalKey]
+	f.adminApprovalMutex.RUnlock()
+
+	if !exists {
+		return nil
+	}
+	return approval
+}
+
+func (f *Frontend) isUserAdmin(userID int64, adminList []int64) bool {
+	for _, adminID := range adminList {
+		if userID == adminID {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *Frontend) answerExpiredCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {
+	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackQueryID,
+		Text:            "This approval request has expired.",
+	}); err != nil {
+		f.logger.Debug("Failed to answer callback query", zap.Error(err))
+	}
+}
+
+func (f *Frontend) answerUnauthorizedCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {
+	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: callbackQueryID,
+		Text:            "Only group administrators can respond to this.",
+	}); err != nil {
+		f.logger.Debug("Failed to answer callback query", zap.Error(err))
+	}
+}
+
+func (f *Frontend) processAdminDecision(ctx context.Context, b *bot.Bot, update *models.Update,
+	approval *adminApprovalContext, approved bool) {
+	select {
+	case approval.approved <- approved:
+		responseText := f.buildResponseText(approved, &update.CallbackQuery.From, approval)
+		f.logAdminDecision(approved, &update.CallbackQuery.From, approval)
+
+		if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			Text:            responseText,
+		}); err != nil {
+			f.logger.Debug("Failed to answer callback query", zap.Error(err))
+		}
+
+		f.updateApprovalMessage(ctx, b, update, approval, responseText)
+
+	case <-approval.cancelCtx.Done():
+		f.answerExpiredCallback(ctx, b, update.CallbackQuery.ID)
+	}
+}
+
+func (f *Frontend) buildResponseText(approved bool, admin *models.User, _ *adminApprovalContext) string {
+	adminName := f.getUserDisplayName(admin)
+	if approved {
+		return "✅ Approved by " + adminName
+	}
+	return "❌ Denied by " + adminName
+}
+
+func (f *Frontend) logAdminDecision(approved bool, admin *models.User, approval *adminApprovalContext) {
+	adminName := f.getUserDisplayName(admin)
+	if approved {
+		f.logger.Info("Admin approved song request",
+			zap.String("admin", adminName),
+			zap.String("user", approval.originUserName),
+			zap.String("song", approval.songInfo))
+	} else {
+		f.logger.Info("Admin denied song request",
+			zap.String("admin", adminName),
+			zap.String("user", approval.originUserName),
+			zap.String("song", approval.songInfo))
+	}
+}
+
+func (f *Frontend) updateApprovalMessage(ctx context.Context, b *bot.Bot, update *models.Update,
+	approval *adminApprovalContext, responseText string) {
+	if update.CallbackQuery.Message.Message != nil {
+		text := fmt.Sprintf("🎵 Admin Approval: %s\n\nUser: %s\nSong: %s\n\n%s",
+			responseText, approval.originUserName, approval.songInfo, responseText)
+
+		if _, err := b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    update.CallbackQuery.From.ID,
+			MessageID: update.CallbackQuery.Message.Message.ID,
+			Text:      text,
+			ParseMode: "Markdown",
+		}); err != nil {
+			f.logger.Debug("Failed to edit admin approval message", zap.Error(err))
+		}
+	}
 }
