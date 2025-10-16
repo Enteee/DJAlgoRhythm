@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -291,9 +292,21 @@ func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *Messag
 		zap.String("top_result", fmt.Sprintf("%s - %s",
 			finalCandidates[0].Track.Artist, finalCandidates[0].Track.Title)))
 
+	// Match LLM candidates back to original Spotify tracks to restore URLs and IDs
+	d.matchSpotifyTrackData(finalCandidates, allSpotifyTracks)
+
 	// Store enhanced candidates and proceed with user approval
 	msgCtx.Candidates = finalCandidates
 	best := finalCandidates[0]
+
+	// Validate that we have a Spotify URL (since we're reranking actual Spotify tracks)
+	if best.Track.URL == "" {
+		d.logger.Warn("Enhanced LLM candidate missing Spotify URL, asking for clarification",
+			zap.String("artist", best.Track.Artist),
+			zap.String("title", best.Track.Title))
+		d.clarifyAsk(ctx, msgCtx, originalMsg, &best)
+		return
+	}
 
 	if best.Confidence >= d.config.LLM.Threshold {
 		d.promptEnhancedApproval(ctx, msgCtx, originalMsg, &best)
@@ -319,6 +332,78 @@ func (d *Dispatcher) buildSpotifyContextForLLM(tracks []Track, originalText stri
 
 	context += "\nPlease rank these songs based on how well they match what the user is looking for."
 	return context
+}
+
+// matchSpotifyTrackData matches LLM candidates back to original Spotify tracks to restore URLs and IDs
+func (d *Dispatcher) matchSpotifyTrackData(candidates []LLMCandidate, spotifyTracks []Track) {
+	for i := range candidates {
+		candidate := &candidates[i]
+
+		// Find best matching Spotify track
+		bestMatch := d.findBestSpotifyMatch(&candidate.Track, spotifyTracks)
+		if bestMatch != nil {
+			// Restore complete Spotify data
+			candidate.Track.ID = bestMatch.ID
+			candidate.Track.URL = bestMatch.URL
+			candidate.Track.Duration = bestMatch.Duration
+			// Keep LLM's values for other fields as they might be more accurate
+		} else {
+			d.logger.Warn("Could not match LLM candidate to Spotify track",
+				zap.String("artist", candidate.Track.Artist),
+				zap.String("title", candidate.Track.Title))
+		}
+	}
+}
+
+// findBestSpotifyMatch finds the best matching Spotify track for an LLM candidate
+func (d *Dispatcher) findBestSpotifyMatch(track *Track, spotifyTracks []Track) *Track {
+	// First try exact match on artist and title
+	for i := range spotifyTracks {
+		spotifyTrack := &spotifyTracks[i]
+		if d.isExactMatch(track, spotifyTrack) {
+			return spotifyTrack
+		}
+	}
+
+	// Then try case-insensitive match
+	for i := range spotifyTracks {
+		spotifyTrack := &spotifyTracks[i]
+		if d.isCaseInsensitiveMatch(track, spotifyTrack) {
+			return spotifyTrack
+		}
+	}
+
+	// Finally try partial match (contains)
+	for i := range spotifyTracks {
+		spotifyTrack := &spotifyTracks[i]
+		if d.isPartialMatch(track, spotifyTrack) {
+			return spotifyTrack
+		}
+	}
+
+	return nil
+}
+
+// isExactMatch checks for exact artist and title match
+func (d *Dispatcher) isExactMatch(track1, track2 *Track) bool {
+	return track1.Artist == track2.Artist && track1.Title == track2.Title
+}
+
+// isCaseInsensitiveMatch checks for case-insensitive artist and title match
+func (d *Dispatcher) isCaseInsensitiveMatch(track1, track2 *Track) bool {
+	return strings.EqualFold(track1.Artist, track2.Artist) && strings.EqualFold(track1.Title, track2.Title)
+}
+
+// isPartialMatch checks if one track's info is contained in the other
+func (d *Dispatcher) isPartialMatch(track1, track2 *Track) bool {
+	artist1 := strings.ToLower(track1.Artist)
+	title1 := strings.ToLower(track1.Title)
+	artist2 := strings.ToLower(track2.Artist)
+	title2 := strings.ToLower(track2.Title)
+
+	// Check if artist and title contain each other (for variations)
+	return (strings.Contains(artist1, artist2) || strings.Contains(artist2, artist1)) &&
+		(strings.Contains(title1, title2) || strings.Contains(title2, title1))
 }
 
 // fallbackToSpotifyResults handles fallback when enhanced LLM fails
