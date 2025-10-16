@@ -27,12 +27,12 @@ var berneseGermanMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required": "⏳ Admin-Freigabe nötig. Wart bis de Gruppen-Admin zueseit...",
+	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis de Gruppen-Admin zueseit...",
 	"admin.approved":          "✅ Admin hets guet geheisse! Wird zur Playlist zuegfüegt...",
 	"admin.denied":            "❌ Admin het s Lied abglehnt.",
-	"admin.approval_prompt":   "🎵 *Admin-Freigabe nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\nWottsch das Lied zur Playlist hinzuefüege?",
-	"admin.button_approve":    "✅ Guet heisse",
-	"admin.button_deny":       "❌ Ablehne",
+	"admin.approval_prompt":   "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\nWottsch das Lied zur Playlist hinzuefüege?",
+	"admin.button_approve":    "✅ Isch ok",
+	"admin.button_deny":       "❌ Ablehnä",
 
 	// Success messages
 	"success.track_added": "Hinzuegfüegt: %s - %s (%s)",

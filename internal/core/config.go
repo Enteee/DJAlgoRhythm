@@ -28,7 +28,6 @@ type Config struct {
 
 type WhatsAppConfig struct {
 	GroupJID    string
-	GroupName   string
 	DeviceName  string
 	SessionPath string
 	Enabled     bool
@@ -37,7 +36,6 @@ type WhatsAppConfig struct {
 type TelegramConfig struct {
 	BotToken        string
 	GroupID         int64
-	GroupName       string
 	Enabled         bool
 	ReactionSupport bool
 	AdminApproval   bool

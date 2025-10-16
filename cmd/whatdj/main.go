@@ -103,7 +103,6 @@ func buildConfig() *core.Config {
 
 	cfg.WhatsApp.Enabled = viper.GetBool("whatsapp-enabled")
 	cfg.WhatsApp.GroupJID = viper.GetString("whatsapp-group-jid")
-	cfg.WhatsApp.GroupName = viper.GetString("whatsapp-group-name")
 	cfg.WhatsApp.DeviceName = viper.GetString("whatsapp-device-name")
 	cfg.WhatsApp.SessionPath = viper.GetString("whatsapp-session-path")
 	if cfg.WhatsApp.SessionPath == "" {
@@ -113,7 +112,6 @@ func buildConfig() *core.Config {
 	cfg.Telegram.Enabled = viper.GetBool("telegram-enabled")
 	cfg.Telegram.BotToken = viper.GetString("telegram-bot-token")
 	cfg.Telegram.GroupID = viper.GetInt64("telegram-group-id")
-	cfg.Telegram.GroupName = viper.GetString("telegram-group-name")
 	cfg.Telegram.ReactionSupport = viper.GetBool("telegram-reaction-support")
 	if !viper.IsSet("telegram-reaction-support") {
 		cfg.Telegram.ReactionSupport = true // default to true
@@ -252,7 +250,6 @@ func createChatFrontend() (chat.Frontend, error) {
 		telegramConfig := &telegram.Config{
 			BotToken:        config.Telegram.BotToken,
 			GroupID:         config.Telegram.GroupID,
-			GroupName:       config.Telegram.GroupName,
 			Enabled:         config.Telegram.Enabled,
 			ReactionSupport: config.Telegram.ReactionSupport,
 			AdminApproval:   config.Telegram.AdminApproval,
@@ -266,7 +263,6 @@ func createChatFrontend() (chat.Frontend, error) {
 	if config.WhatsApp.Enabled {
 		whatsappConfig := &whatsapp.Config{
 			GroupJID:    config.WhatsApp.GroupJID,
-			GroupName:   config.WhatsApp.GroupName,
 			DeviceName:  config.WhatsApp.DeviceName,
 			SessionPath: config.WhatsApp.SessionPath,
 			Enabled:     config.WhatsApp.Enabled,

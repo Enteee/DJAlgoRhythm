@@ -15,7 +15,6 @@ func TestNewFrontend(t *testing.T) {
 	config := &Config{
 		BotToken:        "test-token",
 		GroupID:         -123456789,
-		GroupName:       "Test Group",
 		Enabled:         true,
 		ReactionSupport: true,
 	}

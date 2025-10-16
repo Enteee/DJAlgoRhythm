@@ -25,8 +25,7 @@ const (
 // Config holds Telegram-specific configuration
 type Config struct {
 	BotToken        string
-	GroupID         int64  // Chat ID of the group to monitor
-	GroupName       string // Optional: group name for display purposes
+	GroupID         int64 // Chat ID of the group to monitor
 	Enabled         bool
 	ReactionSupport bool // Whether the group supports reactions
 	AdminApproval   bool // Whether admin approval is required for songs

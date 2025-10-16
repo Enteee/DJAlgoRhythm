@@ -28,7 +28,6 @@ import (
 // Config holds WhatsApp-specific configuration
 type Config struct {
 	GroupJID    string
-	GroupName   string
 	DeviceName  string
 	SessionPath string
 	Enabled     bool
