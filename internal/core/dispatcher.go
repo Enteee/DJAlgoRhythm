@@ -425,8 +425,14 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
 
-	prompt := fmt.Sprintf("Did you mean **%s - %s** (%d)?",
-		candidate.Track.Artist, candidate.Track.Title, candidate.Track.Year)
+	prompt := fmt.Sprintf("Did you mean **%s - %s**", candidate.Track.Artist, candidate.Track.Title)
+	if candidate.Track.Year > 0 {
+		prompt += fmt.Sprintf(" (%d)", candidate.Track.Year)
+	}
+	if candidate.Track.URL != "" {
+		prompt += fmt.Sprintf("\n🔗 %s", candidate.Track.URL)
+	}
+	prompt += "?"
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
