@@ -154,6 +154,14 @@ func (f *Frontend) SendText(ctx context.Context, chatID, replyToID, text string)
 		Text:   text,
 	}
 
+	// Disable link preview for Spotify URLs since they don't work well in Telegram
+	if f.shouldDisablePreview(text) {
+		disabled := true
+		params.LinkPreviewOptions = &models.LinkPreviewOptions{
+			IsDisabled: &disabled,
+		}
+	}
+
 	if replyToID != "" {
 		messageID, parseErr := strconv.Atoi(replyToID)
 		if parseErr != nil {
@@ -787,4 +795,11 @@ func (f *Frontend) updateApprovalMessage(ctx context.Context, b *bot.Bot, update
 			f.logger.Debug("Failed to edit admin approval message", zap.Error(err))
 		}
 	}
+}
+
+// shouldDisablePreview checks if web page preview should be disabled for this message
+// This is specifically done for Spotify URLs which don't preview well in Telegram
+func (f *Frontend) shouldDisablePreview(text string) bool {
+	// Check if the message contains a Spotify URL
+	return strings.Contains(text, "open.spotify.com") || strings.Contains(text, "spotify.com")
 }
