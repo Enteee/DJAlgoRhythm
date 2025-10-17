@@ -40,7 +40,7 @@ var englishMessages = map[string]string{
 	// Success messages
 	"success.track_added":              "Added: %s - %s (%s)",
 	"success.admin_approved_and_added": "✅ Admin approved and added: %s - %s (%s)",
-	"success.track_queued":             "🚀 Queued next: %s - %s (%s)",
+	"success.track_priority":           "🔥 Priority added to top: %s - %s (%s)",
 	"success.duplicate":                "Already in playlist.",
 
 	// Callback messages

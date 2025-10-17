@@ -67,8 +67,6 @@ const (
 	StateAwaitAdminApproval
 	// StateAddToPlaylist indicates adding track to playlist
 	StateAddToPlaylist
-	// StateAddToQueue indicates adding track to playback queue
-	StateAddToQueue
 	// StateReactAdded indicates reacting to successfully added track
 	StateReactAdded
 	// StateReactDuplicate indicates reacting to duplicate track
@@ -106,6 +104,7 @@ type SpotifyClient interface {
 	SearchTrack(ctx context.Context, query string) ([]Track, error)
 	GetTrack(ctx context.Context, trackID string) (*Track, error)
 	AddToPlaylist(ctx context.Context, playlistID, trackID string) error
+	AddToPlaylistAtPosition(ctx context.Context, playlistID, trackID string, position int) error
 	AddToQueue(ctx context.Context, trackID string) error
 	GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error)
 	ExtractTrackID(url string) (string, error)

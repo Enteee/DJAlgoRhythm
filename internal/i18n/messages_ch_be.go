@@ -38,7 +38,7 @@ var berneseGermanMessages = map[string]string{
 	// Success messages
 	"success.track_added":              "Hinzuegfüegt: %s - %s (%s)",
 	"success.admin_approved_and_added": "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
-	"success.track_queued":             "🚀 Als nächschts: %s - %s (%s)",
+	"success.track_priority":           "🔥 Mit Priorität zueoberst: %s - %s (%s)",
 	"success.duplicate":                "Isch scho i dr Playlist.",
 
 	// Callback messages

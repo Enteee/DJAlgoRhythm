@@ -134,6 +134,10 @@ func (c *Client) GetTrack(ctx context.Context, trackID string) (*core.Track, err
 }
 
 func (c *Client) AddToPlaylist(ctx context.Context, playlistID, trackID string) error {
+	return c.AddToPlaylistAtPosition(ctx, playlistID, trackID, -1) // -1 means append to end
+}
+
+func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackID string, position int) error {
 	if c.client == nil {
 		return fmt.Errorf("client not authenticated")
 	}
@@ -141,14 +145,59 @@ func (c *Client) AddToPlaylist(ctx context.Context, playlistID, trackID string) 
 	spotifyTrackID := spotify.ID(trackID)
 	spotifyPlaylistID := spotify.ID(playlistID)
 
+	if position < 0 {
+		// Add to end of playlist (existing behavior)
+		_, err := c.client.AddTracksToPlaylist(ctx, spotifyPlaylistID, spotifyTrackID)
+		if err != nil {
+			return fmt.Errorf("failed to add track to playlist: %w", err)
+		}
+
+		c.logger.Info("Track added to playlist",
+			zap.String("trackID", trackID),
+			zap.String("playlistID", playlistID),
+			zap.String("position", "end"))
+		return nil
+	}
+
+	// For specific positions, we need to add then reorder
+	// Step 1: Add track to end of playlist
 	_, err := c.client.AddTracksToPlaylist(ctx, spotifyPlaylistID, spotifyTrackID)
 	if err != nil {
 		return fmt.Errorf("failed to add track to playlist: %w", err)
 	}
 
-	c.logger.Info("Track added to playlist",
+	// Step 2: Get current playlist length to know where the track was added
+	items, err := c.client.GetPlaylistItems(ctx, spotifyPlaylistID, spotify.Limit(1))
+	if err != nil {
+		// Track was added but we can't reorder - this is still a success
+		c.logger.Warn("Track added but failed to get playlist info for reordering",
+			zap.String("trackID", trackID),
+			zap.Error(err))
+		return nil
+	}
+
+	// Step 3: Reorder the last track (newly added) to the specified position
+	trackPosition := items.Total - 1 // Last position (0-indexed)
+	reorderOpts := spotify.PlaylistReorderOptions{
+		RangeStart:   trackPosition,
+		RangeLength:  1,
+		InsertBefore: position,
+	}
+
+	_, err = c.client.ReorderPlaylistTracks(ctx, spotifyPlaylistID, reorderOpts)
+	if err != nil {
+		// Track was added but reorder failed - this is still a success
+		c.logger.Warn("Track added but failed to reorder to priority position",
+			zap.String("trackID", trackID),
+			zap.Int("targetPosition", position),
+			zap.Error(err))
+		return nil
+	}
+
+	c.logger.Info("Track added to playlist with priority positioning",
 		zap.String("trackID", trackID),
-		zap.String("playlistID", playlistID))
+		zap.String("playlistID", playlistID),
+		zap.Int("position", position))
 
 	return nil
 }
