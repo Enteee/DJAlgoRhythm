@@ -692,13 +692,35 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 		d.logger.Warn("Failed to add priority track to queue, proceeding with playlist only",
 			zap.String("trackID", trackID),
 			zap.Error(queueErr))
-	} else {
-		d.logger.Info("Priority track added to queue",
-			zap.String("trackID", trackID))
+		// If queue fails, fall back to regular playlist addition
+		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+		return
 	}
 
-	// Also add to playlist for history/deduplication (always at the end)
-	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+	d.logger.Info("Priority track added to queue",
+		zap.String("trackID", trackID))
+
+	// Add to playlist for history/deduplication (always at the end)
+	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
+		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+			d.logger.Error("Failed to add priority track to playlist",
+				zap.String("trackID", trackID),
+				zap.Int("retry", retry),
+				zap.Error(err))
+
+			if retry == d.config.App.MaxRetries-1 {
+				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
+				return
+			}
+
+			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
+			continue
+		}
+
+		d.dedup.Add(trackID)
+		d.reactPriorityQueued(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
 }
 
 // awaitAdminApproval requests admin approval before adding to playlist
@@ -809,7 +831,10 @@ func (d *Dispatcher) reactAddedAfterApproval(ctx context.Context, msgCtx *Messag
 	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.admin_approved_and_added")
 }
 
-// Note: Priority reactions have been simplified to use regular success messages
+// reactPriorityQueued reacts to priority tracks that were queued successfully
+func (d *Dispatcher) reactPriorityQueued(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.track_priority_playing")
+}
 
 // reactAddedWithMessage reacts to successfully added tracks with a specific message
 func (d *Dispatcher) reactAddedWithMessage(
