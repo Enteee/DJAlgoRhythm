@@ -895,7 +895,8 @@ func (d *Dispatcher) isLikelyChatter(text string) bool {
 // sendStartupMessage sends a startup notification to the group
 func (d *Dispatcher) sendStartupMessage(ctx context.Context) {
 	if groupID := d.getGroupID(); groupID != "" {
-		startupMessage := d.localizer.T("bot.startup")
+		playlistURL := fmt.Sprintf("https://open.spotify.com/playlist/%s", d.config.Spotify.PlaylistID)
+		startupMessage := d.localizer.T("bot.startup", playlistURL)
 		if _, err := d.frontend.SendText(ctx, groupID, "", startupMessage); err != nil {
 			d.logger.Debug("Failed to send startup message", zap.Error(err))
 		}

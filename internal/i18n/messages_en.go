@@ -57,6 +57,6 @@ var englishMessages = map[string]string{
 	"button.not_this": "👎 Not this",
 
 	// Bot status messages
-	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!",
+	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 I am going offline. See you later!",
 }

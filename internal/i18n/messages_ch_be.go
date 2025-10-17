@@ -55,6 +55,6 @@ var berneseGermanMessages = map[string]string{
 	"button.not_this": "👎 Nö, nid das",
 
 	// Bot status messages
-	"bot.startup":  "🎵 Ig bi jetzt online und bereit für öii Musigwünsch!",
+	"bot.startup":  "🎵 Ig bi jetzt online und bereit für öii Musigwünsch!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!",
 }

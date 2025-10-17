@@ -115,6 +115,7 @@ func TestI18nMessageValues(t *testing.T) {
 		"admin.approval_prompt":            3, // user, song, link
 		"success.track_added":              3, // artist, title, playlist
 		"success.admin_approved_and_added": 3, // artist, title, url
+		"bot.startup":                      1, // playlist url
 		"format.album":                     1, // album name
 		"format.year":                      1, // year number
 		"format.url":                       1, // url
