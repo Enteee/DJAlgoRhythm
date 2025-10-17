@@ -637,9 +637,9 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 			zap.String("text", originalMsg.Text))
 	}
 
-	// If it's a priority request from an admin, add to top of playlist instead of end
+	// If it's a priority request from an admin, add to queue for priority playback
 	if isAdmin && isPriority {
-		d.executePriorityPlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+		d.executePriorityQueue(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
 
@@ -682,31 +682,23 @@ func (d *Dispatcher) isUserAdmin(ctx context.Context, msg *chat.Message) bool {
 	return isAdmin
 }
 
-// executePriorityPlaylistAdd adds a track to the top of the playlist (for priority requests)
-func (d *Dispatcher) executePriorityPlaylistAdd(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+// executePriorityQueue adds priority track to queue and playlist
+func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.State = StateAddToPlaylist
 
-	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
-		// Add to position 0 (top of playlist) for priority
-		if err := d.spotify.AddToPlaylistAtPosition(ctx, d.config.Spotify.PlaylistID, trackID, 0); err != nil {
-			d.logger.Error("Failed to add priority track to playlist",
-				zap.String("trackID", trackID),
-				zap.Int("retry", retry),
-				zap.Error(err))
-
-			if retry == d.config.App.MaxRetries-1 {
-				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
-				return
-			}
-
-			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
-			continue
-		}
-
-		d.dedup.Add(trackID)
-		d.reactPriorityAdded(ctx, msgCtx, originalMsg, trackID)
-		return
+	// First, add to queue for priority playback (will play next)
+	queueErr := d.spotify.AddToQueue(ctx, trackID)
+	if queueErr != nil {
+		d.logger.Warn("Failed to add priority track to queue, proceeding with playlist only",
+			zap.String("trackID", trackID),
+			zap.Error(queueErr))
+	} else {
+		d.logger.Info("Priority track added to queue",
+			zap.String("trackID", trackID))
 	}
+
+	// Also add to playlist for history/deduplication (always at the end)
+	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
 }
 
 // awaitAdminApproval requests admin approval before adding to playlist
@@ -817,10 +809,7 @@ func (d *Dispatcher) reactAddedAfterApproval(ctx context.Context, msgCtx *Messag
 	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.admin_approved_and_added")
 }
 
-// reactPriorityAdded reacts to successfully added priority tracks (added to top of playlist)
-func (d *Dispatcher) reactPriorityAdded(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
-	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.track_priority")
-}
+// Note: Priority reactions have been simplified to use regular success messages
 
 // reactAddedWithMessage reacts to successfully added tracks with a specific message
 func (d *Dispatcher) reactAddedWithMessage(

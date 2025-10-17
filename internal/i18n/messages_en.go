@@ -38,10 +38,12 @@ var englishMessages = map[string]string{
 	"admin.button_deny":    "❌ Deny",
 
 	// Success messages
-	"success.track_added":              "Added: %s - %s (%s)",
-	"success.admin_approved_and_added": "✅ Admin approved and added: %s - %s (%s)",
-	"success.track_priority":           "🔥 Priority added to top: %s - %s (%s)",
-	"success.duplicate":                "Already in playlist.",
+	"success.track_added":                        "Added: %s - %s (%s)",
+	"success.admin_approved_and_added":           "✅ Admin approved and added: %s - %s (%s)",
+	"success.track_priority_playing":             "🚀 Now playing: %s - %s (%s)",
+	"success.track_priority_fallback":            "🔥 Priority added to top: %s - %s (%s) (immediate playback unavailable)",
+	"success.track_priority_fallback_permission": "🔥 Priority added to top: %s - %s (%s) (requires Spotify Premium for immediate play)",
+	"success.duplicate":                          "Already in playlist.",
 
 	// Callback messages
 	"callback.approved":           "✅ Song approved by admin",

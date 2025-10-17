@@ -220,6 +220,8 @@ func (c *Client) AddToQueue(ctx context.Context, trackID string) error {
 	return nil
 }
 
+// Note: Immediate playback methods removed in favor of simpler queue-based priority approach
+
 func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
 	if c.client == nil {
 		return nil, fmt.Errorf("client not authenticated")
