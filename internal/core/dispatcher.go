@@ -675,13 +675,8 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 				zap.String("user", originalMsg.SenderName),
 				zap.String("song", songInfo))
 
-			// Notify user of approval
-			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-				d.localizer.T("admin.approved")); err != nil {
-				d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
-			}
-
-			d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+			// Skip individual approval message - will be combined with success message
+			d.executePlaylistAddAfterApproval(ctx, msgCtx, originalMsg, trackID)
 		} else {
 			d.logger.Info("Admin denied song addition",
 				zap.String("user", originalMsg.SenderName),
@@ -699,8 +694,20 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	}
 }
 
+// executePlaylistAddAfterApproval performs playlist addition after admin approval
+func (d *Dispatcher) executePlaylistAddAfterApproval(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, true)
+}
+
 // executePlaylistAdd performs the actual playlist addition
 func (d *Dispatcher) executePlaylistAdd(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+}
+
+// executePlaylistAddWithReaction performs the actual playlist addition
+func (d *Dispatcher) executePlaylistAddWithReaction(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string, wasAdminApproved bool) {
 	msgCtx.State = StateAddToPlaylist
 
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
@@ -720,13 +727,28 @@ func (d *Dispatcher) executePlaylistAdd(ctx context.Context, msgCtx *MessageCont
 		}
 
 		d.dedup.Add(trackID)
-		d.reactAdded(ctx, msgCtx, originalMsg, trackID)
+		if wasAdminApproved {
+			d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
+		} else {
+			d.reactAdded(ctx, msgCtx, originalMsg, trackID)
+		}
 		return
 	}
 }
 
 // reactAdded reacts to successfully added tracks
 func (d *Dispatcher) reactAdded(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.track_added")
+}
+
+// reactAddedAfterApproval reacts to successfully added tracks after admin approval
+func (d *Dispatcher) reactAddedAfterApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.admin_approved_and_added")
+}
+
+// reactAddedWithMessage reacts to successfully added tracks with a specific message
+func (d *Dispatcher) reactAddedWithMessage(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, messageKey string) {
 	msgCtx.State = StateReactAdded
 
 	track, err := d.spotify.GetTrack(ctx, trackID)
@@ -740,8 +762,8 @@ func (d *Dispatcher) reactAdded(ctx context.Context, msgCtx *MessageContext, ori
 		d.logger.Error("Failed to react with thumbs up", zap.Error(err))
 	}
 
-	// Reply with track info
-	replyText := d.localizer.T("success.track_added", track.Artist, track.Title, track.URL)
+	// Reply with track info using the specified message key
+	replyText := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
 	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, replyText); err != nil {
 		d.logger.Error("Failed to reply with added confirmation", zap.Error(err))
 	}

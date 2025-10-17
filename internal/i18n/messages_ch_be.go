@@ -35,8 +35,9 @@ var berneseGermanMessages = map[string]string{
 	"admin.button_deny":       "❌ Ablehnä",
 
 	// Success messages
-	"success.track_added": "Hinzuegfüegt: %s - %s (%s)",
-	"success.duplicate":   "Isch scho i dr Playlist.",
+	"success.track_added":              "Hinzuegfüegt: %s - %s (%s)",
+	"success.admin_approved_and_added": "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
+	"success.duplicate":                "Isch scho i dr Playlist.",
 
 	// Callback messages
 	"callback.approved":           "✅ Lied isch vom Admin guet geheisse worde.",

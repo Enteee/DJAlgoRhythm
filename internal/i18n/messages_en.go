@@ -37,8 +37,9 @@ var englishMessages = map[string]string{
 	"admin.button_deny":    "❌ Deny",
 
 	// Success messages
-	"success.track_added": "Added: %s - %s (%s)",
-	"success.duplicate":   "Already in playlist.",
+	"success.track_added":              "Added: %s - %s (%s)",
+	"success.admin_approved_and_added": "✅ Admin approved and added: %s - %s (%s)",
+	"success.duplicate":                "Already in playlist.",
 
 	// Callback messages
 	"callback.approved":           "✅ Song approved by admin",
