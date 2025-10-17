@@ -286,6 +286,14 @@ func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prom
 		},
 	}
 
+	// Disable link preview for approval prompts containing Spotify URLs
+	if f.shouldDisablePreview(prompt) {
+		disabled := true
+		params.LinkPreviewOptions = &models.LinkPreviewOptions{
+			IsDisabled: &disabled,
+		}
+	}
+
 	promptMsg, err := f.bot.SendMessage(ctx, params)
 	if err != nil {
 		return false, fmt.Errorf("failed to send approval prompt: %w", err)
@@ -625,6 +633,14 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 			Text:        prompt,
 			ParseMode:   "Markdown",
 			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: keyboard},
+		}
+
+		// Disable link preview for admin approval messages containing Spotify URLs
+		if f.shouldDisablePreview(prompt) {
+			disabled := true
+			params.LinkPreviewOptions = &models.LinkPreviewOptions{
+				IsDisabled: &disabled,
+			}
 		}
 
 		_, err := f.bot.SendMessage(ctx, params)
