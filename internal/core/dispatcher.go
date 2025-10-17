@@ -614,12 +614,37 @@ func (d *Dispatcher) handleRejection(ctx context.Context, msgCtx *MessageContext
 	d.askWhichSong(ctx, msgCtx, originalMsg)
 }
 
-// addToPlaylist adds a track to the Spotify playlist
+// addToPlaylist adds a track to the Spotify playlist or queue based on priority
 func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.SelectedID = trackID
 
+	// Check if this is a priority request from an admin
+	isAdmin := d.isUserAdmin(ctx, originalMsg)
+	isPriority := false
+
+	if isAdmin && d.llm != nil {
+		var err error
+		isPriority, err = d.llm.IsPriorityRequest(ctx, originalMsg.Text)
+		if err != nil {
+			d.logger.Warn("Failed to check priority status, treating as regular request",
+				zap.Error(err),
+				zap.String("text", originalMsg.Text))
+		}
+
+		d.logger.Debug("Priority request check completed",
+			zap.Bool("isAdmin", isAdmin),
+			zap.Bool("isPriority", isPriority),
+			zap.String("text", originalMsg.Text))
+	}
+
+	// If it's a priority request from an admin, add to queue instead of playlist
+	if isAdmin && isPriority {
+		d.executeQueueAdd(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
+
 	// Check if admin approval is required and if the user is not already an admin
-	if d.isAdminApprovalRequired() && !d.isUserAdmin(ctx, originalMsg) {
+	if d.isAdminApprovalRequired() && !isAdmin {
 		d.awaitAdminApproval(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
@@ -655,6 +680,40 @@ func (d *Dispatcher) isUserAdmin(ctx context.Context, msg *chat.Message) bool {
 		zap.Bool("isAdmin", isAdmin))
 
 	return isAdmin
+}
+
+// executeQueueAdd adds a track directly to the Spotify playback queue (for priority requests)
+func (d *Dispatcher) executeQueueAdd(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	msgCtx.State = StateAddToQueue
+
+	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
+		if err := d.spotify.AddToQueue(ctx, trackID); err != nil {
+			d.logger.Error("Failed to add to queue",
+				zap.String("trackID", trackID),
+				zap.Int("retry", retry),
+				zap.Error(err))
+
+			if retry == d.config.App.MaxRetries-1 {
+				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.queue.add_failed"))
+				return
+			}
+
+			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
+			continue
+		}
+
+		// Also add to playlist for completeness and deduplication
+		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+			d.logger.Warn("Failed to add priority track to playlist (queue add succeeded)",
+				zap.String("trackID", trackID),
+				zap.Error(err))
+		} else {
+			d.dedup.Add(trackID)
+		}
+
+		d.reactQueued(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
 }
 
 // awaitAdminApproval requests admin approval before adding to playlist
@@ -763,6 +822,11 @@ func (d *Dispatcher) reactAdded(ctx context.Context, msgCtx *MessageContext, ori
 // reactAddedAfterApproval reacts to successfully added tracks after admin approval
 func (d *Dispatcher) reactAddedAfterApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.admin_approved_and_added")
+}
+
+// reactQueued reacts to successfully queued tracks (priority)
+func (d *Dispatcher) reactQueued(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.track_queued")
 }
 
 // reactAddedWithMessage reacts to successfully added tracks with a specific message

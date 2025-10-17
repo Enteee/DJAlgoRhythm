@@ -205,6 +205,7 @@ type ChatterDetectionResponse struct {
 	Reasoning         string  `json:"reasoning,omitempty"`
 }
 
+//nolint:dupl // Similar structure to IsPriorityRequest but different response types
 func (o *OpenAIClient) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	if strings.TrimSpace(text) == "" {
 		return true, fmt.Errorf("empty text provided")
@@ -251,6 +252,61 @@ func (o *OpenAIClient) IsNotMusicRequest(ctx context.Context, text string) (bool
 		zap.String("reasoning", response.Reasoning))
 
 	return response.IsNotMusicRequest, nil
+}
+
+type PriorityDetectionResponse struct {
+	IsPriorityRequest bool    `json:"is_priority_request"`
+	Confidence        float64 `json:"confidence"`
+	Reasoning         string  `json:"reasoning,omitempty"`
+}
+
+//nolint:dupl // Similar structure to IsNotMusicRequest but different response types
+func (o *OpenAIClient) IsPriorityRequest(ctx context.Context, text string) (bool, error) {
+	if strings.TrimSpace(text) == "" {
+		return false, fmt.Errorf("empty text provided")
+	}
+
+	prompt := o.buildPriorityDetectionPrompt()
+
+	o.logger.Debug("Calling OpenAI for priority detection",
+		zap.String("text", text),
+		zap.String("model", o.config.Model))
+
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(prompt),
+			openai.UserMessage(text),
+		},
+		Model:       o.getModel(),
+		Temperature: openai.Float(defaultTemperature),
+		MaxTokens:   openai.Int(maxTokensExtraction),
+	})
+	if err != nil {
+		o.logger.Error("OpenAI API call failed", zap.Error(err))
+		return false, fmt.Errorf("OpenAI API call failed: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return false, fmt.Errorf("no response from OpenAI")
+	}
+
+	content := resp.Choices[0].Message.Content
+	o.logger.Debug("OpenAI priority detection response received", zap.String("content", content))
+
+	var response PriorityDetectionResponse
+	if err := json.Unmarshal([]byte(content), &response); err != nil {
+		o.logger.Error("Failed to parse OpenAI priority detection response",
+			zap.Error(err),
+			zap.String("content", content))
+		return false, fmt.Errorf("failed to parse OpenAI response: %w", err)
+	}
+
+	o.logger.Debug("Priority detection completed",
+		zap.Bool("is_priority_request", response.IsPriorityRequest),
+		zap.Float64("confidence", response.Confidence),
+		zap.String("reasoning", response.Reasoning))
+
+	return response.IsPriorityRequest, nil
 }
 
 func (o *OpenAIClient) getModel() shared.ChatModel {
@@ -383,4 +439,47 @@ Examples of is_not_music_request = FALSE (LET THROUGH):
 - Ambiguous messages that could be music requests
 
 IMPORTANT: When uncertain, always return FALSE. Better to process a non-music message than to miss a music request.`
+}
+
+func (o *OpenAIClient) buildPriorityDetectionPrompt() string {
+	return `You are analyzing messages to detect priority music requests from group administrators.
+
+Your task is to determine if a message contains indicators that a song should be prioritized (added to the front of the playback queue).
+
+Respond with a JSON object in this exact format:
+{
+  "is_priority_request": true,
+  "confidence": 0.85,
+  "reasoning": "Explanation of why this is/isn't a priority request"
+}
+
+PRIORITY INDICATORS (set is_priority_request = TRUE):
+- Explicit priority keywords: "prio:", "priority:", "urgent:", "next:", "asap", "now"
+- Phrases like "play this next", "add this to the front", "skip the queue"
+- "This is urgent", "emergency song", "important"
+- Time-sensitive context: "for the speech", "before the break", "while they're here"
+- Event-related urgency: "for the toast", "entrance song", "while the boss is here"
+
+NON-PRIORITY REQUESTS (set is_priority_request = FALSE):
+- Regular song requests without urgency indicators
+- General music requests like "add this song", "I like this"
+- Casual mentions: "good song", "nice choice"
+- Future requests: "add this later", "for the playlist"
+
+CONFIDENCE SCORING:
+- 0.9+: Clear explicit priority keywords ("prio:", "priority:", "next:")
+- 0.7-0.9: Strong urgency language ("play this now", "urgent")
+- 0.5-0.7: Contextual urgency ("for the speech", time-sensitive)
+- 0.3-0.5: Weak urgency indicators
+- 0.0-0.3: No priority indicators detected
+
+EXAMPLES:
+- "prio: Bohemian Rhapsody" → TRUE (0.95)
+- "priority: add this song next" → TRUE (0.90)
+- "play this asap" → TRUE (0.85)
+- "we need this for the speech" → TRUE (0.75)
+- "add this song" → FALSE (0.10)
+- "good song choice" → FALSE (0.05)
+
+IMPORTANT: Be conservative. Only mark as priority when there are clear indicators. Default to FALSE when uncertain.`
 }

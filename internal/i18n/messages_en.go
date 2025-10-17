@@ -14,6 +14,7 @@ var englishMessages = map[string]string{
 	"error.admin.track_info":         "Failed to get track information",
 	"error.admin.process_failed":     "Admin approval process failed",
 	"error.playlist.add_failed":      "Failed to add track to playlist",
+	"error.queue.add_failed":         "Failed to add track to queue",
 
 	// Questions and prompts
 	"prompt.which_song":        "Which song do you mean by that?",
@@ -39,6 +40,7 @@ var englishMessages = map[string]string{
 	// Success messages
 	"success.track_added":              "Added: %s - %s (%s)",
 	"success.admin_approved_and_added": "✅ Admin approved and added: %s - %s (%s)",
+	"success.track_queued":             "🚀 Queued next: %s - %s (%s)",
 	"success.duplicate":                "Already in playlist.",
 
 	// Callback messages

@@ -56,6 +56,7 @@ func NewClient(config *core.SpotifyConfig, logger *zap.Logger) *Client {
 			spotifyauth.ScopePlaylistModifyPublic,
 			spotifyauth.ScopePlaylistModifyPrivate,
 			spotifyauth.ScopePlaylistReadPrivate,
+			spotifyauth.ScopeUserModifyPlaybackState,
 		),
 		spotifyauth.WithClientID(config.ClientID),
 		spotifyauth.WithClientSecret(config.ClientSecret),
@@ -148,6 +149,24 @@ func (c *Client) AddToPlaylist(ctx context.Context, playlistID, trackID string) 
 	c.logger.Info("Track added to playlist",
 		zap.String("trackID", trackID),
 		zap.String("playlistID", playlistID))
+
+	return nil
+}
+
+func (c *Client) AddToQueue(ctx context.Context, trackID string) error {
+	if c.client == nil {
+		return fmt.Errorf("client not authenticated")
+	}
+
+	spotifyTrackID := spotify.ID(trackID)
+
+	err := c.client.QueueSong(ctx, spotifyTrackID)
+	if err != nil {
+		return fmt.Errorf("failed to add track to queue: %w", err)
+	}
+
+	c.logger.Info("Track added to queue",
+		zap.String("trackID", trackID))
 
 	return nil
 }

@@ -175,3 +175,8 @@ func (o *OllamaClient) ExtractSongInfo(ctx context.Context, text string) (*core.
 func (o *OllamaClient) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	return IsChatterMessage(ctx, text, o.logger)
 }
+
+func (o *OllamaClient) IsPriorityRequest(_ context.Context, _ string) (bool, error) {
+	// TODO: Implement Ollama priority detection when needed
+	return false, fmt.Errorf("ollama priority detection not yet implemented")
+}

@@ -14,6 +14,7 @@ var berneseGermanMessages = map[string]string{
 	"error.admin.track_info":         "Track-Informatione chöi nid ufgnoh wärde.",
 	"error.admin.process_failed":     "D Admin-Freigab het nid funktioniert.",
 	"error.playlist.add_failed":      "Ha's Lied nid chönne zur Playliste hinzuefüege.",
+	"error.queue.add_failed":         "Ha's Lied nid chönne i d Warteschlange inetuä.",
 
 	// Questions and prompts
 	"prompt.which_song":        "Weles Lied meinsch de gnau?",
@@ -37,6 +38,7 @@ var berneseGermanMessages = map[string]string{
 	// Success messages
 	"success.track_added":              "Hinzuegfüegt: %s - %s (%s)",
 	"success.admin_approved_and_added": "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
+	"success.track_queued":             "🚀 Als nächschts: %s - %s (%s)",
 	"success.duplicate":                "Isch scho i dr Playlist.",
 
 	// Callback messages

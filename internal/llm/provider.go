@@ -19,6 +19,7 @@ type Client interface {
 	RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error)
 	ExtractSongInfo(ctx context.Context, text string) (*core.Track, error)
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
+	IsPriorityRequest(ctx context.Context, text string) (bool, error)
 }
 
 func NewProvider(config *core.LLMConfig, logger *zap.Logger) (*Provider, error) {
@@ -74,6 +75,10 @@ func (p *Provider) IsNotMusicRequest(ctx context.Context, text string) (bool, er
 	return p.client.IsNotMusicRequest(ctx, text)
 }
 
+func (p *Provider) IsPriorityRequest(ctx context.Context, text string) (bool, error) {
+	return p.client.IsPriorityRequest(ctx, text)
+}
+
 type NoOpClient struct{}
 
 func (n *NoOpClient) RankCandidates(_ context.Context, _ string) ([]core.LLMCandidate, error) {
@@ -86,5 +91,10 @@ func (n *NoOpClient) ExtractSongInfo(_ context.Context, _ string) (*core.Track, 
 
 func (n *NoOpClient) IsNotMusicRequest(_ context.Context, _ string) (bool, error) {
 	// When no LLM provider is configured, don't filter anything (return false)
+	return false, nil
+}
+
+func (n *NoOpClient) IsPriorityRequest(_ context.Context, _ string) (bool, error) {
+	// When no LLM provider is configured, assume no priority (return false)
 	return false, nil
 }

@@ -60,3 +60,8 @@ func (a *AnthropicClient) ExtractSongInfo(ctx context.Context, text string) (*co
 func (a *AnthropicClient) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	return IsChatterMessage(ctx, text, a.logger)
 }
+
+func (a *AnthropicClient) IsPriorityRequest(_ context.Context, _ string) (bool, error) {
+	// TODO: Implement Anthropic priority detection when main integration is complete
+	return false, fmt.Errorf("anthropic priority detection not yet implemented")
+}
