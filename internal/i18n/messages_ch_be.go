@@ -11,10 +11,8 @@ var berneseGermanMessages = map[string]string{
 	"error.spotify.no_matches":       "Ha kei passendi Lieder uf Spotify gfunde. Chasch es bitzeli genauer sii?",
 	"error.generic":                  "Öppis isch schief gloffe. Probier's haut nomau, bitte.",
 	"error.spotify.not_found":        "Ha's uf Spotify nid gfunde – chasch das no chli erlüterä?",
-	"error.admin.track_info":         "Track-Informatione chöi nid ufgnoh wärde.",
 	"error.admin.process_failed":     "D Admin-Freigab het nid funktioniert.",
 	"error.playlist.add_failed":      "Ha's Lied nid chönne zur Playliste hinzuefüege.",
-	"error.queue.add_failed":         "Ha's Lied nid chönne i d Warteschlange inetuä.",
 
 	// Questions and prompts
 	"prompt.which_song":        "Weles Lied meinsch de gnau?",
@@ -29,30 +27,24 @@ var berneseGermanMessages = map[string]string{
 
 	// Admin approval messages
 	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis dr Gruppen-Admin zueseit...",
-	"admin.approved":          "✅ Admin hets guet geheisse! Wird zur Playlist zuegfüegt...",
 	"admin.denied":            "❌ Admin het z'Lied abglehnt.",
 	"admin.approval_prompt":   "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\nWottsch das Lied zur Playlist hinzuefüege?",
 	"admin.button_approve":    "✅ Isch ok",
 	"admin.button_deny":       "❌ Ablehnä",
 
 	// Success messages
-	"success.track_added":                        "Hinzuegfüegt: %s - %s (%s)",
-	"success.admin_approved_and_added":           "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
-	"success.track_priority_playing":             "🚀 Spielt jetzt: %s - %s (%s)",
-	"success.track_priority_fallback":            "🔥 Mit Priorität zueoberst: %s - %s (%s) (sofortigi Widerga nid verfüegbar)",
-	"success.track_priority_fallback_permission": "🔥 Mit Priorität zueoberst: %s - %s (%s) (brucht Spotify Premium zum sofort abspielä)",
-	"success.duplicate":                          "Isch scho i dr Playlist.",
+	"success.track_added":              "Hinzuegfüegt: %s - %s (%s)",
+	"success.admin_approved_and_added": "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
+	"success.track_priority_playing":   "🚀 Spielt jetzt: %s - %s (%s)",
+	"success.duplicate":                "Isch scho i dr Playlist.",
 
 	// Callback messages
-	"callback.approved":           "✅ Lied isch vom Admin guet geheisse worde.",
-	"callback.denied":             "❌ Lied isch vom Admin abglehnt worde.",
-	"callback.already_decided":    "Über die Freigab isch scho entschide worde.",
-	"callback.not_admin":          "Nur Gruppen-Admins chöi Lieder freigäh.",
-	"callback.approval_not_found": "D Freigab-Afroge isch nid gfunde worde oder abgloffe.",
-	"callback.expired":            "D Freigab-Afroge isch abgloffe.",
-	"callback.unauthorized":       "Nur Gruppen-Admins chöi do druf antworte.",
-	"callback.sender_only":        "Nur dä, wo s Lied gschickt het, cha da antworte.",
-	"callback.prompt_expired":     "Die Afroge isch abgloffe.",
+	"callback.approved":       "✅ Lied isch vom Admin guet geheisse worde.",
+	"callback.denied":         "❌ Lied isch vom Admin abglehnt worde.",
+	"callback.expired":        "D Freigab-Afroge isch abgloffe.",
+	"callback.unauthorized":   "Nur Gruppen-Admins chöi do druf antworte.",
+	"callback.sender_only":    "Nur dä, wo s Lied gschickt het, cha da antworte.",
+	"callback.prompt_expired": "Die Afroge isch abgloffe.",
 
 	// Button texts
 	"button.confirm":  "👍 Ja, das isch's",

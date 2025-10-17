@@ -11,10 +11,8 @@ var englishMessages = map[string]string{
 	"error.spotify.no_matches":       "Couldn't find matching songs on Spotify. Could you be more specific?",
 	"error.generic":                  "Something went wrong. Please try again.",
 	"error.spotify.not_found":        "Couldn't find on Spotify—mind clarifying?",
-	"error.admin.track_info":         "Failed to get track information",
 	"error.admin.process_failed":     "Admin approval process failed",
 	"error.playlist.add_failed":      "Failed to add track to playlist",
-	"error.queue.add_failed":         "Failed to add track to queue",
 
 	// Questions and prompts
 	"prompt.which_song":        "Which song do you mean by that?",
@@ -29,7 +27,6 @@ var englishMessages = map[string]string{
 
 	// Admin approval messages
 	"admin.approval_required": "⏳ Admin approval required. Waiting for group admin approval...",
-	"admin.approved":          "✅ Admin approved! Adding to playlist...",
 	"admin.denied":            "❌ Admin denied the song request.",
 	"admin.approval_prompt": "🎵 *Admin Approval Required*\n\n" +
 		"User: %s\nSong: %s\nLink: %s\n\n" +
@@ -38,23 +35,18 @@ var englishMessages = map[string]string{
 	"admin.button_deny":    "❌ Deny",
 
 	// Success messages
-	"success.track_added":                        "Added: %s - %s (%s)",
-	"success.admin_approved_and_added":           "✅ Admin approved and added: %s - %s (%s)",
-	"success.track_priority_playing":             "🚀 Now playing: %s - %s (%s)",
-	"success.track_priority_fallback":            "🔥 Priority added to top: %s - %s (%s) (immediate playback unavailable)",
-	"success.track_priority_fallback_permission": "🔥 Priority added to top: %s - %s (%s) (requires Spotify Premium for immediate play)",
-	"success.duplicate":                          "Already in playlist.",
+	"success.track_added":              "Added: %s - %s (%s)",
+	"success.admin_approved_and_added": "✅ Admin approved and added: %s - %s (%s)",
+	"success.track_priority_playing":   "🚀 Now playing: %s - %s (%s)",
+	"success.duplicate":                "Already in playlist.",
 
 	// Callback messages
-	"callback.approved":           "✅ Song approved by admin",
-	"callback.denied":             "❌ Song denied by admin",
-	"callback.already_decided":    "This approval request has already been decided.",
-	"callback.not_admin":          "Only group administrators can approve songs.",
-	"callback.approval_not_found": "Approval request not found or expired.",
-	"callback.expired":            "This approval request has expired.",
-	"callback.unauthorized":       "Only group administrators can respond to this.",
-	"callback.sender_only":        "Only the original sender can respond to this.",
-	"callback.prompt_expired":     "This prompt has expired.",
+	"callback.approved":       "✅ Song approved by admin",
+	"callback.denied":         "❌ Song denied by admin",
+	"callback.expired":        "This approval request has expired.",
+	"callback.unauthorized":   "Only group administrators can respond to this.",
+	"callback.sender_only":    "Only the original sender can respond to this.",
+	"callback.prompt_expired": "This prompt has expired.",
 
 	// Button texts
 	"button.confirm":  "👍 Confirm",

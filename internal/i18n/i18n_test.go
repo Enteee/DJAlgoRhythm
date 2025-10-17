@@ -110,18 +110,16 @@ func TestI18nMessageValues(t *testing.T) {
 
 	// Test specific keys that should have placeholders
 	testsWithPlaceholders := map[string]int{
-		"prompt.enhanced_approval":                   5, // %s - %s, album, year, url
-		"prompt.basic_approval":                      4, // %s - %s, album, year
-		"admin.approval_prompt":                      3, // user, song, link
-		"success.track_added":                        3, // artist, title, playlist
-		"success.admin_approved_and_added":           3, // artist, title, url
-		"success.track_priority_playing":             3, // artist, title, url
-		"success.track_priority_fallback":            3, // artist, title, url
-		"success.track_priority_fallback_permission": 3, // artist, title, url
-		"bot.startup":                                1, // playlist url
-		"format.album":                               1, // album name
-		"format.year":                                1, // year number
-		"format.url":                                 1, // url
+		"prompt.enhanced_approval":         5, // %s - %s, album, year, url
+		"prompt.basic_approval":            4, // %s - %s, album, year
+		"admin.approval_prompt":            3, // user, song, link
+		"success.track_added":              3, // artist, title, playlist
+		"success.admin_approved_and_added": 3, // artist, title, url
+		"success.track_priority_playing":   3, // artist, title, url
+		"bot.startup":                      1, // playlist url
+		"format.album":                     1, // album name
+		"format.year":                      1, // year number
+		"format.url":                       1, // url
 	}
 
 	for key, expectedPlaceholders := range testsWithPlaceholders {
