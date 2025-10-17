@@ -700,9 +700,9 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	d.logger.Info("Priority track added to queue",
 		zap.String("trackID", trackID))
 
-	// Add to playlist for history/deduplication (always at the end)
+	// Add to playlist at position 0 (top) for history/deduplication to avoid replaying later
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
-		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+		if err := d.spotify.AddToPlaylistAtPosition(ctx, d.config.Spotify.PlaylistID, trackID, 0); err != nil {
 			d.logger.Error("Failed to add priority track to playlist",
 				zap.String("trackID", trackID),
 				zap.Int("retry", retry),
