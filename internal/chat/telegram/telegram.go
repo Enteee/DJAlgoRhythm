@@ -154,12 +154,11 @@ func (f *Frontend) SendText(ctx context.Context, chatID, replyToID, text string)
 		Text:   text,
 	}
 
-	// Disable link preview for Spotify URLs since they don't work well in Telegram
-	if f.shouldDisablePreview(text) {
-		disabled := true
-		params.LinkPreviewOptions = &models.LinkPreviewOptions{
-			IsDisabled: &disabled,
-		}
+	// Disable link previews for all messages since the bot primarily sends Spotify links
+	// which don't work well with Telegram's preview system
+	disabled := true
+	params.LinkPreviewOptions = &models.LinkPreviewOptions{
+		IsDisabled: &disabled,
 	}
 
 	if replyToID != "" {
@@ -286,12 +285,10 @@ func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prom
 		},
 	}
 
-	// Disable link preview for approval prompts containing Spotify URLs
-	if f.shouldDisablePreview(prompt) {
-		disabled := true
-		params.LinkPreviewOptions = &models.LinkPreviewOptions{
-			IsDisabled: &disabled,
-		}
+	// Disable link previews for approval prompts
+	disabled := true
+	params.LinkPreviewOptions = &models.LinkPreviewOptions{
+		IsDisabled: &disabled,
 	}
 
 	promptMsg, err := f.bot.SendMessage(ctx, params)
@@ -635,12 +632,10 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: keyboard},
 		}
 
-		// Disable link preview for admin approval messages containing Spotify URLs
-		if f.shouldDisablePreview(prompt) {
-			disabled := true
-			params.LinkPreviewOptions = &models.LinkPreviewOptions{
-				IsDisabled: &disabled,
-			}
+		// Disable link previews for admin approval messages
+		disabled := true
+		params.LinkPreviewOptions = &models.LinkPreviewOptions{
+			IsDisabled: &disabled,
 		}
 
 		_, err := f.bot.SendMessage(ctx, params)
@@ -811,11 +806,4 @@ func (f *Frontend) updateApprovalMessage(ctx context.Context, b *bot.Bot, update
 			f.logger.Debug("Failed to edit admin approval message", zap.Error(err))
 		}
 	}
-}
-
-// shouldDisablePreview checks if web page preview should be disabled for this message
-// This is specifically done for Spotify URLs which don't preview well in Telegram
-func (f *Frontend) shouldDisablePreview(text string) bool {
-	// Check if the message contains a Spotify URL
-	return strings.Contains(text, "open.spotify.com") || strings.Contains(text, "spotify.com")
 }
