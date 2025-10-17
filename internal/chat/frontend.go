@@ -43,4 +43,7 @@ type Frontend interface {
 	// AwaitApproval waits for user approval via reaction or inline buttons
 	// Returns true if approved within timeout, false otherwise
 	AwaitApproval(ctx context.Context, origin *Message, prompt string, timeoutSec int) (approved bool, err error)
+
+	// IsUserAdmin checks if a user is an administrator in the chat
+	IsUserAdmin(ctx context.Context, chatID, userID string) (bool, error)
 }

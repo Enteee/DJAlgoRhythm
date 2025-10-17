@@ -618,8 +618,8 @@ func (d *Dispatcher) handleRejection(ctx context.Context, msgCtx *MessageContext
 func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.SelectedID = trackID
 
-	// Check if admin approval is required
-	if d.isAdminApprovalRequired() {
+	// Check if admin approval is required and if the user is not already an admin
+	if d.isAdminApprovalRequired() && !d.isUserAdmin(ctx, originalMsg) {
 		d.awaitAdminApproval(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
@@ -636,6 +636,25 @@ func (d *Dispatcher) isAdminApprovalRequired() bool {
 		return telegramFrontend.IsAdminApprovalEnabled()
 	}
 	return false
+}
+
+// isUserAdmin checks if the message sender is an admin in the chat
+func (d *Dispatcher) isUserAdmin(ctx context.Context, msg *chat.Message) bool {
+	isAdmin, err := d.frontend.IsUserAdmin(ctx, msg.ChatID, msg.SenderID)
+	if err != nil {
+		d.logger.Warn("Failed to check admin status, assuming non-admin",
+			zap.String("userID", msg.SenderID),
+			zap.String("chatID", msg.ChatID),
+			zap.Error(err))
+		return false
+	}
+
+	d.logger.Debug("Admin status checked",
+		zap.String("userID", msg.SenderID),
+		zap.String("userName", msg.SenderName),
+		zap.Bool("isAdmin", isAdmin))
+
+	return isAdmin
 }
 
 // awaitAdminApproval requests admin approval before adding to playlist

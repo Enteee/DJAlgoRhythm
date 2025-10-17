@@ -729,6 +729,38 @@ func (f *Frontend) isUserAdmin(userID int64, adminList []int64) bool {
 	return false
 }
 
+// IsUserAdmin implements the chat.Frontend interface to check if a user is an admin
+func (f *Frontend) IsUserAdmin(ctx context.Context, chatID, userID string) (bool, error) {
+	if !f.config.Enabled {
+		return false, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	// Parse user ID
+	userIDInt, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	// Parse chat ID
+	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	// Only check admin status for the configured group
+	if chatIDInt != f.config.GroupID {
+		return false, nil
+	}
+
+	// Get current admin list
+	adminIDs, err := f.GetGroupAdmins(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get group admins: %w", err)
+	}
+
+	return f.isUserAdmin(userIDInt, adminIDs), nil
+}
+
 func (f *Frontend) answerExpiredCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {
 	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: callbackQueryID,

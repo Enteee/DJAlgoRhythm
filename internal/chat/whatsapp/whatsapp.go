@@ -416,3 +416,21 @@ func (f *Frontend) extractMessageText(msg *waE2E.Message) string {
 
 	return ""
 }
+
+// IsUserAdmin implements the chat.Frontend interface to check if a user is an admin
+// For WhatsApp, this is a stub implementation since WhatsApp group admin checking
+// requires more complex API calls that are not easily available through whatsmeow
+func (f *Frontend) IsUserAdmin(_ context.Context, chatID, userID string) (bool, error) {
+	if !f.config.Enabled {
+		return false, fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// For now, return false - WhatsApp admin checking would require
+	// querying group metadata which is complex and not always reliable
+	// This could be enhanced in the future if needed
+	f.logger.Debug("WhatsApp admin checking not implemented, returning false",
+		zap.String("chatID", chatID),
+		zap.String("userID", userID))
+
+	return false, nil
+}
