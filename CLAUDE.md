@@ -64,6 +64,20 @@ Pre-commit hooks are automatically configured and include:
 - **Error handling**: Always handle errors explicitly, never ignore them
 - **Context usage**: Pass context through function calls for cancellation/timeout
 
+### Configuration Management
+**CRITICAL**: When introducing new configuration options:
+
+1. **Add to config structs** - Update the relevant config struct in `internal/core/config.go`
+2. **Update .env.example** - ALWAYS add the new option to `.env.example` with:
+   - Clear documentation comment explaining the option
+   - Sensible default value or example
+   - Required/optional status indication
+3. **Add CLI flags** - Add corresponding command-line flags in `cmd/whatdj/main.go`
+4. **Update README.md** - Add the new option to the configuration table in README.md
+5. **Test the option** - Ensure the new configuration works with both environment variables and CLI flags
+
+**Never add a config option without updating `.env.example` - this is the primary reference for users.**
+
 ### Makefile Usage
 The project includes a comprehensive Makefile with targets for:
 - `make build` - Build the binary
