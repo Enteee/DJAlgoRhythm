@@ -872,8 +872,36 @@ func (d *Dispatcher) reactAddedWithMessage(
 		d.logger.Error("Failed to react with thumbs up", zap.Error(err))
 	}
 
-	// Reply with track info using the specified message key
-	replyText := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+	// Try to get queue position for added track
+	var replyText string
+	if queuePosition, err := d.spotify.GetQueuePosition(ctx, trackID); err == nil && queuePosition >= 0 {
+		// Track found in queue - use message with queue position
+		var queueMessageKey string
+		switch messageKey {
+		case "success.track_added":
+			queueMessageKey = "success.track_added_with_queue"
+		case "success.admin_approved_and_added":
+			queueMessageKey = "success.admin_approved_and_added_queue"
+		default:
+			// For other messages (like priority playing), fall back to original
+			queueMessageKey = messageKey
+		}
+
+		if queueMessageKey != messageKey {
+			// Use queue position message with 1-based indexing for user display
+			replyText = d.localizer.T(queueMessageKey, track.Artist, track.Title, track.URL, queuePosition+1)
+		} else {
+			// Use original message format
+			replyText = d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+		}
+	} else {
+		// Queue position not available or error occurred - use original message
+		if err != nil {
+			d.logger.Debug("Could not get queue position", zap.Error(err))
+		}
+		replyText = d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+	}
+
 	messageWithMention := d.formatMessageWithMention(originalMsg, replyText)
 	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, messageWithMention); err != nil {
 		d.logger.Error("Failed to reply with added confirmation", zap.Error(err))

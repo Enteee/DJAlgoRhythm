@@ -66,6 +66,8 @@ func NewClient(config *core.SpotifyConfig, logger *zap.Logger) *Client {
 			spotifyauth.ScopePlaylistModifyPrivate,
 			spotifyauth.ScopePlaylistReadPrivate,
 			spotifyauth.ScopeUserModifyPlaybackState,
+			spotifyauth.ScopeUserReadCurrentlyPlaying,
+			spotifyauth.ScopeUserReadPlaybackState,
 		),
 		spotifyauth.WithClientID(config.ClientID),
 		spotifyauth.WithClientSecret(config.ClientSecret),
@@ -229,7 +231,30 @@ func (c *Client) AddToQueue(ctx context.Context, trackID string) error {
 	return nil
 }
 
-// Note: Immediate playback methods removed in favor of simpler queue-based priority approach
+// GetQueuePosition finds the position of a track in the user's queue
+// Returns the position (0-based) or -1 if not found
+func (c *Client) GetQueuePosition(ctx context.Context, trackID string) (int, error) {
+	if c.client == nil {
+		return -1, fmt.Errorf("client not authenticated")
+	}
+
+	queue, err := c.client.GetQueue(ctx)
+	if err != nil {
+		return -1, fmt.Errorf("failed to get user queue: %w", err)
+	}
+
+	// Search through the queue for our track
+	for i := range queue.Items {
+		if queue.Items[i].ID == spotify.ID(trackID) {
+			return i, nil
+		}
+	}
+
+	// Track not found in queue
+	return -1, nil
+}
+
+// Note: Immediate playbook methods removed in favor of simpler queue-based priority approach
 
 func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
 	if c.client == nil {

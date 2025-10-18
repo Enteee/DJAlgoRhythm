@@ -35,10 +35,12 @@ var englishMessages = map[string]string{
 	"admin.button_deny":    "❌ Deny",
 
 	// Success messages
-	"success.track_added":              "Added: %s - %s (%s)",
-	"success.admin_approved_and_added": "✅ Admin approved and added: %s - %s (%s)",
-	"success.track_priority_playing":   "🚀 Now playing: %s - %s (%s)",
-	"success.duplicate":                "Already in playlist.",
+	"success.track_added":                    "Added: %s - %s (%s)",
+	"success.track_added_with_queue":         "Added: %s - %s (%s) - Queue position: %d",
+	"success.admin_approved_and_added":       "✅ Admin approved and added: %s - %s (%s)",
+	"success.admin_approved_and_added_queue": "✅ Admin approved and added: %s - %s (%s) - Queue position: %d",
+	"success.track_priority_playing":         "🚀 Now playing: %s - %s (%s)",
+	"success.duplicate":                      "Already in playlist.",
 
 	// Callback messages
 	"callback.approved":       "✅ Song approved by admin",
