@@ -747,8 +747,9 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	songURL := track.URL
 
 	// Send notification to user that admin approval is required
-	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-		d.localizer.T("admin.approval_required")); err != nil {
+	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
+		d.localizer.T("admin.approval_required"))
+	if err != nil {
 		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
 	}
 
@@ -761,6 +762,13 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 			d.logger.Error("Admin approval failed", zap.Error(err))
 			d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
 			return
+		}
+
+		// Delete the admin approval required message
+		if approvalMsgID != "" {
+			if deleteErr := d.frontend.DeleteMessage(ctx, originalMsg.ChatID, approvalMsgID); deleteErr != nil {
+				d.logger.Debug("Failed to delete admin approval message", zap.Error(deleteErr))
+			}
 		}
 
 		if approved {

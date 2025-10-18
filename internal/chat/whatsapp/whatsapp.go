@@ -194,6 +194,17 @@ func (f *Frontend) React(ctx context.Context, chatID, msgID string, r chat.React
 	return err
 }
 
+// DeleteMessage deletes a message by its ID
+// Note: WhatsApp doesn't support message deletion for bots in the same way as Telegram
+func (f *Frontend) DeleteMessage(_ context.Context, _, _ string) error {
+	if !f.config.Enabled {
+		return fmt.Errorf("whatsapp frontend is disabled")
+	}
+	// WhatsApp doesn't support message deletion via bot API
+	// This is a stub implementation for interface compatibility
+	return nil
+}
+
 // AwaitApproval waits for user approval via reaction
 // Note: WhatsApp primarily uses reactions for approval
 func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prompt string, timeoutSec int) (bool, error) {

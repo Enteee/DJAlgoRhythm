@@ -46,4 +46,7 @@ type Frontend interface {
 
 	// IsUserAdmin checks if a user is an administrator in the chat
 	IsUserAdmin(ctx context.Context, chatID, userID string) (bool, error)
+
+	// DeleteMessage deletes a message by its ID
+	DeleteMessage(ctx context.Context, chatID, msgID string) error
 }

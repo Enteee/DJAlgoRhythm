@@ -190,6 +190,35 @@ func (f *Frontend) SendText(ctx context.Context, chatID, replyToID, text string)
 	return strconv.Itoa(msg.ID), nil
 }
 
+// DeleteMessage deletes a message by its ID
+func (f *Frontend) DeleteMessage(ctx context.Context, chatID, msgID string) error {
+	if !f.config.Enabled {
+		return fmt.Errorf("telegram frontend is disabled")
+	}
+
+	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	messageID, err := strconv.Atoi(msgID)
+	if err != nil {
+		return fmt.Errorf("invalid message ID: %w", err)
+	}
+
+	params := &bot.DeleteMessageParams{
+		ChatID:    chatIDInt,
+		MessageID: messageID,
+	}
+
+	_, err = f.bot.DeleteMessage(ctx, params)
+	if err != nil {
+		return fmt.Errorf("failed to delete message: %w", err)
+	}
+
+	return nil
+}
+
 // React adds an emoji reaction to a message
 func (f *Frontend) React(ctx context.Context, chatID, msgID string, r chat.Reaction) error {
 	if !f.config.Enabled {
@@ -314,19 +343,13 @@ func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prom
 	select {
 	case approved := <-approval.approved:
 		// Clean up the prompt message
-		if _, delErr := f.bot.DeleteMessage(ctx, &bot.DeleteMessageParams{
-			ChatID:    chatIDInt,
-			MessageID: promptMsgID,
-		}); delErr != nil {
+		if delErr := f.DeleteMessage(ctx, strconv.FormatInt(chatIDInt, 10), strconv.Itoa(promptMsgID)); delErr != nil {
 			f.logger.Debug("Failed to delete prompt message", zap.Error(delErr))
 		}
 		return approved, nil
 	case <-approvalCtx.Done():
 		// Clean up the prompt message on timeout
-		if _, delErr := f.bot.DeleteMessage(ctx, &bot.DeleteMessageParams{
-			ChatID:    chatIDInt,
-			MessageID: promptMsgID,
-		}); delErr != nil {
+		if delErr := f.DeleteMessage(ctx, strconv.FormatInt(chatIDInt, 10), strconv.Itoa(promptMsgID)); delErr != nil {
 			f.logger.Debug("Failed to delete prompt message on timeout", zap.Error(delErr))
 		}
 		return false, nil
