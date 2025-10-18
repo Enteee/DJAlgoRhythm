@@ -26,7 +26,7 @@ var berneseGermanMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis dr Gruppen-Admin zueseit...",
+	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis dr Gruppe-Admin zueseit...",
 	"admin.denied":            "❌ Admin het z'Lied abglehnt.",
 	"admin.approval_prompt":   "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\nWottsch das Lied zur Playlist hinzuefüege?",
 	"admin.button_approve":    "✅ Isch ok",
@@ -42,7 +42,7 @@ var berneseGermanMessages = map[string]string{
 	"callback.approved":       "✅ Lied isch vom Admin guet geheisse worde.",
 	"callback.denied":         "❌ Lied isch vom Admin abglehnt worde.",
 	"callback.expired":        "D Freigab-Afroge isch abgloffe.",
-	"callback.unauthorized":   "Nur Gruppen-Admins chöi do druf antworte.",
+	"callback.unauthorized":   "Nur Gruppe-Admins chöi do druf antworte.",
 	"callback.sender_only":    "Nur dä, wo s Lied gschickt het, cha da antworte.",
 	"callback.prompt_expired": "Die Afroge isch abgloffe.",
 
@@ -52,5 +52,5 @@ var berneseGermanMessages = map[string]string{
 
 	// Bot status messages
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit für öii Musigwünsch!\n\n📀 Playlist: %s",
-	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!",
+	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!\n\n📀 Aui Lieder vo dere Session: %s",
 }

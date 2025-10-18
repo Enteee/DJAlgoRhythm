@@ -996,7 +996,8 @@ func (d *Dispatcher) sendStartupMessage(ctx context.Context) {
 // sendShutdownMessage sends a shutdown notification to the group
 func (d *Dispatcher) sendShutdownMessage(ctx context.Context) {
 	if groupID := d.getGroupID(); groupID != "" {
-		shutdownMessage := d.localizer.T("bot.shutdown")
+		playlistURL := fmt.Sprintf("https://open.spotify.com/playlist/%s", d.config.Spotify.PlaylistID)
+		shutdownMessage := d.localizer.T("bot.shutdown", playlistURL)
 		if _, err := d.frontend.SendText(ctx, groupID, "", shutdownMessage); err != nil {
 			d.logger.Debug("Failed to send shutdown message", zap.Error(err))
 		}
