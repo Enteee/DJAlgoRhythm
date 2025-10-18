@@ -171,7 +171,8 @@ func (d *Dispatcher) handleSpotifyLink(ctx context.Context, msgCtx *MessageConte
 func (d *Dispatcher) askWhichSong(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	msgCtx.State = StateAskWhichSong
 
-	_, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, d.localizer.T("prompt.which_song"))
+	message := d.formatMessageWithMention(originalMsg, d.localizer.T("prompt.which_song"))
+	_, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, message)
 	if err != nil {
 		d.logger.Error("Failed to ask which song", zap.Error(err))
 	}
@@ -479,8 +480,9 @@ func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *Message
 
 	prompt := d.localizer.T("prompt.enhanced_approval",
 		candidate.Track.Artist, candidate.Track.Title, albumPart, yearPart, urlPart)
+	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
-	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
+	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Failed to get enhanced approval", zap.Error(err))
 		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
@@ -550,8 +552,9 @@ func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext,
 
 	prompt := d.localizer.T("prompt.basic_approval",
 		candidate.Track.Artist, candidate.Track.Title, yearPart, urlPart)
+	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
-	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
+	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Failed to get approval", zap.Error(err))
 		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
@@ -570,8 +573,9 @@ func (d *Dispatcher) clarifyAsk(ctx context.Context, msgCtx *MessageContext, ori
 	msgCtx.State = StateClarifyAsk
 
 	prompt := d.localizer.T("prompt.clarification", candidate.Track.Artist, candidate.Track.Title)
+	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
-	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, prompt, d.config.App.ConfirmTimeoutSecs)
+	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Failed to get clarification", zap.Error(err))
 		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
@@ -747,8 +751,8 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	songURL := track.URL
 
 	// Send notification to user that admin approval is required
-	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-		d.localizer.T("admin.approval_required"))
+	approvalMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("admin.approval_required"))
+	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, approvalMessage)
 	if err != nil {
 		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
 	}
@@ -784,8 +788,8 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 				zap.String("song", songInfo))
 
 			// Notify user of denial
-			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID,
-				d.localizer.T("admin.denied")); err != nil {
+			denialMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("admin.denied"))
+			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, denialMessage); err != nil {
 				d.logger.Error("Failed to notify user about admin denial", zap.Error(err))
 			}
 		}
@@ -870,7 +874,8 @@ func (d *Dispatcher) reactAddedWithMessage(
 
 	// Reply with track info using the specified message key
 	replyText := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
-	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, replyText); err != nil {
+	messageWithMention := d.formatMessageWithMention(originalMsg, replyText)
+	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, messageWithMention); err != nil {
 		d.logger.Error("Failed to reply with added confirmation", zap.Error(err))
 	}
 }
@@ -885,7 +890,8 @@ func (d *Dispatcher) reactDuplicate(ctx context.Context, msgCtx *MessageContext,
 	}
 
 	// Reply with duplicate message
-	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, d.localizer.T("success.duplicate")); err != nil {
+	duplicateMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("success.duplicate"))
+	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, duplicateMessage); err != nil {
 		d.logger.Error("Failed to reply with duplicate message", zap.Error(err))
 	}
 }
@@ -894,7 +900,8 @@ func (d *Dispatcher) reactDuplicate(ctx context.Context, msgCtx *MessageContext,
 func (d *Dispatcher) reactError(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, message string) {
 	msgCtx.State = StateReactError
 
-	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, message); err != nil {
+	errorMessage := d.formatMessageWithMention(originalMsg, message)
+	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, errorMessage); err != nil {
 		d.logger.Error("Failed to reply with error message", zap.Error(err))
 	}
 }
@@ -1050,4 +1057,19 @@ func (d *Dispatcher) reactIgnored(ctx context.Context, msg *chat.Message) {
 	if err := d.frontend.React(ctx, msg.ChatID, msg.ID, chat.Reaction(emoji)); err != nil {
 		d.logger.Debug("Failed to add ignored reaction", zap.Error(err))
 	}
+}
+
+// formatUserMention creates a user mention string based on the frontend type
+func (d *Dispatcher) formatUserMention(msg *chat.Message) string {
+	// Always add @ prefix if not already present
+	if strings.HasPrefix(msg.SenderName, "@") {
+		return msg.SenderName
+	}
+	return "@" + msg.SenderName
+}
+
+// formatMessageWithMention adds user mention to a message
+func (d *Dispatcher) formatMessageWithMention(msg *chat.Message, messageText string) string {
+	mention := d.formatUserMention(msg)
+	return fmt.Sprintf("%s %s", mention, messageText)
 }

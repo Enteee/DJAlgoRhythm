@@ -102,6 +102,9 @@ debug.test
 *.prof
 *.pprof
 
+# Build artifacts
+whatdj
+
 # Cache directories
 .cache/
 node_modules/

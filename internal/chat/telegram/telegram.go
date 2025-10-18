@@ -662,7 +662,6 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 		params := &bot.SendMessageParams{
 			ChatID:      adminID,
 			Text:        prompt,
-			ParseMode:   "Markdown",
 			ReplyMarkup: &models.InlineKeyboardMarkup{InlineKeyboard: keyboard},
 		}
 
@@ -867,7 +866,6 @@ func (f *Frontend) updateApprovalMessage(ctx context.Context, b *bot.Bot, update
 			ChatID:    update.CallbackQuery.From.ID,
 			MessageID: update.CallbackQuery.Message.Message.ID,
 			Text:      text,
-			ParseMode: "Markdown",
 		}); err != nil {
 			f.logger.Debug("Failed to edit admin approval message", zap.Error(err))
 		}
