@@ -70,29 +70,27 @@ in
       telegram-desktop
 
       # IDE
-      (
-        vscode-with-extensions.override {
-          vscodeExtensions =
-            with vscode-extensions;
-            [
-              bbenoist.nix
-              mkhl.direnv
+      (vscode-with-extensions.override {
+        vscodeExtensions =
+          with vscode-extensions;
+          [
+            bbenoist.nix
+            mkhl.direnv
 
-              davidanson.vscode-markdownlint
-              vscode-extensions.golang.go
+            davidanson.vscode-markdownlint
+            vscode-extensions.golang.go
 
-              jebbs.plantuml
-            ]
-            ++ vscode-utils.extensionsFromVscodeMarketplace [
-              {
-                name = "hadolint";
-                publisher = "exiasr";
-                version = "1.1.2";
-                sha256 = "sha256-6GO1f8SP4CE8yYl87/tm60FdGHqHsJA4c2B6UKVdpgM=";
-              }
-            ];
-        }
-      )
+            jebbs.plantuml
+          ]
+          ++ vscode-utils.extensionsFromVscodeMarketplace [
+            {
+              name = "hadolint";
+              publisher = "exiasr";
+              version = "1.1.2";
+              sha256 = "sha256-6GO1f8SP4CE8yYl87/tm60FdGHqHsJA4c2B6UKVdpgM=";
+            }
+          ];
+      })
     ]);
 
   # https://devenv.sh/languages/
@@ -100,71 +98,70 @@ in
   languages.go.enable = true;
 
   # https://devenv.sh/git-hooks/
-  git-hooks.hooks =
-    {
-      dos2unix = {
-        enable = true;
-        entry = "dos2unix";
-        args = [
-          "--info=c"
-        ];
-        excludes = [
-          ".*/assets/.*"
-        ];
-      };
+  git-hooks.hooks = {
+    dos2unix = {
+      enable = true;
+      entry = "dos2unix";
+      args = [
+        "--info=c"
+      ];
+      excludes = [
+        ".*/assets/.*"
+      ];
+    };
 
-      trim-trailing-whitespace.enable = true;
+    trim-trailing-whitespace.enable = true;
 
-      nixfmt-rfc-style.enable = true;
+    nixfmt-rfc-style.enable = true;
 
-      shellcheck = {
-        enable = true;
-        args = [
-          "-x"
-          "-o"
-          "all"
-        ];
-      };
+    shellcheck = {
+      enable = true;
+      args = [
+        "-x"
+        "-o"
+        "all"
+      ];
+    };
 
-      hadolint.enable = true;
+    hadolint.enable = true;
 
-      markdownlint = {
-        enable = true;
-        settings.configuration = {
-          MD013 = {
-            line_length = 120;
-            tables = false;
-          };
+    markdownlint = {
+      enable = true;
+      settings.configuration = {
+        MD013 = {
+          line_length = 120;
+          tables = false;
         };
-      };
-
-      yamllint = {
-        enable = true;
-        excludes = [
-          "pnpm-lock.yaml"
-          "charts/templates/"
-          "charts/charts/"
-        ];
-        settings = {
-          strict = true;
-          configData = ''{ extends: default, rules: { document-start: disable, line-length: {max: 165} } }'';
-        };
-      };
-
-      check-json.enable = true;
-
-      check-toml.enable = true;
-
-      trufflehog.enable = true;
-      ripsecrets.enable = true;
-
-      typos = {
-        enable = true;
-        exclude_types = [
-          "svg"
-        ];
       };
     };
+
+    yamllint = {
+      enable = true;
+      excludes = [
+        "pnpm-lock.yaml"
+        "charts/templates/"
+        "charts/charts/"
+      ];
+      settings = {
+        strict = true;
+        configData = ''{ extends: default, rules: { document-start: disable, line-length: {max: 165} } }'';
+      };
+    };
+
+    check-json.enable = true;
+
+    check-toml.enable = true;
+
+    trufflehog.enable = true;
+    ripsecrets.enable = true;
+
+    typos = {
+      enable = true;
+      exclude_types = [
+        "svg"
+      ];
+    };
+  };
 
   dotenv = {
     enable = false;

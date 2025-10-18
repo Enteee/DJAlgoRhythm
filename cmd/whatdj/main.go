@@ -392,7 +392,81 @@ func runServices(ctx context.Context, svcs *services) error {
 	return nil
 }
 
+func promptForTelegramGroup() (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	fmt.Println("\n🤖 WHATDJ_TELEGRAM_GROUP_ID not set. Scanning for available groups...")
+
+	// Create a temporary Telegram frontend to list groups
+	telegramConfig := &telegram.Config{
+		BotToken:        config.Telegram.BotToken,
+		GroupID:         0, // Temporary - we'll set this after selection
+		Enabled:         true,
+		ReactionSupport: config.Telegram.ReactionSupport,
+		AdminApproval:   config.Telegram.AdminApproval,
+		Language:        config.App.Language,
+	}
+
+	tempFrontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram-setup"))
+	if err := tempFrontend.Start(ctx); err != nil {
+		return 0, fmt.Errorf("failed to initialize Telegram bot: %w", err)
+	}
+
+	// Wait a moment for the bot to be ready
+	time.Sleep(2 * time.Second)
+
+	// List available groups
+	groups, err := tempFrontend.ListAvailableGroups(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list groups: %w", err)
+	}
+
+	if len(groups) == 0 {
+		return 0, fmt.Errorf("no groups found. Please add the bot to a group first and send some messages")
+	}
+
+	// Display available groups
+	fmt.Println("\n📋 Available groups:")
+	for i, group := range groups {
+		fmt.Printf("  %d. %s (ID: %d, Type: %s)\n", i+1, group.Title, group.ID, group.Type)
+	}
+
+	// Prompt user for selection
+	fmt.Printf("\nSelect a group (1-%d): ", len(groups))
+	var selection int
+	if _, err := fmt.Scanln(&selection); err != nil {
+		return 0, fmt.Errorf("failed to read selection: %w", err)
+	}
+
+	if selection < 1 || selection > len(groups) {
+		return 0, fmt.Errorf("invalid selection: %d (must be between 1 and %d)", selection, len(groups))
+	}
+
+	selectedGroup := groups[selection-1]
+	fmt.Printf("\n✅ Selected group: %s (ID: %d)\n", selectedGroup.Title, selectedGroup.ID)
+	fmt.Printf("💡 To avoid this prompt in the future, set: WHATDJ_TELEGRAM_GROUP_ID=%d\n\n", selectedGroup.ID)
+
+	return selectedGroup.ID, nil
+}
+
 func validateConfig() error {
+	if err := validateChatFrontends(); err != nil {
+		return err
+	}
+
+	if err := validateSpotifyConfig(); err != nil {
+		return err
+	}
+
+	if err := validateLLMConfig(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateChatFrontends() error {
 	// Ensure at least one chat frontend is enabled
 	if !config.Telegram.Enabled && !config.WhatsApp.Enabled {
 		return fmt.Errorf("at least one chat frontend must be enabled (Telegram or WhatsApp)")
@@ -404,7 +478,13 @@ func validateConfig() error {
 			return fmt.Errorf("telegram bot token is required when Telegram is enabled")
 		}
 		if config.Telegram.GroupID == 0 {
-			return fmt.Errorf("telegram group ID is required when Telegram is enabled")
+			// Interactive group selection if group ID not provided
+			groupID, err := promptForTelegramGroup()
+			if err != nil {
+				return fmt.Errorf("failed to select Telegram group: %w", err)
+			}
+			config.Telegram.GroupID = groupID
+			logger.Info("Selected Telegram group interactively", zap.Int64("groupID", groupID))
 		}
 	}
 
@@ -415,7 +495,10 @@ func validateConfig() error {
 		}
 	}
 
-	// Validate Spotify configuration (always required)
+	return nil
+}
+
+func validateSpotifyConfig() error {
 	if config.Spotify.ClientID == "" {
 		return fmt.Errorf("spotify client ID is required")
 	}
@@ -428,12 +511,14 @@ func validateConfig() error {
 		return fmt.Errorf("spotify playlist ID is required")
 	}
 
-	// Validate LLM configuration if enabled
+	return nil
+}
+
+func validateLLMConfig() error {
 	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {
 		if config.LLM.APIKey == "" && config.LLM.Provider != "ollama" {
 			return fmt.Errorf("LLM API key is required for provider: %s", config.LLM.Provider)
 		}
 	}
-
 	return nil
 }

@@ -4,6 +4,8 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +21,10 @@ import (
 )
 
 const (
-	entityTypeURL = "url"
+	entityTypeURL         = "url"
+	chatTypeGroup         = "group"
+	chatTypeSuperGroup    = "supergroup"
+	groupDiscoveryTimeout = 15 // seconds for group discovery
 )
 
 // Config holds Telegram-specific configuration
@@ -115,9 +120,11 @@ func (f *Frontend) Start(ctx context.Context) error {
 
 	f.bot = b
 
-	// Verify bot can access the group
-	if err := f.verifyGroupAccess(ctx); err != nil {
-		return fmt.Errorf("failed to verify group access: %w", err)
+	// Verify bot can access the group (skip if GroupID is 0 for interactive setup)
+	if f.config.GroupID != 0 {
+		if err := f.verifyGroupAccess(ctx); err != nil {
+			return fmt.Errorf("failed to verify group access: %w", err)
+		}
 	}
 
 	f.logger.Info("Telegram frontend started successfully")
@@ -352,7 +359,7 @@ func (f *Frontend) handleMessage(_ context.Context, msg *models.Message) {
 		SenderName: f.getUserDisplayName(msg.From),
 		Text:       msg.Text,
 		URLs:       urls,
-		IsGroup:    msg.Chat.Type == "group" || msg.Chat.Type == "supergroup",
+		IsGroup:    msg.Chat.Type == chatTypeGroup || msg.Chat.Type == chatTypeSuperGroup,
 		Raw:        msg,
 	}
 
@@ -838,4 +845,123 @@ func (f *Frontend) updateApprovalMessage(ctx context.Context, b *bot.Bot, update
 			f.logger.Debug("Failed to edit admin approval message", zap.Error(err))
 		}
 	}
+}
+
+// GroupInfo represents a Telegram group/chat information
+type GroupInfo struct {
+	ID    int64
+	Title string
+	Type  string
+}
+
+// ListAvailableGroups returns a list of groups the bot is part of
+func (f *Frontend) ListAvailableGroups(ctx context.Context) ([]GroupInfo, error) {
+	var groups []GroupInfo
+	groupsMap := make(map[int64]GroupInfo)
+
+	// Create a separate bot instance just for group discovery without default handler
+	tempHandler := func(_ context.Context, _ *bot.Bot, update *models.Update) {
+		f.logger.Info("Received update during group discovery")
+
+		var chat models.Chat
+		var hasChat bool
+
+		if update.Message != nil {
+			chat = update.Message.Chat
+			hasChat = true
+			f.logger.Info("Found message in chat",
+				zap.Int64("chatID", chat.ID),
+				zap.String("chatTitle", chat.Title),
+				zap.String("chatType", string(chat.Type)))
+		} else if update.CallbackQuery != nil && update.CallbackQuery.Message.Message != nil {
+			chat = update.CallbackQuery.Message.Message.Chat
+			hasChat = true
+			f.logger.Info("Found callback query in chat",
+				zap.Int64("chatID", chat.ID),
+				zap.String("chatTitle", chat.Title),
+				zap.String("chatType", string(chat.Type)))
+		}
+
+		if hasChat && (string(chat.Type) == chatTypeGroup || string(chat.Type) == chatTypeSuperGroup) {
+			f.logger.Info("Discovered group during scan",
+				zap.Int64("groupID", chat.ID),
+				zap.String("groupTitle", chat.Title),
+				zap.String("groupType", string(chat.Type)))
+			groupsMap[chat.ID] = GroupInfo{
+				ID:    chat.ID,
+				Title: chat.Title,
+				Type:  string(chat.Type),
+			}
+		} else if hasChat {
+			f.logger.Info("Ignoring non-group chat",
+				zap.Int64("chatID", chat.ID),
+				zap.String("chatType", string(chat.Type)))
+		}
+	}
+
+	// Create a temporary bot with only our handler (no default handler)
+	// Note: We can't easily suppress the "context canceled" error from the bot library
+	// as it uses the standard log package internally. The error is expected and harmless.
+	tempBot, err := bot.New(f.config.BotToken,
+		bot.WithDefaultHandler(tempHandler))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary bot for group discovery: %w", err)
+	}
+
+	f.logger.Info("Created temporary bot for group discovery")
+
+	// Start the bot to receive updates
+	discoverCtx, cancelDiscover := context.WithTimeout(ctx, groupDiscoveryTimeout*time.Second)
+	defer cancelDiscover()
+
+	// Start bot polling in background
+	go func() {
+		// Suppress the expected "context canceled" error from bot polling
+		defer func() {
+			if r := recover(); r != nil {
+				// Log unexpected panics but ignore context cancellation
+				f.logger.Debug("Bot polling stopped", zap.Any("reason", r))
+			}
+		}()
+		tempBot.Start(discoverCtx)
+	}()
+
+	// Give some time to collect updates
+	f.logger.Info("Scanning for groups... Please send a message in any group the bot should monitor")
+	f.logger.Info("Waiting 15 seconds for group discovery...")
+
+	// Wait for groups to be discovered
+	select {
+	case <-time.After(groupDiscoveryTimeout * time.Second):
+		// Timeout - proceed with discovered groups
+
+		// Temporarily suppress stderr to hide the expected "context canceled" error
+		originalOutput := log.Writer()
+		log.SetOutput(io.Discard)
+
+		cancelDiscover() // Stop the bot polling
+
+		// Give a brief moment for the bot to stop and any error messages to be discarded
+		time.Sleep(200 * time.Millisecond)
+
+		// Restore stderr
+		log.SetOutput(originalOutput)
+
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	// Convert map to slice
+	for _, group := range groupsMap {
+		groups = append(groups, group)
+	}
+
+	f.logger.Info("Group discovery completed",
+		zap.Int("groupCount", len(groups)),
+		zap.Any("groups", groups))
+
+	// Add a small delay to let any remaining bot error messages print before our output
+	time.Sleep(50 * time.Millisecond)
+
+	return groups, nil
 }
