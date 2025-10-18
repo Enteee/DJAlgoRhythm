@@ -643,8 +643,11 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 		return
 	}
 
-	// Check if admin approval is required and if the user is not already an admin
-	if d.isAdminApprovalRequired() && !isAdmin {
+	// Check if admin approval is required
+	// If AdminNeedsApproval is enabled, even admins need approval
+	// Otherwise, only non-admins need approval when AdminApproval is enabled
+	needsApproval := d.isAdminApprovalRequired() && (!isAdmin || d.isAdminNeedsApproval())
+	if needsApproval {
 		d.awaitAdminApproval(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
@@ -661,6 +664,11 @@ func (d *Dispatcher) isAdminApprovalRequired() bool {
 		return telegramFrontend.IsAdminApprovalEnabled()
 	}
 	return false
+}
+
+// isAdminNeedsApproval checks if admins also need approval
+func (d *Dispatcher) isAdminNeedsApproval() bool {
+	return d.config.Telegram.AdminNeedsApproval
 }
 
 // isUserAdmin checks if the message sender is an admin in the chat

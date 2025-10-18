@@ -32,12 +32,13 @@ const (
 
 // Config holds Telegram-specific configuration
 type Config struct {
-	BotToken        string
-	GroupID         int64 // Chat ID of the group to monitor
-	Enabled         bool
-	ReactionSupport bool   // Whether the group supports reactions
-	AdminApproval   bool   // Whether admin approval is required for songs
-	Language        string // Bot language for user-facing messages
+	BotToken           string
+	GroupID            int64 // Chat ID of the group to monitor
+	Enabled            bool
+	ReactionSupport    bool   // Whether the group supports reactions
+	AdminApproval      bool   // Whether admin approval is required for songs
+	AdminNeedsApproval bool   // Whether admins also need approval (for testing)
+	Language           string // Bot language for user-facing messages
 }
 
 // Frontend implements the chat.Frontend interface for Telegram

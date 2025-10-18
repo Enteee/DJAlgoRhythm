@@ -74,6 +74,7 @@ func init() {
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
 	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
+	rootCmd.PersistentFlags().Bool("admin-needs-approval", false, "Require approval even for admins (for testing)")
 	supportedLangs := strings.Join(i18n.GetSupportedLanguages(), ", ")
 	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", supportedLangs))
 
@@ -137,6 +138,7 @@ func configureTelegram(cfg *core.Config) {
 		cfg.Telegram.ReactionSupport = true // default to true
 	}
 	cfg.Telegram.AdminApproval = viper.GetBool("admin-approval")
+	cfg.Telegram.AdminNeedsApproval = viper.GetBool("admin-needs-approval")
 }
 
 func configureSpotify(cfg *core.Config) {
@@ -304,12 +306,13 @@ func initializeServices(ctx context.Context) (*services, error) {
 func createChatFrontend() (chat.Frontend, error) {
 	if config.Telegram.Enabled {
 		telegramConfig := &telegram.Config{
-			BotToken:        config.Telegram.BotToken,
-			GroupID:         config.Telegram.GroupID,
-			Enabled:         config.Telegram.Enabled,
-			ReactionSupport: config.Telegram.ReactionSupport,
-			AdminApproval:   config.Telegram.AdminApproval,
-			Language:        config.App.Language,
+			BotToken:           config.Telegram.BotToken,
+			GroupID:            config.Telegram.GroupID,
+			Enabled:            config.Telegram.Enabled,
+			ReactionSupport:    config.Telegram.ReactionSupport,
+			AdminApproval:      config.Telegram.AdminApproval,
+			AdminNeedsApproval: config.Telegram.AdminNeedsApproval,
+			Language:           config.App.Language,
 		}
 		frontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
 		logger.Info("Using Telegram as primary chat frontend",
@@ -400,12 +403,13 @@ func promptForTelegramGroup() (int64, error) {
 
 	// Create a temporary Telegram frontend to list groups
 	telegramConfig := &telegram.Config{
-		BotToken:        config.Telegram.BotToken,
-		GroupID:         0, // Temporary - we'll set this after selection
-		Enabled:         true,
-		ReactionSupport: config.Telegram.ReactionSupport,
-		AdminApproval:   config.Telegram.AdminApproval,
-		Language:        config.App.Language,
+		BotToken:           config.Telegram.BotToken,
+		GroupID:            0, // Temporary - we'll set this after selection
+		Enabled:            true,
+		ReactionSupport:    config.Telegram.ReactionSupport,
+		AdminApproval:      config.Telegram.AdminApproval,
+		AdminNeedsApproval: config.Telegram.AdminNeedsApproval,
+		Language:           config.App.Language,
 	}
 
 	tempFrontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram-setup"))

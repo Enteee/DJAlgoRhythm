@@ -215,6 +215,8 @@ never gonna give you up rick astley
 | `WHATDJ_TELEGRAM_ENABLED` | Enable Telegram integration | `true` | ❌ |
 | `WHATDJ_TELEGRAM_BOT_TOKEN` | Telegram bot token | - | ✅ (if enabled) |
 | `WHATDJ_TELEGRAM_GROUP_ID` | Telegram group ID | - | ✅ (if enabled) |
+| `WHATDJ_ADMIN_APPROVAL` | Require admin approval for songs | `false` | ❌ |
+| `WHATDJ_ADMIN_NEEDS_APPROVAL` | Require approval even for admins (testing) | `false` | ❌ |
 | `WHATDJ_WHATSAPP_ENABLED` | Enable WhatsApp integration | `false` | ❌ |
 | `WHATDJ_WHATSAPP_GROUP_JID` | WhatsApp group JID | - | ✅ (if enabled) |
 | **Spotify** | | | |

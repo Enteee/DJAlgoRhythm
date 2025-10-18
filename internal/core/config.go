@@ -37,11 +37,12 @@ type WhatsAppConfig struct {
 }
 
 type TelegramConfig struct {
-	BotToken        string
-	GroupID         int64
-	Enabled         bool
-	ReactionSupport bool
-	AdminApproval   bool
+	BotToken           string
+	GroupID            int64
+	Enabled            bool
+	ReactionSupport    bool
+	AdminApproval      bool
+	AdminNeedsApproval bool
 }
 
 type SpotifyConfig struct {
