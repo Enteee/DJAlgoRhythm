@@ -28,6 +28,12 @@ func TestParser_ParseMessage(t *testing.T) {
 			urls:     []string{},
 		},
 		{
+			name:     "Spotify shortened link",
+			input:    "Check this out: https://spotify.link/ie2dPfjkzXb",
+			expected: core.MessageTypeSpotifyLink,
+			urls:     []string{"https://spotify.link/ie2dPfjkzXb"},
+		},
+		{
 			name:     "YouTube link",
 			input:    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 			expected: core.MessageTypeNonSpotifyLink,
@@ -276,6 +282,11 @@ func TestParser_isSpotifyURL(t *testing.T) {
 		{
 			name:     "Spotify track URI",
 			input:    "spotify:track:123",
+			expected: true,
+		},
+		{
+			name:     "Spotify shortened link",
+			input:    "https://spotify.link/ie2dPfjkzXb",
 			expected: true,
 		},
 		{

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -30,6 +31,14 @@ const (
 	MaxSearchResults = 10
 	// ReleaseDateYearLength is the expected length of a release date year string
 	ReleaseDateYearLength = 4
+	// URLResolveTimeout is the timeout for resolving shortened URLs
+	URLResolveTimeout = 10 * time.Second
+	// MaxRedirects is the maximum number of redirects to follow
+	MaxRedirects = 10
+	// ReadBufferSize is the buffer size for reading page content
+	ReadBufferSize = 8192
+	// SpotifyAppLinkDomain is the domain for Spotify app links
+	SpotifyAppLinkDomain = "spotify.app.link"
 )
 
 var (
@@ -260,6 +269,94 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]st
 	return allTrackIDs, nil
 }
 
+// resolveShortURL resolves shortened Spotify URLs to their final destination
+func (c *Client) resolveShortURL(shortURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), URLResolveTimeout)
+	defer cancel()
+
+	client := &http.Client{
+		Timeout: URLResolveTimeout,
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
+			if len(via) >= MaxRedirects {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "HEAD", shortURL, http.NoBody)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("User-Agent",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	finalURL := resp.Request.URL.String()
+
+	// Check if we got a Spotify track URL
+	u, err := url.Parse(finalURL)
+	if err != nil {
+		return "", err
+	}
+
+	hostname := strings.ToLower(u.Hostname())
+	if hostname == "open.spotify.com" && strings.Contains(u.Path, "/track/") {
+		return finalURL, nil
+	}
+
+	// If still a shortened URL, try fetching page content
+	if hostname == SpotifyAppLinkDomain {
+		return c.resolveWithPageContent(shortURL)
+	}
+
+	return "", fmt.Errorf("URL did not resolve to a Spotify track")
+}
+
+// resolveWithPageContent fetches page content to extract Spotify URL
+func (c *Client) resolveWithPageContent(shortURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), URLResolveTimeout)
+	defer cancel()
+
+	client := &http.Client{Timeout: URLResolveTimeout}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", shortURL, http.NoBody)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("User-Agent",
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// Read page content to extract Spotify URL
+	buf := make([]byte, ReadBufferSize)
+	n, _ := resp.Body.Read(buf)
+	content := string(buf[:n])
+
+	// Extract Spotify track URL using regex
+	spotifyURLRegex := regexp.MustCompile(`https://open\.spotify\.com/track/[a-zA-Z0-9]+`)
+	matches := spotifyURLRegex.FindStringSubmatch(content)
+
+	if len(matches) > 0 {
+		return matches[0], nil
+	}
+
+	return "", fmt.Errorf("could not find Spotify track URL in page content")
+}
+
 func (c *Client) ExtractTrackID(rawURL string) (string, error) {
 	rawURL = strings.TrimSpace(rawURL)
 
@@ -274,6 +371,17 @@ func (c *Client) ExtractTrackID(rawURL string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Handle shortened URLs by resolving them first
+	hostname := strings.ToLower(u.Hostname())
+	if hostname == "spotify.link" || hostname == SpotifyAppLinkDomain {
+		resolvedURL, err := c.resolveShortURL(rawURL)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve shortened URL: %w", err)
+		}
+		// Recursively extract from the resolved URL
+		return c.ExtractTrackID(resolvedURL)
 	}
 
 	pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")

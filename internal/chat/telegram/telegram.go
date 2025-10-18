@@ -25,6 +25,9 @@ const (
 	chatTypeGroup         = "group"
 	chatTypeSuperGroup    = "supergroup"
 	groupDiscoveryTimeout = 15 // seconds for group discovery
+	// Sleep durations for group discovery
+	botStopDelay       = 200 * time.Millisecond
+	discoveryFinalWait = 50 * time.Millisecond
 )
 
 // Config holds Telegram-specific configuration
@@ -942,7 +945,7 @@ func (f *Frontend) ListAvailableGroups(ctx context.Context) ([]GroupInfo, error)
 		cancelDiscover() // Stop the bot polling
 
 		// Give a brief moment for the bot to stop and any error messages to be discarded
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(botStopDelay)
 
 		// Restore stderr
 		log.SetOutput(originalOutput)
@@ -961,7 +964,7 @@ func (f *Frontend) ListAvailableGroups(ctx context.Context) ([]GroupInfo, error)
 		zap.Any("groups", groups))
 
 	// Add a small delay to let any remaining bot error messages print before our output
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(discoveryFinalWait)
 
 	return groups, nil
 }

@@ -160,9 +160,13 @@ WhatDj recognizes three types of messages:
 
 ```
 https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC
+https://spotify.link/ie2dPfjkzXb
+spotify:track:4uLU6hMCjMI75M1A2tKUQC
 ```
 
 → **Immediate addition** (if not duplicate)
+
+Supports both full Spotify URLs and shortened `spotify.link` URLs.
 
 #### 2. Music Platform Links
 
