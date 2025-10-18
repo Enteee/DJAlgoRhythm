@@ -41,6 +41,42 @@ Pre-commit hooks are automatically configured and include:
 - **trufflehog/ripsecrets** - Secret detection
 - **typos** - Spell checking (excludes SVG files)
 
+### Mandatory Code Quality Checks
+
+**CRITICAL**: After making ANY code changes, you MUST run `make check` before proceeding or considering the task complete. This command runs:
+
+1. **make fmt** - Format all Go code with `go fmt` and `gofmt -s`
+2. **make vet** - Run `go vet` to catch common Go mistakes
+3. **make lint** - Run `golangci-lint` for comprehensive linting
+4. **make test** - Run all tests with race detection
+5. **make build** - Ensure the code builds successfully
+
+**Never skip this step.** All changes must pass these checks. If any check fails, fix the issues before proceeding.
+
+## Go Development Best Practices
+
+### Code Quality Standards
+- **No magic numbers**: Use named constants for all numeric literals
+- **No unused parameters**: Rename unused parameters to `_` (underscore)
+- **Line length**: Keep lines under 140 characters, break long lines appropriately
+- **String constants**: Repeated strings (2+ occurrences) must be constants
+- **HTTP requests**: Use `http.NoBody` instead of `nil` for requests without body
+- **Error handling**: Always handle errors explicitly, never ignore them
+- **Context usage**: Pass context through function calls for cancellation/timeout
+
+### Makefile Usage
+The project includes a comprehensive Makefile with targets for:
+- `make build` - Build the binary
+- `make test` - Run tests with race detection
+- `make fmt` - Format code
+- `make vet` - Run go vet
+- `make lint` - Run golangci-lint
+- `make check` - **Run all quality checks (fmt, vet, lint, test, build)**
+- `make clean` - Clean build artifacts
+- `make run` - Build and run the application
+
+Use `make help` to see all available targets.
+
 ## Project Structure
 
 This is a fresh repository with minimal structure. The project is set up with:

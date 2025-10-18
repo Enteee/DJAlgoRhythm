@@ -82,7 +82,7 @@ benchmark: ## Run benchmarks
 fmt: ## Format code
 	@echo "Formatting code..."
 	go fmt ./...
-	gofmt -s -w .
+	find . -name "*.go" -not -path "./.devenv/*" -not -path "./vendor/*" -exec gofmt -s -w {} \;
 
 vet: ## Run go vet
 	@echo "Running go vet..."
@@ -96,7 +96,7 @@ lint: ## Run golangci-lint
 		echo "golangci-lint not found. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 	fi
 
-check: fmt vet lint test ## Run all code quality checks
+check: fmt vet lint test build ## Run all code quality checks and build
 
 # Security targets
 security: ## Run security checks
