@@ -51,8 +51,6 @@ const (
 	ReadBufferSize = 8192
 	// SpotifyAppLinkDomain is the domain for Spotify app links
 	SpotifyAppLinkDomain = "spotify.app.link"
-	// PlaylistCacheDuration is how long to cache playlist contents
-	PlaylistCacheDuration = 5 * time.Minute
 	// UnknownArtist is the default value when artist name is not available
 	UnknownArtist = "Unknown"
 	// PlaybackStartDelay is the delay to wait for playback to start
@@ -81,15 +79,13 @@ var (
 )
 
 type Client struct {
-	config             *core.SpotifyConfig
-	logger             *zap.Logger
-	client             *spotify.Client
-	normalizer         *fuzzy.Normalizer
-	auth               *spotifyauth.Authenticator
-	llm                core.LLMProvider // LLM provider for search query generation
-	targetPlaylist     string           // Playlist ID we're managing
-	playlistTrackCache map[string]bool  // Cache of track IDs in our playlist
-	cacheLastUpdated   time.Time        // When cache was last updated
+	config         *core.SpotifyConfig
+	logger         *zap.Logger
+	client         *spotify.Client
+	normalizer     *fuzzy.Normalizer
+	auth           *spotifyauth.Authenticator
+	llm            core.LLMProvider // LLM provider for search query generation
+	targetPlaylist string           // Playlist ID we're managing
 }
 
 type TokenData struct {
@@ -112,12 +108,11 @@ func NewClient(config *core.SpotifyConfig, logger *zap.Logger, llm core.LLMProvi
 	)
 
 	return &Client{
-		config:             config,
-		logger:             logger,
-		normalizer:         fuzzy.NewNormalizer(),
-		auth:               auth,
-		llm:                llm,
-		playlistTrackCache: make(map[string]bool),
+		config:     config,
+		logger:     logger,
+		normalizer: fuzzy.NewNormalizer(),
+		auth:       auth,
+		llm:        llm,
 	}
 }
 
@@ -290,8 +285,6 @@ func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackI
 			return fmt.Errorf("failed to add track to playlist: %w", err)
 		}
 
-		// Invalidate cache since we added a track
-		c.invalidatePlaylistCache()
 		c.logger.Info("Track added to playlist",
 			zap.String("trackID", trackID),
 			zap.String("playlistID", playlistID),
@@ -334,8 +327,6 @@ func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackI
 		return nil
 	}
 
-	// Invalidate cache since we added a track
-	c.invalidatePlaylistCache()
 	c.logger.Info("Track added to playlist with priority positioning",
 		zap.String("trackID", trackID),
 		zap.String("playlistID", playlistID),
@@ -385,19 +376,105 @@ func (c *Client) GetQueuePosition(ctx context.Context, trackID string) (int, err
 	return -1, nil
 }
 
+// GetPlaylistPosition calculates the position of a track relative to the currently playing track in the playlist
+// This is more reliable than GetQueuePosition for newly added tracks since playlist updates are immediate
+func (c *Client) GetPlaylistPosition(ctx context.Context, trackID string) (int, error) {
+	if c.client == nil {
+		return -1, fmt.Errorf("client not authenticated")
+	}
+
+	if c.targetPlaylist == "" {
+		return -1, fmt.Errorf("no target playlist set")
+	}
+
+	currentTrackID, err := c.getCurrentTrackID(ctx)
+	if err != nil {
+		// No track playing, fallback to queue-based position
+		return c.GetQueuePosition(ctx, trackID)
+	}
+
+	return c.calculatePlaylistPosition(ctx, currentTrackID, trackID)
+}
+
+// getCurrentTrackID gets the currently playing track ID, returns error if no track is playing
+func (c *Client) getCurrentTrackID(ctx context.Context) (string, error) {
+	currently, err := c.client.PlayerCurrentlyPlaying(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get currently playing: %w", err)
+	}
+
+	if currently == nil || currently.Item == nil || !currently.Playing {
+		return "", fmt.Errorf("no track currently playing")
+	}
+
+	return string(currently.Item.ID), nil
+}
+
+// calculatePlaylistPosition calculates the relative position between two tracks in the playlist
+func (c *Client) calculatePlaylistPosition(ctx context.Context, currentTrackID, newTrackID string) (int, error) {
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return -1, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	currentTrackPos, newTrackPos := c.findTrackPositions(playlistTracks, currentTrackID, newTrackID)
+
+	if currentTrackPos == -1 {
+		c.logger.Debug("Current track not found in playlist, falling back to queue position")
+		return c.GetQueuePosition(ctx, newTrackID)
+	}
+
+	if newTrackPos == -1 {
+		return -1, fmt.Errorf("track %s not found in playlist", newTrackID)
+	}
+
+	return c.computeRelativePosition(currentTrackPos, newTrackPos, newTrackID)
+}
+
+// findTrackPositions finds the positions of two tracks in the playlist
+func (c *Client) findTrackPositions(playlistTracks []string, currentTrackID, newTrackID string) (currentPos, newPos int) {
+	currentPos = -1
+	newPos = -1
+
+	for i, id := range playlistTracks {
+		if id == currentTrackID {
+			currentPos = i
+		}
+		if id == newTrackID {
+			newPos = i
+		}
+		// Stop early if we found both tracks
+		if currentPos >= 0 && newPos >= 0 {
+			break
+		}
+	}
+
+	return
+}
+
+// computeRelativePosition calculates the relative position between current and new track
+func (c *Client) computeRelativePosition(currentTrackPos, newTrackPos int, newTrackID string) (int, error) {
+	// If the new track is after the current track, subtract current position
+	if newTrackPos > currentTrackPos {
+		position := newTrackPos - currentTrackPos - 1 // -1 because current track is playing
+		c.logger.Debug("Calculated playlist position",
+			zap.String("trackID", newTrackID),
+			zap.Int("currentTrackPos", currentTrackPos),
+			zap.Int("newTrackPos", newTrackPos),
+			zap.Int("calculatedPosition", position))
+		return position, nil
+	}
+
+	// If the new track is before the current track, it will play after the playlist loops
+	// This is more complex to calculate accurately, so fall back to queue position
+	c.logger.Debug("New track is before current track in playlist, falling back to queue position")
+	return c.GetQueuePosition(context.Background(), newTrackID)
+}
+
 // SetTargetPlaylist sets the playlist ID that we're managing
 func (c *Client) SetTargetPlaylist(playlistID string) {
 	c.targetPlaylist = playlistID
-	// Clear cache when target playlist changes
-	c.playlistTrackCache = make(map[string]bool)
-	c.cacheLastUpdated = time.Time{}
 	c.logger.Info("Target playlist set", zap.String("playlistID", playlistID))
-}
-
-// invalidatePlaylistCache clears the playlist cache to force refresh
-func (c *Client) invalidatePlaylistCache() {
-	c.playlistTrackCache = make(map[string]bool)
-	c.cacheLastUpdated = time.Time{}
 }
 
 // EnsureTrackInQueue checks if a track is in the queue and adds it if not

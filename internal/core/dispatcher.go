@@ -996,10 +996,10 @@ func (d *Dispatcher) reactAddedWithMessage(
 		d.logger.Error("Failed to react with thumbs up", zap.Error(err))
 	}
 
-	// Try to get queue position for added track
+	// Try to get playlist position for added track (more reliable than queue position)
 	var replyText string
-	if queuePosition, err := d.spotify.GetQueuePosition(ctx, trackID); err == nil && queuePosition >= 0 {
-		// Track found in queue - use message with queue position
+	if playlistPosition, err := d.spotify.GetPlaylistPosition(ctx, trackID); err == nil && playlistPosition >= 0 {
+		// Track found in playlist - use message with queue position
 		var queueMessageKey string
 		switch messageKey {
 		case "success.track_added":
@@ -1013,15 +1013,15 @@ func (d *Dispatcher) reactAddedWithMessage(
 
 		if queueMessageKey != messageKey {
 			// Use queue position message with 1-based indexing for user display
-			replyText = d.localizer.T(queueMessageKey, track.Artist, track.Title, track.URL, queuePosition+1)
+			replyText = d.localizer.T(queueMessageKey, track.Artist, track.Title, track.URL, playlistPosition+1)
 		} else {
 			// Use original message format
 			replyText = d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
 		}
 	} else {
-		// Queue position not available or error occurred - use original message
+		// Playlist position not available or error occurred - use original message
 		if err != nil {
-			d.logger.Debug("Could not get queue position", zap.Error(err))
+			d.logger.Debug("Could not get playlist position", zap.Error(err))
 		}
 		replyText = d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
 	}
