@@ -1358,13 +1358,22 @@ func (f *Frontend) EditMessage(ctx context.Context, chatID, messageID, newText s
 		return fmt.Errorf("invalid message ID: %w", err)
 	}
 
-	// Edit the message to remove inline keyboard and update text
-	_, err = f.bot.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    chatIDInt,
-		MessageID: messageIDInt,
-		Text:      newText,
-		// No ReplyMarkup means removing the inline keyboard
-	})
+	if newText == "" {
+		// Only remove inline keyboard without changing text
+		_, err = f.bot.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
+			ChatID:    chatIDInt,
+			MessageID: messageIDInt,
+			// No ReplyMarkup means removing the inline keyboard
+		})
+	} else {
+		// Edit the message text and remove inline keyboard
+		_, err = f.bot.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatIDInt,
+			MessageID: messageIDInt,
+			Text:      newText,
+			// No ReplyMarkup means removing the inline keyboard
+		})
+	}
 
 	if err != nil {
 		return fmt.Errorf("failed to edit message: %w", err)
@@ -1373,7 +1382,8 @@ func (f *Frontend) EditMessage(ctx context.Context, chatID, messageID, newText s
 	f.logger.Debug("Edited message",
 		zap.String("chatID", chatID),
 		zap.String("messageID", messageID),
-		zap.String("newText", newText))
+		zap.String("newText", newText),
+		zap.Bool("onlyRemovedButtons", newText == ""))
 
 	return nil
 }

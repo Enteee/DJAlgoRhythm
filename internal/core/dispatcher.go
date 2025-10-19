@@ -1659,13 +1659,17 @@ func (d *Dispatcher) removeAutoPlayApprovalButtons(ctx context.Context, chatID, 
 	// For Telegram, we can edit the message to remove the inline keyboard
 	// For WhatsApp, this is a no-op since it doesn't support inline buttons
 
-	// Get the message content without buttons
-	expiredMessage := d.localizer.T("callback.autoplay_expired")
-
-	// Try to edit the message to remove buttons (Telegram-specific)
+	// Try to edit the message to remove buttons without changing the text (Telegram-specific)
 	// This will gracefully fail for WhatsApp and other platforms that don't support message editing
-	if err := d.editMessageToRemoveButtons(ctx, chatID, messageID, expiredMessage); err != nil {
+	if err := d.editMessageToRemoveButtons(ctx, chatID, messageID, ""); err != nil {
 		d.logger.Debug("Could not edit message to remove buttons (expected for WhatsApp)",
+			zap.String("messageID", messageID),
+			zap.Error(err))
+	}
+
+	// React with thumbs up to indicate auto-acceptance
+	if err := d.frontend.React(ctx, chatID, messageID, thumbsUpReaction); err != nil {
+		d.logger.Debug("Could not react to auto-play message (expected for WhatsApp)",
 			zap.String("messageID", messageID),
 			zap.Error(err))
 	}
