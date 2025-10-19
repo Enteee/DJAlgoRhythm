@@ -69,10 +69,8 @@ var berneseGermanMessages = map[string]string{
 
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playliste!\n\n" +
-		"🎵 Bitte wächsle zrügg zu dr richtige Playlist: %s\n\n" +
-		"💡 Klick uf de Link obe zum schnäu zrügg zu der Playliste z cho.\n\n" +
-		"🎵 Letschte gspilt Song: %s - %s\n🎵 Nöchschte Song zum abspile: %s - %s\n\n" +
-		"🔄 Du chasch ou d Buttons unde bruche zum automatisch wächsle mit Volume-Fade.",
+		"🔄 Bitte wächsle zrügg zu dr richtige Playliste: %s\n\n" +
+		"🎵 Nöchschte Song zum abspile: %s - %s\n\n",
 	"bot.shuffle_warning": "⚠️ Warnig: Shuffle isch igschalte!\n\n" +
 		"🔀 Bitte schalt Shuffle us für optimals Auto-DJing. " +
 		"Shuffle stört d Track-Reihefolg und s Queueing.",

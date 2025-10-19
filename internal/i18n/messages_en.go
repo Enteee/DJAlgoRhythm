@@ -69,10 +69,8 @@ var englishMessages = map[string]string{
 
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
-		"🎵 Please switch back to the correct playlist: %s\n\n" +
-		"💡 Click the link above to quickly return to the tracked playlist.\n\n" +
-		"🎵 Last played regular song: %s - %s\n🎵 Next song to play: %s - %s\n\n" +
-		"🔄 You can also use the buttons below to automatically switch with volume fade.",
+		"🔄 Please switch back to the correct playlist: %s\n\n" +
+		"🎵 Next song to play: %s - %s\n\n",
 	"bot.shuffle_warning": "⚠️ Warning: Shuffle is enabled!\n\n" +
 		"🔀 Please turn off shuffle for optimal auto-DJing. " +
 		"Shuffle interferes with track order and queueing.",

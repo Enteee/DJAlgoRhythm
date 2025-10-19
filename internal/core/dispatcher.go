@@ -2033,24 +2033,7 @@ func (d *Dispatcher) generateComplianceWarningMessage(compliance *PlaybackCompli
 
 	// Add appropriate warning based on specific issues
 	if !compliance.IsCorrectPlaylist {
-		// Get track information for playlist warning
-		lastArtist, lastTitle, nextArtist, nextTitle := d.getTrackInfoForWarning()
-
-		// Use available track info, with fallbacks for missing parts
-		if lastArtist == "" {
-			lastArtist = unknownArtist
-		}
-		if lastTitle == "" {
-			lastTitle = unknownTrack
-		}
-		if nextArtist == "" {
-			nextArtist = unknownArtist
-		}
-		if nextTitle == "" {
-			nextTitle = unknownTrack
-		}
-
-		parts = append(parts, d.localizer.T("bot.playlist_warning", playlistURL, lastArtist, lastTitle, nextArtist, nextTitle))
+		parts = append(parts, d.buildPlaylistWarningMessage(playlistURL))
 	}
 
 	if !compliance.IsCorrectShuffle {
@@ -2071,15 +2054,9 @@ func (d *Dispatcher) generateComplianceWarningMessage(compliance *PlaybackCompli
 	}
 
 	// Fallback (shouldn't happen)
-	lastArtist, lastTitle, nextArtist, nextTitle := d.getTrackInfoForWarning()
+	nextArtist, nextTitle := d.getNextTrackForWarning()
 
 	// Use available track info, with fallbacks for missing parts
-	if lastArtist == "" {
-		lastArtist = unknownArtist
-	}
-	if lastTitle == "" {
-		lastTitle = unknownTrack
-	}
 	if nextArtist == "" {
 		nextArtist = unknownArtist
 	}
@@ -2087,109 +2064,95 @@ func (d *Dispatcher) generateComplianceWarningMessage(compliance *PlaybackCompli
 		nextTitle = unknownTrack
 	}
 
-	return d.localizer.T("bot.playlist_warning", playlistURL, lastArtist, lastTitle, nextArtist, nextTitle)
+	return d.localizer.T("bot.playlist_warning", playlistURL, nextArtist, nextTitle)
 }
 
-// getTrackInfoForWarning returns track information for playlist warnings
-func (d *Dispatcher) getTrackInfoForWarning() (lastArtist, lastTitle, nextArtist, nextTitle string) {
+// buildPlaylistWarningMessage creates the playlist warning message
+func (d *Dispatcher) buildPlaylistWarningMessage(playlistURL string) string {
+	// Get next track information for playlist warning
+	nextArtist, nextTitle := d.getNextTrackForWarning()
+
+	// Use fallbacks for missing track info
+	if nextArtist == "" {
+		nextArtist = unknownArtist
+	}
+	if nextTitle == "" {
+		nextTitle = unknownTrack
+	}
+
+	return d.localizer.T("bot.playlist_warning", playlistURL, nextArtist, nextTitle)
+}
+
+// getNextTrackForWarning returns the next track that will be played after playlist switch
+func (d *Dispatcher) getNextTrackForWarning() (nextArtist, nextTitle string) {
 	d.queuePositionMutex.RLock()
 	lastTrackID := d.lastRegularTrackID
 	d.queuePositionMutex.RUnlock()
 
-	d.logger.Debug("Getting track info for playlist warning",
+	d.logger.Debug("Getting next track info for playlist warning",
 		zap.String("lastRegularTrackID", lastTrackID))
 
 	// Get track information
 	ctx, cancel := context.WithTimeout(context.Background(), trackInfoTimeoutSecs*time.Second)
 	defer cancel()
 
-	// If we don't have a lastRegularTrackID, try to get the most recent track from the playlist as fallback
-	if lastTrackID == "" {
-		d.logger.Debug("No lastRegularTrackID, trying playlist fallback")
-		playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
-		if err != nil {
-			d.logger.Debug("Failed to get playlist tracks for warning fallback", zap.Error(err))
-			return "", "", "", ""
-		}
-		if len(playlistTracks) == 0 {
-			d.logger.Debug("Playlist is empty, cannot provide track info for warning")
-			return "", "", "", ""
-		}
-		// Use the last track in the playlist as fallback
-		lastTrackID = playlistTracks[len(playlistTracks)-1]
-		d.logger.Debug("Using playlist fallback track for warning", zap.String("trackID", lastTrackID))
-	}
-
-	lastTrack, err := d.spotify.GetTrack(ctx, lastTrackID)
-	if err != nil {
-		d.logger.Warn("Failed to get last regular track info for warning message",
-			zap.String("trackID", lastTrackID),
-			zap.Error(err))
-		return "", "", "", ""
-	}
-
-	d.logger.Debug("Successfully got last track info",
-		zap.String("trackID", lastTrackID),
-		zap.String("artist", lastTrack.Artist),
-		zap.String("title", lastTrack.Title))
-
-	// Get all tracks in the playlist to find the next track
+	// Get playlist tracks
 	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
 	if err != nil {
-		d.logger.Debug("Failed to get playlist tracks for warning message", zap.Error(err))
-		// Still return last track info even if we can't get playlist
-		return lastTrack.Artist, lastTrack.Title, "", ""
+		d.logger.Debug("Failed to get playlist tracks for warning", zap.Error(err))
+		return "", ""
+	}
+	if len(playlistTracks) == 0 {
+		d.logger.Debug("Playlist is empty, cannot provide track info for warning")
+		return "", ""
 	}
 
-	// Find the position of the last regular track in the playlist
-	lastTrackPosition := -1
-	for i, trackID := range playlistTracks {
-		if trackID == lastTrackID {
-			lastTrackPosition = i
-			break
+	// Determine next track using same logic as switchToCorrectPlaylist
+	var nextTrackID string
+	var nextTrackReason string
+
+	if lastTrackID != "" {
+		// Find the position of the last regular track
+		lastTrackPosition := -1
+		for i, trackID := range playlistTracks {
+			if trackID == lastTrackID {
+				lastTrackPosition = i
+				break
+			}
+		}
+
+		// If we found the last track and there's a next track after it
+		if lastTrackPosition >= 0 && lastTrackPosition+1 < len(playlistTracks) {
+			nextTrackID = playlistTracks[lastTrackPosition+1]
+			nextTrackReason = "next track after lastRegularTrackID"
 		}
 	}
 
-	d.logger.Debug("Found last track position in playlist",
-		zap.String("lastTrackID", lastTrackID),
-		zap.Int("position", lastTrackPosition),
+	// Fallback: use endOfPlaylistThreshold position
+	if nextTrackID == "" {
+		endPosition := len(playlistTracks) - endOfPlaylistThreshold
+		if endPosition < 0 {
+			endPosition = 0 // If playlist is shorter than threshold, use first track
+		}
+		nextTrackID = playlistTracks[endPosition]
+		nextTrackReason = "endOfPlaylistThreshold position"
+	}
+
+	d.logger.Debug("Selected next track for warning",
+		zap.String("nextTrackID", nextTrackID),
+		zap.String("reason", nextTrackReason),
 		zap.Int("playlistLength", len(playlistTracks)))
 
-	// Find the next track after the last regular track
-	if lastTrackPosition >= 0 && lastTrackPosition+1 < len(playlistTracks) {
-		nextTrackID := playlistTracks[lastTrackPosition+1]
-		d.logger.Debug("Getting next track info",
-			zap.String("nextTrackID", nextTrackID),
-			zap.Int("lastTrackPosition", lastTrackPosition),
-			zap.Int("playlistLength", len(playlistTracks)))
-
-		nextTrack, err := d.spotify.GetTrack(ctx, nextTrackID)
-		if err != nil {
-			d.logger.Debug("Failed to get next track info for warning message",
-				zap.String("nextTrackID", nextTrackID),
-				zap.Error(err))
-			return lastTrack.Artist, lastTrack.Title, "", ""
-		}
-
-		d.logger.Debug("Successfully got next track info",
-			zap.String("nextTrackID", nextTrackID),
-			zap.String("nextArtist", nextTrack.Artist),
-			zap.String("nextTitle", nextTrack.Title))
-
-		return lastTrack.Artist, lastTrack.Title, nextTrack.Artist, nextTrack.Title
+	// Get next track info
+	nextTrack, err := d.spotify.GetTrack(ctx, nextTrackID)
+	if err != nil {
+		d.logger.Warn("Failed to get next track info for warning message",
+			zap.String("trackID", nextTrackID),
+			zap.Error(err))
+		return "", ""
 	}
 
-	if lastTrackPosition == -1 {
-		d.logger.Debug("Last track not found in playlist (maybe it was removed)",
-			zap.String("lastTrackID", lastTrackID),
-			zap.Int("playlistLength", len(playlistTracks)))
-	} else {
-		d.logger.Debug("No next track available (last track is at end of playlist)",
-			zap.Int("lastTrackPosition", lastTrackPosition),
-			zap.Int("playlistLength", len(playlistTracks)))
-	}
-
-	return lastTrack.Artist, lastTrack.Title, "", ""
+	return nextTrack.Artist, nextTrack.Title
 }
 
 // fadeVolumeOut gradually reduces volume to 0 over fade duration
@@ -2351,7 +2314,7 @@ func (d *Dispatcher) handlePlaylistSwitchDecision(approved bool) {
 		d.logger.Info("Admin approved playlist switch, initiating switch")
 
 		// Get track info for success message (before switch, so we can show what will be played)
-		_, _, nextArtist, nextTitle := d.getTrackInfoForWarning()
+		nextArtist, nextTitle := d.getNextTrackForWarning()
 		var successMsg string
 		if nextArtist != "" && nextTitle != "" {
 			successMsg = d.localizer.T("callback.playlist_switched", nextArtist, nextTitle)
