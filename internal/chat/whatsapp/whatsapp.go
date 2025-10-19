@@ -509,3 +509,24 @@ func (f *Frontend) EditMessage(_ context.Context, _, _, _ string) error {
 	f.logger.Debug("EditMessage called on WhatsApp frontend (not supported, gracefully ignored)")
 	return nil
 }
+
+// SendPlaylistSwitchApproval sends a playlist switch warning message
+// WhatsApp doesn't support inline buttons like Telegram, so this falls back to regular message
+func (f *Frontend) SendPlaylistSwitchApproval(ctx context.Context, chatID, message string) (string, error) {
+	if !f.config.Enabled {
+		return "", fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// WhatsApp doesn't support inline buttons, fallback to regular message
+	f.logger.Debug("SendPlaylistSwitchApproval called on WhatsApp frontend (falling back to regular message)")
+	return f.SendText(ctx, chatID, "", message)
+}
+
+// SetPlaylistSwitchDecisionHandler sets the handler for playlist switch decisions
+// This is a stub implementation for WhatsApp since it doesn't support inline buttons
+func (f *Frontend) SetPlaylistSwitchDecisionHandler(_ func(approved bool)) {
+	// WhatsApp doesn't support inline button callbacks like Telegram
+	// This would need to be implemented through message parsing or reactions
+	// For now, this is just a stub to satisfy the interface
+	f.logger.Debug("SetPlaylistSwitchDecisionHandler called on WhatsApp frontend (stub implementation)")
+}

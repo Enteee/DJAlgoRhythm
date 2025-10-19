@@ -52,8 +52,10 @@ var berneseGermanMessages = map[string]string{
 	"callback.prompt_expired": "Die Afrag isch abgloffe.",
 
 	// Button texts
-	"button.confirm":  "👍 Ja, das isch's",
-	"button.not_this": "👎 Nö, nid das",
+	"button.confirm":         "👍 Ja, das isch's",
+	"button.not_this":        "👎 Nö, nid das",
+	"button.switch_playlist": "🔄 Zur Playlist wächsle",
+	"button.stay_current":    "❌ Bliibe wo mer si",
 
 	// Bot status messages
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit för öii Musigwünsch!\n\n📀 Playlist: %s",
@@ -66,9 +68,11 @@ var berneseGermanMessages = map[string]string{
 	"bot.autoplay_replacement_failed": "❌ Ha kei Ersatz-Auto-Play-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
 
 	// Playlist monitoring messages
-	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playlist!\n\n" +
+	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playliste!\n\n" +
 		"🎵 Bitte wächsle zrügg zu dr richtige Playlist: %s\n\n" +
-		"💡 Klick uf de Link obe zum schnäu zrügg zu der Playliste z cho.",
+		"💡 Klick uf de Link obe zum schnäu zrügg zu der Playliste z cho.\n\n" +
+		"🎵 Letschte gspilt Song: %s - %s\n🎵 Nöchschte Song zum abspile: %s - %s\n\n" +
+		"🔄 Du chasch ou d Buttons unde bruche zum automatisch wächsle mit Volume-Fade.",
 	"bot.shuffle_warning": "⚠️ Warnig: Shuffle isch igschalte!\n\n" +
 		"🔀 Bitte schalt Shuffle us für optimals Auto-DJing. " +
 		"Shuffle stört d Track-Reihefolg und s Queueing.",
@@ -78,9 +82,9 @@ var berneseGermanMessages = map[string]string{
 	"bot.playback_compliance_warning": "⚠️ Warnig: Playback-Iistellige müesse agpasst werde!\n\n" +
 		"🎵 Ziel-Playlist: %s\n\n" +
 		"Bitte prüef dini Spotify-Iistellige:\n" +
-		"• Wächsle zu dr richtige Playlist\n" +
+		"• Wächsle zu dr richtige Playliste\n" +
 		"• Schalt Shuffle us (🔀)\n" +
-		"• Stell Repeat uf us oder Playlist (🔁)\n\n" +
+		"• Stell Repeat uf us oder Playliste (🔁)\n\n" +
 		"💡 Die Iistellige sorged für optimals Auto-DJing.",
 
 	// Auto-play approval messages
@@ -88,5 +92,7 @@ var berneseGermanMessages = map[string]string{
 	"button.autoplay_deny":               "❌ Ou nei",
 	"callback.autoplay_approved":         "✅ Auto-Play-Track isch guetgeheisse worde",
 	"callback.autoplay_denied":           "❌ Auto-Play-Track isch abglehnt worde",
+	"callback.playlist_switched":         "🔄 Zrügg zur Playlist gwächslet und spielt jetzt: %s - %s",
+	"callback.playlist_stay":             "❌ Bliibe bi dr aktuälle Playliste",
 	"bot.autoplay_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
 }

@@ -56,6 +56,9 @@ type Frontend struct {
 	// Auto-play decision handling
 	autoPlayDecisionHandler func(trackID string, approved bool)
 
+	// Playlist switch decision handling
+	playlistSwitchDecisionHandler func(approved bool)
+
 	// Approval tracking
 	approvalMutex    sync.RWMutex
 	pendingApprovals map[string]*approvalContext
@@ -137,6 +140,8 @@ func (f *Frontend) Start(ctx context.Context) error {
 		bot.WithCallbackQueryDataHandler("admin_deny_", bot.MatchTypePrefix, f.handleAdminDenyCallback),
 		bot.WithCallbackQueryDataHandler("autoplay_approve_", bot.MatchTypePrefix, f.handleAutoPlayApproveCallback),
 		bot.WithCallbackQueryDataHandler("autoplay_deny_", bot.MatchTypePrefix, f.handleAutoPlayDenyCallback),
+		bot.WithCallbackQueryDataHandler("playlist_switch_approve", bot.MatchTypeExact, f.handlePlaylistSwitchApproveCallback),
+		bot.WithCallbackQueryDataHandler("playlist_switch_deny", bot.MatchTypeExact, f.handlePlaylistSwitchDenyCallback),
 	}
 
 	b, err := bot.New(f.config.BotToken, opts...)
@@ -906,6 +911,61 @@ func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, updat
 		zap.String("userID", strconv.FormatInt(update.CallbackQuery.From.ID, 10)))
 }
 
+// handlePlaylistSwitchApproveCallback handles playlist switch approval
+func (f *Frontend) handlePlaylistSwitchApproveCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
+	f.handlePlaylistSwitchCallback(ctx, b, update, true)
+}
+
+// handlePlaylistSwitchDenyCallback handles playlist switch denial
+func (f *Frontend) handlePlaylistSwitchDenyCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
+	f.handlePlaylistSwitchCallback(ctx, b, update, false)
+}
+
+// handlePlaylistSwitchCallback handles both playlist switch approve and deny callbacks
+func (f *Frontend) handlePlaylistSwitchCallback(ctx context.Context, b *bot.Bot, update *models.Update, approved bool) {
+	if update.CallbackQuery == nil {
+		return
+	}
+
+	// Note: We don't check admin status here because playlist switch messages are only sent to admins
+	// and they might be responding from a DM where we can't verify group admin status
+
+	// Answer the callback query immediately
+	var responseText string
+	if approved {
+		responseText = f.localizer.T("callback.playlist_switched", "...", "...")
+	} else {
+		responseText = f.localizer.T("callback.playlist_stay")
+	}
+
+	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: update.CallbackQuery.ID,
+		Text:            responseText,
+	}); err != nil {
+		f.logger.Debug("Failed to answer callback query", zap.Error(err))
+	}
+
+	// Remove the inline keyboard by editing the message
+	if _, err := b.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
+		ChatID:    update.CallbackQuery.Message.Message.Chat.ID,
+		MessageID: update.CallbackQuery.Message.Message.ID,
+		ReplyMarkup: &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{},
+		},
+	}); err != nil {
+		f.logger.Debug("Failed to remove buttons from playlist switch message", zap.Error(err))
+	}
+
+	// Call the decision handler
+	if f.playlistSwitchDecisionHandler != nil {
+		f.playlistSwitchDecisionHandler(approved)
+	}
+
+	f.logger.Info("Playlist switch decision processed",
+		zap.Bool("approved", approved),
+		zap.String("userID", strconv.FormatInt(update.CallbackQuery.From.ID, 10)))
+}
+
 func (f *Frontend) extractAutoPlayTrackID(callbackData string, approved bool) string {
 	if approved && strings.HasPrefix(callbackData, "autoplay_approve_") {
 		return strings.TrimPrefix(callbackData, "autoplay_approve_")
@@ -1344,6 +1404,46 @@ func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, trackID, me
 // SetAutoPlayDecisionHandler sets the handler for auto-play approval/denial decisions
 func (f *Frontend) SetAutoPlayDecisionHandler(handler func(trackID string, approved bool)) {
 	f.autoPlayDecisionHandler = handler
+}
+
+// SendPlaylistSwitchApproval sends a playlist switch warning with switch/stay buttons
+func (f *Frontend) SendPlaylistSwitchApproval(ctx context.Context, chatID, message string) (string, error) {
+	groupID, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	keyboard := &models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{
+					Text:         f.localizer.T("button.switch_playlist"),
+					CallbackData: "playlist_switch_approve",
+				},
+				{
+					Text:         f.localizer.T("button.stay_current"),
+					CallbackData: "playlist_switch_deny",
+				},
+			},
+		},
+	}
+
+	resp, err := f.bot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:      groupID,
+		Text:        message,
+		ReplyMarkup: keyboard,
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to send playlist switch approval: %w", err)
+	}
+
+	return strconv.Itoa(resp.ID), nil
+}
+
+// SetPlaylistSwitchDecisionHandler sets the handler for playlist switch decisions
+func (f *Frontend) SetPlaylistSwitchDecisionHandler(handler func(approved bool)) {
+	f.playlistSwitchDecisionHandler = handler
 }
 
 // EditMessage edits an existing message by ID

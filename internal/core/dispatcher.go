@@ -16,6 +16,24 @@ import (
 const (
 	thumbsUpReaction   = chat.ReactionThumbsUp
 	thumbsDownReaction = chat.ReactionThumbsDown
+
+	// EndOfPlaylistThreshold is the number of tracks from the end to consider "near end"
+	// This should match the value in internal/spotify/client.go
+	endOfPlaylistThreshold = 3
+
+	// Track info retrieval timeout
+	trackInfoTimeoutSecs = 10
+	// Timeout for initialization track update
+	initializationTimeoutSecs = 5
+
+	// Volume fade settings
+	fadeStepDurationMs   = 100 // 100ms per step
+	fadeSteps            = 20  // 20 steps = 2 seconds total
+	playbackStartDelayMs = 500 // Delay for playback to start
+
+	// Track info fallback constants
+	unknownArtist = "Unknown"
+	unknownTrack  = "Track"
 )
 
 // autoPlayApprovalContext tracks pending auto-play approval messages with timeout information
@@ -41,8 +59,9 @@ type Dispatcher struct {
 	contextMutex    sync.RWMutex
 
 	// Playlist monitoring
-	lastPlaylistWarning  time.Time
-	playlistWarningMutex sync.RWMutex
+	hasUnconfirmedWarning   bool
+	playlistWarningMessages map[string]string // messageID -> adminUserID for deletion
+	playlistWarningMutex    sync.RWMutex
 
 	// Auto-play approval tracking
 	pendingAutoPlayTracks    map[string]string                   // trackID -> track name for pending approvals
@@ -78,6 +97,7 @@ func NewDispatcher(
 		pendingAutoPlayTracks:   make(map[string]string),
 		pendingApprovalMessages: make(map[string]*autoPlayApprovalContext),
 		priorityTracks:          make(map[string]bool),
+		playlistWarningMessages: make(map[string]string),
 	}
 
 	return d
@@ -105,6 +125,9 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 	// Set up auto-play decision handler
 	d.frontend.SetAutoPlayDecisionHandler(d.handleAutoPlayDecision)
 
+	// Set up playlist switch decision handler
+	d.frontend.SetPlaylistSwitchDecisionHandler(d.handlePlaylistSwitchDecision)
+
 	// Send startup message to the group
 	d.sendStartupMessage(ctx)
 
@@ -113,6 +136,13 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 
 	// Start playlist monitoring
 	go d.runPlaylistMonitoring(ctx)
+
+	// Initialize lastRegularTrackID with currently playing track if available
+	go func() {
+		initCtx, initCancel := context.WithTimeout(context.Background(), initializationTimeoutSecs*time.Second)
+		defer initCancel()
+		d.updateLastRegularTrack(initCtx)
+	}()
 
 	// Begin listening for messages
 	return d.frontend.Listen(ctx, d.handleMessage)
@@ -1324,9 +1354,8 @@ func (d *Dispatcher) addApprovalReactions(ctx context.Context, chatID, msgID str
 }
 
 const (
-	autoPlayCheckInterval   = 30 * time.Second
-	playlistCheckInterval   = 15 * time.Second // Check playlist more frequently
-	playlistWarningDebounce = 5 * time.Minute  // Wait 5 minutes between warnings
+	autoPlayCheckInterval = 30 * time.Second
+	playlistCheckInterval = 30 * time.Second // Check playlist every 30 seconds
 )
 
 // runAutoPlayPrevention monitors for playlist end and adds tracks to prevent auto-play
@@ -1349,6 +1378,8 @@ func (d *Dispatcher) runAutoPlayPrevention(ctx context.Context) {
 
 // checkAndPreventAutoPlay checks if we're near the end of the playlist and adds a track if needed
 func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
+	d.logger.Debug("checkAndPreventAutoPlay called")
+
 	// Check if auto-play prevention is already active
 	d.autoPlayMutex.Lock()
 	if d.autoPlayActive {
@@ -1360,12 +1391,15 @@ func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
 	d.autoPlayMutex.Unlock()
 
 	// Check if we're near the end of the playlist
+	d.logger.Debug("Checking if near playlist end")
 	nearEnd, err := d.spotify.IsNearPlaylistEnd(ctx)
 	if err != nil {
-		d.logger.Debug("Could not check playlist end status", zap.Error(err))
+		d.logger.Warn("Could not check playlist end status", zap.Error(err))
 		d.resetAutoPlayFlag()
 		return
 	}
+
+	d.logger.Debug("Playlist end check result", zap.Bool("nearEnd", nearEnd))
 
 	if !nearEnd {
 		// Not near the end, reset flag and return
@@ -1717,8 +1751,12 @@ func (d *Dispatcher) updateLastRegularTrack(ctx context.Context) {
 	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
 	if err != nil {
 		// No track playing or error getting track, keep the last known regular track
+		d.logger.Debug("No current track or error getting current track", zap.Error(err))
 		return
 	}
+
+	d.logger.Debug("updateLastRegularTrack called",
+		zap.String("currentTrackID", currentTrackID))
 
 	d.queuePositionMutex.Lock()
 	defer d.queuePositionMutex.Unlock()
@@ -1731,7 +1769,47 @@ func (d *Dispatcher) updateLastRegularTrack(ctx context.Context) {
 		return
 	}
 
-	// This is a regular track, update the last regular track ID
+	// Check if the currently playing track is in our target playlist
+	// This now runs every 30 seconds to reduce API call frequency
+	d.logger.Debug("Checking if current track is in target playlist",
+		zap.String("currentTrackID", currentTrackID),
+		zap.String("playlistID", d.config.Spotify.PlaylistID))
+
+	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	if err != nil {
+		d.logger.Warn("Failed to get playlist tracks for regular track validation",
+			zap.String("currentTrackID", currentTrackID),
+			zap.String("playlistID", d.config.Spotify.PlaylistID),
+			zap.Error(err))
+		return
+	}
+
+	d.logger.Debug("Retrieved playlist tracks for validation",
+		zap.String("playlistID", d.config.Spotify.PlaylistID),
+		zap.Int("trackCount", len(playlistTracks)))
+
+	// Check if current track is in the playlist
+	trackInPlaylist := false
+	for i, trackID := range playlistTracks {
+		if trackID == currentTrackID {
+			trackInPlaylist = true
+			d.logger.Debug("Found current track in playlist",
+				zap.String("currentTrackID", currentTrackID),
+				zap.Int("position", i))
+			break
+		}
+	}
+
+	if !trackInPlaylist {
+		// Currently playing track is not in our target playlist
+		d.logger.Warn("Currently playing track is not in target playlist - not updating lastRegularTrackID",
+			zap.String("currentTrackID", currentTrackID),
+			zap.String("playlistID", d.config.Spotify.PlaylistID),
+			zap.Int("playlistTrackCount", len(playlistTracks)))
+		return
+	}
+
+	// This is a regular track in our playlist, update the last regular track ID
 	if d.lastRegularTrackID != currentTrackID {
 		d.logger.Debug("Updating last regular track",
 			zap.String("previousRegularTrackID", d.lastRegularTrackID),
@@ -1794,20 +1872,44 @@ func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
 	}
 
 	if compliance.IsOptimalForAutoDJ() {
-		// Everything is fine
+		// Everything is fine - clear any unconfirmed warning flag and delete warning messages
+		d.playlistWarningMutex.Lock()
+		if d.hasUnconfirmedWarning {
+			d.hasUnconfirmedWarning = false
+
+			// Delete any existing warning messages since issues are resolved
+			messagesToDelete := make(map[string]string)
+			for messageID, adminUserID := range d.playlistWarningMessages {
+				messagesToDelete[messageID] = adminUserID
+			}
+			d.playlistWarningMessages = make(map[string]string)
+
+			d.logger.Debug("Compliance issues resolved, cleared unconfirmed warning flag and deleting warning messages")
+
+			// Delete messages outside the lock to avoid blocking
+			go func() {
+				for messageID, adminUserID := range messagesToDelete {
+					if deleteErr := d.frontend.DeleteMessage(ctx, adminUserID, messageID); deleteErr != nil {
+						d.logger.Debug("Failed to delete resolved playlist warning message",
+							zap.String("messageID", messageID),
+							zap.String("adminUserID", adminUserID),
+							zap.Error(deleteErr))
+					}
+				}
+			}()
+		}
+		d.playlistWarningMutex.Unlock()
 		return
 	}
 
-	// Not playing from correct playlist - check if we should send a warning
+	// Not playing from correct playlist - check if there's already an unconfirmed warning
 	d.playlistWarningMutex.RLock()
-	timeSinceLastWarning := time.Since(d.lastPlaylistWarning)
+	hasUnconfirmed := d.hasUnconfirmedWarning
 	d.playlistWarningMutex.RUnlock()
 
-	if timeSinceLastWarning < playlistWarningDebounce {
-		// Too soon to send another warning
-		d.logger.Debug("Playback compliance issues detected but warning debounced",
-			zap.Duration("timeSinceLastWarning", timeSinceLastWarning),
-			zap.Duration("debounceThreshold", playlistWarningDebounce),
+	if hasUnconfirmed {
+		// Already have an unconfirmed warning, don't send another
+		d.logger.Debug("Playback compliance issues detected but unconfirmed warning already exists",
 			zap.Strings("issues", compliance.Issues))
 		return
 	}
@@ -1837,8 +1939,28 @@ func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
 	// Generate Spotify playlist URL for easy recovery
 	playlistURL := fmt.Sprintf("https://open.spotify.com/playlist/%s", d.config.Spotify.PlaylistID)
 
-	// Generate detailed warning message based on compliance issues
-	message := d.generateComplianceWarningMessage(compliance, playlistURL)
+	// Generate detailed warning message for admins
+	detailedMessage := d.generateComplianceWarningMessage(compliance, playlistURL)
+
+	// Check if this is a playlist issue - if so, send message with buttons to admins
+	if !compliance.IsCorrectPlaylist {
+		// Send detailed message with playlist switch buttons to admins
+		d.sendPlaylistWarningWithButtonsToAdmins(ctx, adminUserIDs, detailedMessage)
+	} else {
+		// For other compliance issues (shuffle/repeat), send regular message to admins
+		d.sendComplianceWarningToAdmins(ctx, adminUserIDs, detailedMessage)
+	}
+
+	// Update last warning time
+	d.playlistWarningMutex.Lock()
+	d.hasUnconfirmedWarning = true
+	d.playlistWarningMutex.Unlock()
+
+	d.logger.Info("Sent playlist compliance warning message")
+}
+
+// sendComplianceWarningToAdmins sends warning messages to all admin users via DM
+func (d *Dispatcher) sendComplianceWarningToAdmins(ctx context.Context, adminUserIDs []string, message string) {
 	successCount := 0
 	var errors []string
 
@@ -1858,15 +1980,51 @@ func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
 	if successCount == 0 {
 		d.logger.Error("Failed to send playlist warning to any admins",
 			zap.Strings("errors", errors))
-		return
+	}
+}
+
+// sendPlaylistWarningWithButtonsToAdmins sends warning messages with interactive buttons to admin users via DM
+func (d *Dispatcher) sendPlaylistWarningWithButtonsToAdmins(ctx context.Context, adminUserIDs []string, message string) {
+	successCount := 0
+	var errors []string
+
+	// Store message IDs as they are successfully sent
+	d.playlistWarningMutex.Lock()
+	defer d.playlistWarningMutex.Unlock()
+
+	for _, adminUserID := range adminUserIDs {
+		// Try to send with playlist switch buttons first
+		if messageID, err := d.frontend.SendPlaylistSwitchApproval(ctx, adminUserID, message); err != nil {
+			d.logger.Warn("Failed to send playlist warning with buttons to admin, falling back to regular message",
+				zap.String("adminUserID", adminUserID),
+				zap.Error(err))
+
+			// Fallback to regular message using SendText (which returns message ID)
+			if fallbackMessageID, fallbackErr := d.frontend.SendText(ctx, adminUserID, "", message); fallbackErr != nil {
+				d.logger.Warn("Failed to send fallback playlist warning to admin",
+					zap.String("adminUserID", adminUserID),
+					zap.Error(fallbackErr))
+				errors = append(errors, fallbackErr.Error())
+			} else {
+				successCount++
+				d.playlistWarningMessages[fallbackMessageID] = adminUserID
+				d.logger.Debug("Sent fallback playlist warning to admin",
+					zap.String("adminUserID", adminUserID),
+					zap.String("messageID", fallbackMessageID))
+			}
+		} else {
+			successCount++
+			d.playlistWarningMessages[messageID] = adminUserID
+			d.logger.Debug("Sent playlist warning with buttons to admin",
+				zap.String("adminUserID", adminUserID),
+				zap.String("messageID", messageID))
+		}
 	}
 
-	// Update last warning time
-	d.playlistWarningMutex.Lock()
-	d.lastPlaylistWarning = time.Now()
-	d.playlistWarningMutex.Unlock()
-
-	d.logger.Info("Sent playlist compliance warning message")
+	if successCount == 0 {
+		d.logger.Error("Failed to send playlist warning to any admins",
+			zap.Strings("errors", errors))
+	}
 }
 
 // generateComplianceWarningMessage creates a detailed warning message based on compliance issues
@@ -1875,7 +2033,24 @@ func (d *Dispatcher) generateComplianceWarningMessage(compliance *PlaybackCompli
 
 	// Add appropriate warning based on specific issues
 	if !compliance.IsCorrectPlaylist {
-		parts = append(parts, d.localizer.T("bot.playlist_warning", playlistURL))
+		// Get track information for playlist warning
+		lastArtist, lastTitle, nextArtist, nextTitle := d.getTrackInfoForWarning()
+
+		// Use available track info, with fallbacks for missing parts
+		if lastArtist == "" {
+			lastArtist = unknownArtist
+		}
+		if lastTitle == "" {
+			lastTitle = unknownTrack
+		}
+		if nextArtist == "" {
+			nextArtist = unknownArtist
+		}
+		if nextTitle == "" {
+			nextTitle = unknownTrack
+		}
+
+		parts = append(parts, d.localizer.T("bot.playlist_warning", playlistURL, lastArtist, lastTitle, nextArtist, nextTitle))
 	}
 
 	if !compliance.IsCorrectShuffle {
@@ -1896,5 +2071,335 @@ func (d *Dispatcher) generateComplianceWarningMessage(compliance *PlaybackCompli
 	}
 
 	// Fallback (shouldn't happen)
-	return d.localizer.T("bot.playlist_warning", playlistURL)
+	lastArtist, lastTitle, nextArtist, nextTitle := d.getTrackInfoForWarning()
+
+	// Use available track info, with fallbacks for missing parts
+	if lastArtist == "" {
+		lastArtist = unknownArtist
+	}
+	if lastTitle == "" {
+		lastTitle = unknownTrack
+	}
+	if nextArtist == "" {
+		nextArtist = unknownArtist
+	}
+	if nextTitle == "" {
+		nextTitle = unknownTrack
+	}
+
+	return d.localizer.T("bot.playlist_warning", playlistURL, lastArtist, lastTitle, nextArtist, nextTitle)
+}
+
+// getTrackInfoForWarning returns track information for playlist warnings
+func (d *Dispatcher) getTrackInfoForWarning() (lastArtist, lastTitle, nextArtist, nextTitle string) {
+	d.queuePositionMutex.RLock()
+	lastTrackID := d.lastRegularTrackID
+	d.queuePositionMutex.RUnlock()
+
+	d.logger.Debug("Getting track info for playlist warning",
+		zap.String("lastRegularTrackID", lastTrackID))
+
+	// Get track information
+	ctx, cancel := context.WithTimeout(context.Background(), trackInfoTimeoutSecs*time.Second)
+	defer cancel()
+
+	// If we don't have a lastRegularTrackID, try to get the most recent track from the playlist as fallback
+	if lastTrackID == "" {
+		d.logger.Debug("No lastRegularTrackID, trying playlist fallback")
+		playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+		if err != nil {
+			d.logger.Debug("Failed to get playlist tracks for warning fallback", zap.Error(err))
+			return "", "", "", ""
+		}
+		if len(playlistTracks) == 0 {
+			d.logger.Debug("Playlist is empty, cannot provide track info for warning")
+			return "", "", "", ""
+		}
+		// Use the last track in the playlist as fallback
+		lastTrackID = playlistTracks[len(playlistTracks)-1]
+		d.logger.Debug("Using playlist fallback track for warning", zap.String("trackID", lastTrackID))
+	}
+
+	lastTrack, err := d.spotify.GetTrack(ctx, lastTrackID)
+	if err != nil {
+		d.logger.Warn("Failed to get last regular track info for warning message",
+			zap.String("trackID", lastTrackID),
+			zap.Error(err))
+		return "", "", "", ""
+	}
+
+	d.logger.Debug("Successfully got last track info",
+		zap.String("trackID", lastTrackID),
+		zap.String("artist", lastTrack.Artist),
+		zap.String("title", lastTrack.Title))
+
+	// Get all tracks in the playlist to find the next track
+	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	if err != nil {
+		d.logger.Debug("Failed to get playlist tracks for warning message", zap.Error(err))
+		// Still return last track info even if we can't get playlist
+		return lastTrack.Artist, lastTrack.Title, "", ""
+	}
+
+	// Find the position of the last regular track in the playlist
+	lastTrackPosition := -1
+	for i, trackID := range playlistTracks {
+		if trackID == lastTrackID {
+			lastTrackPosition = i
+			break
+		}
+	}
+
+	d.logger.Debug("Found last track position in playlist",
+		zap.String("lastTrackID", lastTrackID),
+		zap.Int("position", lastTrackPosition),
+		zap.Int("playlistLength", len(playlistTracks)))
+
+	// Find the next track after the last regular track
+	if lastTrackPosition >= 0 && lastTrackPosition+1 < len(playlistTracks) {
+		nextTrackID := playlistTracks[lastTrackPosition+1]
+		d.logger.Debug("Getting next track info",
+			zap.String("nextTrackID", nextTrackID),
+			zap.Int("lastTrackPosition", lastTrackPosition),
+			zap.Int("playlistLength", len(playlistTracks)))
+
+		nextTrack, err := d.spotify.GetTrack(ctx, nextTrackID)
+		if err != nil {
+			d.logger.Debug("Failed to get next track info for warning message",
+				zap.String("nextTrackID", nextTrackID),
+				zap.Error(err))
+			return lastTrack.Artist, lastTrack.Title, "", ""
+		}
+
+		d.logger.Debug("Successfully got next track info",
+			zap.String("nextTrackID", nextTrackID),
+			zap.String("nextArtist", nextTrack.Artist),
+			zap.String("nextTitle", nextTrack.Title))
+
+		return lastTrack.Artist, lastTrack.Title, nextTrack.Artist, nextTrack.Title
+	}
+
+	if lastTrackPosition == -1 {
+		d.logger.Debug("Last track not found in playlist (maybe it was removed)",
+			zap.String("lastTrackID", lastTrackID),
+			zap.Int("playlistLength", len(playlistTracks)))
+	} else {
+		d.logger.Debug("No next track available (last track is at end of playlist)",
+			zap.Int("lastTrackPosition", lastTrackPosition),
+			zap.Int("playlistLength", len(playlistTracks)))
+	}
+
+	return lastTrack.Artist, lastTrack.Title, "", ""
+}
+
+// fadeVolumeOut gradually reduces volume to 0 over fade duration
+func (d *Dispatcher) fadeVolumeOut(ctx context.Context, originalVolume int) {
+	for step := fadeSteps; step >= 0; step-- {
+		targetVolume := (originalVolume * step) / fadeSteps
+		if err := d.spotify.SetVolume(ctx, targetVolume); err != nil {
+			d.logger.Warn("Failed to set volume during fade out",
+				zap.Int("targetVolume", targetVolume),
+				zap.Error(err))
+			// Continue despite errors
+		}
+
+		if step > 0 {
+			time.Sleep(time.Duration(fadeStepDurationMs) * time.Millisecond)
+		}
+	}
+}
+
+// fadeVolumeIn gradually increases volume from 0 to target over fade duration
+func (d *Dispatcher) fadeVolumeIn(ctx context.Context, targetVolume int) {
+	for step := 0; step <= fadeSteps; step++ {
+		currentVolume := (targetVolume * step) / fadeSteps
+		if err := d.spotify.SetVolume(ctx, currentVolume); err != nil {
+			d.logger.Warn("Failed to set volume during fade in",
+				zap.Int("currentVolume", currentVolume),
+				zap.Error(err))
+			// Continue despite errors
+		}
+
+		if step < fadeSteps {
+			time.Sleep(time.Duration(fadeStepDurationMs) * time.Millisecond)
+		}
+	}
+}
+
+// switchToCorrectPlaylist performs the complete playlist switch with fade
+func (d *Dispatcher) switchToCorrectPlaylist(ctx context.Context) error {
+	// Get the last regular track (if any)
+	d.queuePositionMutex.RLock()
+	lastTrackID := d.lastRegularTrackID
+	d.queuePositionMutex.RUnlock()
+
+	// Get current volume
+	originalVolume, err := d.spotify.GetCurrentVolume(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to get current volume, using default", zap.Error(err))
+		originalVolume = 50 // Default volume
+	}
+
+	d.logger.Info("Starting playlist switch with fade",
+		zap.Int("originalVolume", originalVolume),
+		zap.String("lastRegularTrack", lastTrackID))
+
+	// Fade volume out
+	d.fadeVolumeOut(ctx, originalVolume)
+
+	// Get playlist tracks to find the next track
+	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	if err != nil {
+		return fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	if len(playlistTracks) == 0 {
+		return fmt.Errorf("playlist is empty")
+	}
+
+	// Determine the next track to play
+	var nextTrackID string
+	var nextTrackReason string
+
+	if lastTrackID != "" {
+		// Find the position of the last regular track
+		lastTrackPosition := -1
+		for i, trackID := range playlistTracks {
+			if trackID == lastTrackID {
+				lastTrackPosition = i
+				break
+			}
+		}
+
+		// If we found the last track and there's a next track after it
+		if lastTrackPosition >= 0 && lastTrackPosition+1 < len(playlistTracks) {
+			nextTrackID = playlistTracks[lastTrackPosition+1]
+			nextTrackReason = fmt.Sprintf("next track after lastRegularTrackID (position %d)", lastTrackPosition)
+		}
+	}
+
+	// Fallback: play towards the end of the playlist at EndOfPlaylistThreshold
+	if nextTrackID == "" {
+		// Calculate position near the end (EndOfPlaylistThreshold tracks from end)
+		endPosition := len(playlistTracks) - endOfPlaylistThreshold
+		if endPosition < 0 {
+			endPosition = 0 // If playlist is shorter than threshold, start from beginning
+		}
+		nextTrackID = playlistTracks[endPosition]
+		if lastTrackID == "" {
+			nextTrackReason = fmt.Sprintf("no lastRegularTrackID, resuming at EndOfPlaylistThreshold (position %d)", endPosition)
+		} else {
+			nextTrackReason = fmt.Sprintf("no next track after lastRegularTrackID, resuming at EndOfPlaylistThreshold (position %d)", endPosition)
+		}
+	}
+
+	d.logger.Info("Selected track for playlist switch",
+		zap.String("nextTrackID", nextTrackID),
+		zap.String("reason", nextTrackReason),
+		zap.Int("playlistLength", len(playlistTracks)))
+
+	// Set playlist context and start playing the track (this does both operations)
+	if err := d.spotify.SetPlaylistContext(ctx, d.config.Spotify.PlaylistID, nextTrackID); err != nil {
+		return fmt.Errorf("failed to set playlist context and play track %s: %w", nextTrackID, err)
+	}
+
+	// Small delay to ensure playback starts
+	time.Sleep(time.Duration(playbackStartDelayMs) * time.Millisecond)
+
+	// Fade volume back in
+	d.fadeVolumeIn(ctx, originalVolume)
+
+	d.logger.Info("Successfully switched to correct playlist",
+		zap.String("nextTrackID", nextTrackID),
+		zap.Int("restoredVolume", originalVolume))
+
+	return nil
+}
+
+// handlePlaylistSwitchDecision processes playlist switch approval/denial
+func (d *Dispatcher) handlePlaylistSwitchDecision(approved bool) {
+	ctx := context.Background()
+
+	// Delete all playlist warning messages and clear the unconfirmed warning flag since admin has responded
+	d.playlistWarningMutex.Lock()
+	d.hasUnconfirmedWarning = false
+	messagesToDelete := make(map[string]string)
+	for messageID, adminUserID := range d.playlistWarningMessages {
+		messagesToDelete[messageID] = adminUserID
+	}
+	// Clear the map
+	d.playlistWarningMessages = make(map[string]string)
+	d.playlistWarningMutex.Unlock()
+
+	// Delete all warning messages
+	for messageID, adminUserID := range messagesToDelete {
+		if err := d.frontend.DeleteMessage(ctx, adminUserID, messageID); err != nil {
+			d.logger.Warn("Failed to delete playlist warning message",
+				zap.String("messageID", messageID),
+				zap.String("adminUserID", adminUserID),
+				zap.Error(err))
+		} else {
+			d.logger.Debug("Deleted playlist warning message",
+				zap.String("messageID", messageID),
+				zap.String("adminUserID", adminUserID))
+		}
+	}
+
+	groupID := d.getGroupID()
+
+	if approved {
+		d.logger.Info("Admin approved playlist switch, initiating switch")
+
+		// Get track info for success message (before switch, so we can show what will be played)
+		_, _, nextArtist, nextTitle := d.getTrackInfoForWarning()
+		var successMsg string
+		if nextArtist != "" && nextTitle != "" {
+			successMsg = d.localizer.T("callback.playlist_switched", nextArtist, nextTitle)
+		} else {
+			successMsg = d.localizer.T("callback.playlist_switched", "Unknown", "Track")
+		}
+
+		// Send success message to admins immediately (before the actual switch)
+		adminIDs, err := d.frontend.GetAdminUserIDs(ctx, groupID)
+		if err != nil {
+			d.logger.Warn("Failed to get admin user IDs for switch notification", zap.Error(err))
+		} else {
+			for _, adminID := range adminIDs {
+				if err := d.frontend.SendDirectMessage(ctx, adminID, successMsg); err != nil {
+					d.logger.Warn("Failed to send switch success message to admin",
+						zap.String("adminID", adminID),
+						zap.Error(err))
+				}
+			}
+		}
+
+		// Now perform the playlist switch with fade
+		if err := d.switchToCorrectPlaylist(ctx); err != nil {
+			d.logger.Error("Failed to switch to correct playlist", zap.Error(err))
+
+			// Send error message
+			errorMsg := d.localizer.T("error.generic")
+			if _, sendErr := d.frontend.SendText(ctx, groupID, "", errorMsg); sendErr != nil {
+				d.logger.Warn("Failed to send switch error message", zap.Error(sendErr))
+			}
+			return
+		}
+	} else {
+		d.logger.Info("Admin denied playlist switch")
+
+		// Send "staying current" message to admins instead of the group
+		stayMsg := d.localizer.T("callback.playlist_stay")
+		adminIDs, err := d.frontend.GetAdminUserIDs(ctx, groupID)
+		if err != nil {
+			d.logger.Warn("Failed to get admin user IDs for stay notification", zap.Error(err))
+		} else {
+			for _, adminID := range adminIDs {
+				if err := d.frontend.SendDirectMessage(ctx, adminID, stayMsg); err != nil {
+					d.logger.Warn("Failed to send stay message to admin",
+						zap.String("adminID", adminID),
+						zap.Error(err))
+				}
+			}
+		}
+	}
 }

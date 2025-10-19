@@ -71,6 +71,9 @@ const (
 	QueueClearDelay = 500 * time.Millisecond
 	// TrackAddDelay is the delay between track additions to avoid rate limits
 	TrackAddDelay = 100 * time.Millisecond
+
+	// MaxVolume is the maximum volume level (0-100)
+	MaxVolume = 100
 )
 
 var (
@@ -1386,4 +1389,92 @@ func (c *Client) saveToken(token *oauth2.Token) error {
 	}
 
 	return os.WriteFile(c.config.TokenPath, data, FilePermission)
+}
+
+// GetCurrentVolume gets the current playback volume (0-100)
+func (c *Client) GetCurrentVolume(ctx context.Context) (int, error) {
+	if c.client == nil {
+		return 0, fmt.Errorf("spotify client not initialized")
+	}
+
+	playerState, err := c.client.PlayerState(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	return playerState.Device.Volume, nil
+}
+
+// SetVolume sets the playback volume (0-100)
+func (c *Client) SetVolume(ctx context.Context, volume int) error {
+	if c.client == nil {
+		return fmt.Errorf("spotify client not initialized")
+	}
+
+	if volume < 0 {
+		volume = 0
+	}
+	if volume > MaxVolume {
+		volume = MaxVolume
+	}
+
+	err := c.client.Volume(ctx, volume)
+	if err != nil {
+		return fmt.Errorf("failed to set volume to %d: %w", volume, err)
+	}
+
+	c.logger.Debug("Set Spotify volume",
+		zap.Int("volume", volume))
+
+	return nil
+}
+
+// PlayTrack starts playing a specific track
+func (c *Client) PlayTrack(ctx context.Context, trackID string) error {
+	if c.client == nil {
+		return fmt.Errorf("spotify client not initialized")
+	}
+
+	trackURI := spotify.URI("spotify:track:" + trackID)
+	playOptions := &spotify.PlayOptions{
+		URIs: []spotify.URI{trackURI},
+	}
+
+	err := c.client.PlayOpt(ctx, playOptions)
+	if err != nil {
+		return fmt.Errorf("failed to play track %s: %w", trackID, err)
+	}
+
+	c.logger.Info("Started playing track",
+		zap.String("trackID", trackID))
+
+	return nil
+}
+
+// SetPlaylistContext sets the playback context to a specific playlist and starts playing from a specific track
+func (c *Client) SetPlaylistContext(ctx context.Context, playlistID, trackID string) error {
+	if c.client == nil {
+		return fmt.Errorf("spotify client not initialized")
+	}
+
+	playlistURI := spotify.URI("spotify:playlist:" + playlistID)
+	trackURI := spotify.URI("spotify:track:" + trackID)
+
+	playOptions := &spotify.PlayOptions{
+		PlaybackContext: &playlistURI,
+		PlaybackOffset: &spotify.PlaybackOffset{
+			URI: trackURI,
+		},
+	}
+
+	err := c.client.PlayOpt(ctx, playOptions)
+	if err != nil {
+		return fmt.Errorf("failed to set playlist context %s with track %s: %w", playlistID, trackID, err)
+	}
+
+	c.logger.Info("Set playlist context and started playback",
+		zap.String("playlistID", playlistID),
+		zap.String("trackID", trackID))
+
+	return nil
 }

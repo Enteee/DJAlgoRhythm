@@ -53,8 +53,10 @@ var englishMessages = map[string]string{
 	"callback.prompt_expired": "This prompt has expired.",
 
 	// Button texts
-	"button.confirm":  "👍 Confirm",
-	"button.not_this": "👎 Not this",
+	"button.confirm":         "👍 Confirm",
+	"button.not_this":        "👎 Not this",
+	"button.switch_playlist": "🔄 Switch to Playlist",
+	"button.stay_current":    "❌ Stay Current",
 
 	// Bot status messages
 	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",
@@ -68,7 +70,9 @@ var englishMessages = map[string]string{
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
 		"🎵 Please switch back to the correct playlist: %s\n\n" +
-		"💡 Click the link above to quickly return to the tracked playlist.",
+		"💡 Click the link above to quickly return to the tracked playlist.\n\n" +
+		"🎵 Last played regular song: %s - %s\n🎵 Next song to play: %s - %s\n\n" +
+		"🔄 You can also use the buttons below to automatically switch with volume fade.",
 	"bot.shuffle_warning": "⚠️ Warning: Shuffle is enabled!\n\n" +
 		"🔀 Please turn off shuffle for optimal auto-DJing. " +
 		"Shuffle interferes with track order and queueing.",
@@ -88,5 +92,7 @@ var englishMessages = map[string]string{
 	"button.autoplay_deny":               "❌ Deny",
 	"callback.autoplay_approved":         "✅ Auto-play track approved",
 	"callback.autoplay_denied":           "❌ Auto-play track denied",
+	"callback.playlist_switched":         "🔄 Switched back to playlist and now playing: %s - %s",
+	"callback.playlist_stay":             "❌ Staying on current playlist",
 	"bot.autoplay_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
 }

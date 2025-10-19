@@ -143,6 +143,11 @@ type SpotifyClient interface {
 	// Playlist monitoring
 	IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error)
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
+	// Volume and playback control
+	GetCurrentVolume(ctx context.Context) (int, error)
+	SetVolume(ctx context.Context, volume int) error
+	PlayTrack(ctx context.Context, trackID string) error
+	SetPlaylistContext(ctx context.Context, playlistID, trackID string) error
 }
 
 type LLMProvider interface {
