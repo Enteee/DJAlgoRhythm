@@ -16,9 +16,9 @@ var berneseGermanMessages = map[string]string{
 
 	// Questions and prompts
 	"prompt.which_song":        "Weles Lied meinsch de gnau?",
-	"prompt.enhanced_approval": "🎵 Gfunde: **%s - %s**%s%s%s\n\nIsch das z'richtige?",
-	"prompt.basic_approval":    "Meinsch **%s - %s**%s%s?",
-	"prompt.clarification":     "Meinsch **%s - %s**? Wenn nid, chasch das bitte gnauer erlüterä?",
+	"prompt.enhanced_approval": "🎵 Gfunde: %s - %s%s%s%s\n\nIsch das z'richtige?",
+	"prompt.basic_approval":    "Meinsch %s - %s%s%s?",
+	"prompt.clarification":     "Meinsch %s - %s? Wenn nid, chasch das bitte gnauer erlüterä?",
 
 	// Format helpers for prompts
 	"format.album": " (Album: %s)",
@@ -26,11 +26,15 @@ var berneseGermanMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required": "⏳ Admin-Freigab nötig. Wart bis dr Gruppe-Admin zueseit...",
-	"admin.denied":            "❌ Admin het z'Lied abglehnt.",
-	"admin.approval_prompt":   "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\nWottsch das Lied zur Playlist hinzuefüege?",
-	"admin.button_approve":    "✅ Isch ok",
-	"admin.button_deny":       "❌ Ablehnä",
+	"admin.approval_required":          "⏳ Admin-Freigab nötig. Wart bis dr Gruppe-Admin zueseit...",
+	"admin.approval_required_enhanced": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\nWart uf Admin-Freigab...",
+	"admin.approval_required_community": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\n" +
+		"Wart uf Admin-Freigab oder reagier mit 👍 unde we das o guet fingsch (%d+ Reaktione für Community-Freigab nötig).",
+	"admin.denied": "❌ Admin het z'Lied abglehnt.",
+	"admin.approval_prompt": "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\n" +
+		"Wottsch das Lied zur Playlist hinzuefüege?",
+	"admin.button_approve": "✅ Isch ok",
+	"admin.button_deny":    "❌ Ablehnä",
 
 	// Success messages
 	"success.track_added":                    "Hinzuegfüegt: %s - %s (%s)",
@@ -51,6 +55,9 @@ var berneseGermanMessages = map[string]string{
 	// Button texts
 	"button.confirm":  "👍 Ja, das isch's",
 	"button.not_this": "👎 Nö, nid das",
+
+	// Success messages for community approval
+	"success.community_approved": "🎉 Vo dr Community guetgeheisse mit %d 👍 Reaktione!",
 
 	// Bot status messages
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit für öii Musigwünsch!\n\n📀 Playlist: %s",

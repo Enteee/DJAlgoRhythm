@@ -38,6 +38,7 @@ type Config struct {
 	ReactionSupport    bool   // Whether the group supports reactions
 	AdminApproval      bool   // Whether admin approval is required for songs
 	AdminNeedsApproval bool   // Whether admins also need approval (for testing)
+	CommunityApproval  int    // Number of 👍 reactions needed to bypass admin approval (0 disables)
 	Language           string // Bot language for user-facing messages
 }
 
@@ -59,6 +60,10 @@ type Frontend struct {
 	// Admin approval tracking
 	adminApprovalMutex    sync.RWMutex
 	pendingAdminApprovals map[string]*adminApprovalContext
+
+	// Community approval tracking
+	communityApprovalMutex    sync.RWMutex
+	pendingCommunityApprovals map[string]*communityApprovalContext
 }
 
 // approvalContext tracks pending user approvals
@@ -81,6 +86,17 @@ type adminApprovalContext struct {
 	sentToAdmins   []int64
 }
 
+// communityApprovalContext tracks pending community approvals via reactions
+type communityApprovalContext struct {
+	messageID         int
+	requiredReactions int
+	currentReactions  int
+	reactedUsers      map[int64]bool // track users who reacted to prevent double counting
+	approved          chan bool
+	cancelCtx         context.Context
+	cancelFunc        context.CancelFunc
+}
+
 // NewFrontend creates a new Telegram frontend
 func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
 	// Use configured language, fallback to default if not set
@@ -90,12 +106,13 @@ func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
 	}
 
 	return &Frontend{
-		config:                config,
-		logger:                logger,
-		parser:                text.NewParser(),
-		localizer:             i18n.NewLocalizer(language),
-		pendingApprovals:      make(map[string]*approvalContext),
-		pendingAdminApprovals: make(map[string]*adminApprovalContext),
+		config:                    config,
+		logger:                    logger,
+		parser:                    text.NewParser(),
+		localizer:                 i18n.NewLocalizer(language),
+		pendingApprovals:          make(map[string]*approvalContext),
+		pendingAdminApprovals:     make(map[string]*adminApprovalContext),
+		pendingCommunityApprovals: make(map[string]*communityApprovalContext),
 	}
 }
 
@@ -361,6 +378,9 @@ func (f *Frontend) handleUpdate(ctx context.Context, _ *bot.Bot, update *models.
 	if update.Message != nil {
 		f.handleMessage(ctx, update.Message)
 	}
+	if update.MessageReactionCount != nil {
+		f.handleMessageReactionCount(ctx, update.MessageReactionCount)
+	}
 }
 
 // handleMessage processes incoming messages
@@ -393,6 +413,71 @@ func (f *Frontend) handleMessage(_ context.Context, msg *models.Message) {
 	// Call the message handler
 	if f.messageHandler != nil {
 		f.messageHandler(&message)
+	}
+}
+
+// handleMessageReactionCount processes incoming message reaction count updates for community approval
+func (f *Frontend) handleMessageReactionCount(_ context.Context, reactionCount *models.MessageReactionCountUpdated) {
+	// Only process reactions from the configured group
+	if reactionCount.Chat.ID != f.config.GroupID {
+		return
+	}
+
+	// Check if there are any pending community approvals for this message
+	f.communityApprovalMutex.Lock()
+	defer f.communityApprovalMutex.Unlock()
+
+	for _, approval := range f.pendingCommunityApprovals {
+		if approval.messageID == reactionCount.MessageID {
+			f.processReactionCountForCommunityApproval(approval, reactionCount)
+			break
+		}
+	}
+}
+
+// processReactionCountForCommunityApproval processes a reaction count update for community approval
+func (f *Frontend) processReactionCountForCommunityApproval(
+	approval *communityApprovalContext, reactionCount *models.MessageReactionCountUpdated) {
+	// Count 👍 reactions
+	thumbsUpCount := 0
+
+	for _, reaction := range reactionCount.Reactions {
+		if reaction.Type.Type == models.ReactionTypeTypeEmoji &&
+			reaction.Type.ReactionTypeEmoji != nil &&
+			reaction.Type.ReactionTypeEmoji.Emoji == "👍" {
+			thumbsUpCount = reaction.TotalCount
+			break
+		}
+	}
+
+	// Adjust for bot's initial reaction: subtract 1 since the bot adds a 👍 when creating the message
+	// We want to count only user reactions for community approval
+	userReactions := thumbsUpCount
+	if thumbsUpCount > 0 {
+		userReactions = thumbsUpCount - 1 // Exclude bot's initial reaction
+	}
+
+	// Update the approval context with user reactions (excluding bot)
+	approval.currentReactions = userReactions
+
+	f.logger.Debug("Community approval reaction count update",
+		zap.Int("message_id", approval.messageID),
+		zap.Int("total_reactions", thumbsUpCount),
+		zap.Int("user_reactions", userReactions),
+		zap.Int("required_reactions", approval.requiredReactions))
+
+	// Check if we've reached the required number of user reactions
+	if userReactions >= approval.requiredReactions {
+		select {
+		case approval.approved <- true:
+			f.logger.Info("Community approval achieved via reactions",
+				zap.Int("message_id", approval.messageID),
+				zap.Int("user_reactions_received", userReactions),
+				zap.Int("total_reactions_received", thumbsUpCount),
+				zap.Int("reactions_required", approval.requiredReactions))
+		case <-approval.cancelCtx.Done():
+			// Context already canceled, do nothing
+		}
 	}
 }
 
@@ -989,4 +1074,69 @@ func (f *Frontend) ListAvailableGroups(ctx context.Context) ([]GroupInfo, error)
 	time.Sleep(discoveryFinalWait)
 
 	return groups, nil
+}
+
+// AwaitCommunityApproval waits for enough community 👍 reactions to bypass admin approval
+func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions, timeoutSec int) (bool, error) {
+	if !f.config.Enabled {
+		return false, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	// If community approval is disabled (0), return false immediately
+	if f.config.CommunityApproval <= 0 || requiredReactions <= 0 {
+		return false, nil
+	}
+
+	messageID, err := strconv.Atoi(msgID)
+	if err != nil {
+		return false, fmt.Errorf("invalid message ID: %w", err)
+	}
+
+	// Create community approval context
+	approvalCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
+	communityApproval := &communityApprovalContext{
+		messageID:         messageID,
+		requiredReactions: requiredReactions,
+		currentReactions:  0,
+		reactedUsers:      make(map[int64]bool),
+		approved:          make(chan bool, 1),
+		cancelCtx:         approvalCtx,
+		cancelFunc:        cancel,
+	}
+
+	// Generate unique key for this community approval
+	approvalKey := fmt.Sprintf("community_%s_%d", msgID, time.Now().Unix())
+
+	f.communityApprovalMutex.Lock()
+	f.pendingCommunityApprovals[approvalKey] = communityApproval
+	f.communityApprovalMutex.Unlock()
+
+	// Cleanup function
+	defer func() {
+		cancel()
+		f.communityApprovalMutex.Lock()
+		delete(f.pendingCommunityApprovals, approvalKey)
+		f.communityApprovalMutex.Unlock()
+	}()
+
+	f.logger.Debug("Started community approval tracking",
+		zap.String("message_id", msgID),
+		zap.Int("required_reactions", requiredReactions),
+		zap.Int("timeout_sec", timeoutSec))
+
+	// Wait for approval or timeout
+	select {
+	case approved := <-communityApproval.approved:
+		f.logger.Info("Community approval completed",
+			zap.String("message_id", msgID),
+			zap.Bool("approved", approved),
+			zap.Int("final_reactions", communityApproval.currentReactions))
+		return approved, nil
+	case <-approvalCtx.Done():
+		f.logger.Debug("Community approval timed out",
+			zap.String("message_id", msgID),
+			zap.Int("final_reactions", communityApproval.currentReactions),
+			zap.Int("required_reactions", requiredReactions))
+		return false, nil
+	}
 }

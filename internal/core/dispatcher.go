@@ -750,52 +750,157 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	songInfo := fmt.Sprintf("%s - %s", track.Artist, track.Title)
 	songURL := track.URL
 
-	// Send notification to user that admin approval is required
-	approvalMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("admin.approval_required"))
+	// Send notification to user that admin approval is required with song details
+	approvalMessage := d.formatAdminApprovalMessage(originalMsg, track)
 	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, approvalMessage)
 	if err != nil {
 		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
 	}
 
-	// Request admin approval via Telegram frontend
-	if telegramFrontend, ok := d.frontend.(interface {
+	// Add reaction buttons if message was sent successfully and community approval is enabled
+	if approvalMsgID != "" {
+		d.addApprovalReactions(ctx, originalMsg.ChatID, approvalMsgID)
+	}
+
+	// Check if frontend supports both admin approval and community approval
+	telegramFrontend, supportsAdminApproval := d.frontend.(interface {
 		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
-	}); ok {
-		approved, err := telegramFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
-		if err != nil {
-			d.logger.Error("Admin approval failed", zap.Error(err))
-			d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
-			return
-		}
+	})
 
-		// Delete the admin approval required message
-		if approvalMsgID != "" {
-			if deleteErr := d.frontend.DeleteMessage(ctx, originalMsg.ChatID, approvalMsgID); deleteErr != nil {
-				d.logger.Debug("Failed to delete admin approval message", zap.Error(deleteErr))
-			}
-		}
+	communityApprovalFrontend, supportsCommunityApproval := d.frontend.(interface {
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (bool, error)
+	})
 
-		if approved {
-			d.logger.Info("Admin approved song addition",
-				zap.String("user", originalMsg.SenderName),
-				zap.String("song", songInfo))
-
-			// Skip individual approval message - will be combined with success message
-			d.executePlaylistAddAfterApproval(ctx, msgCtx, originalMsg, trackID)
-		} else {
-			d.logger.Info("Admin denied song addition",
-				zap.String("user", originalMsg.SenderName),
-				zap.String("song", songInfo))
-
-			// Notify user of denial
-			denialMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("admin.denied"))
-			if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, denialMessage); err != nil {
-				d.logger.Error("Failed to notify user about admin denial", zap.Error(err))
-			}
-		}
-	} else {
+	if !supportsAdminApproval {
 		d.logger.Error("Frontend doesn't support admin approval, proceeding without")
 		d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
+
+	// Check if community approval is enabled and supported
+	communityApprovalThreshold := d.config.Telegram.CommunityApproval
+	if supportsCommunityApproval && communityApprovalThreshold > 0 && approvalMsgID != "" {
+		// Run both admin approval and community approval concurrently
+		d.awaitConcurrentApproval(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, approvalMsgID,
+			telegramFrontend, communityApprovalFrontend, communityApprovalThreshold)
+	} else {
+		// Only admin approval
+		d.awaitAdminApprovalOnly(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, approvalMsgID, telegramFrontend)
+	}
+}
+
+// awaitConcurrentApproval runs both admin and community approval concurrently
+func (d *Dispatcher) awaitConcurrentApproval(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, approvalMsgID string,
+	adminFrontend interface {
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+	},
+	communityFrontend interface {
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (bool, error)
+	},
+	communityThreshold int,
+) {
+	// Create channels for results
+	adminResult := make(chan bool, 1)
+	communityResult := make(chan bool, 1)
+	const maxConcurrentApprovals = 2
+	errorResult := make(chan error, maxConcurrentApprovals)
+
+	// Start admin approval in goroutine
+	go func() {
+		approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
+		if err != nil {
+			errorResult <- err
+			return
+		}
+		adminResult <- approved
+	}()
+
+	// Start community approval in goroutine
+	go func() {
+		approved, err := communityFrontend.AwaitCommunityApproval(ctx, approvalMsgID, communityThreshold, d.config.App.ConfirmAdminTimeoutSecs)
+		if err != nil {
+			errorResult <- err
+			return
+		}
+		communityResult <- approved
+	}()
+
+	// Wait for first approval or timeout
+	select {
+	case approved := <-adminResult:
+		d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
+	case approved := <-communityResult:
+		if approved {
+			d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, true, "community")
+		} else {
+			// Community approval failed, still wait for admin
+			select {
+			case approved := <-adminResult:
+				d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
+			case err := <-errorResult:
+				d.logger.Error("Admin approval failed", zap.Error(err))
+				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
+			case <-ctx.Done():
+				d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, false, "timeout")
+			}
+		}
+	case err := <-errorResult:
+		d.logger.Error("Approval process failed", zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
+	case <-ctx.Done():
+		d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, false, "timeout")
+	}
+}
+
+// awaitAdminApprovalOnly handles only admin approval (legacy behavior)
+func (d *Dispatcher) awaitAdminApprovalOnly(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, approvalMsgID string,
+	adminFrontend interface {
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+	},
+) {
+	approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
+	if err != nil {
+		d.logger.Error("Admin approval failed", zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
+		return
+	}
+
+	d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
+}
+
+// handleApprovalResult processes the approval result regardless of source
+func (d *Dispatcher) handleApprovalResult(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, approvalMsgID string,
+	approved bool, approvalSource string,
+) {
+	// Delete the admin approval required message
+	if approvalMsgID != "" {
+		if deleteErr := d.frontend.DeleteMessage(ctx, originalMsg.ChatID, approvalMsgID); deleteErr != nil {
+			d.logger.Debug("Failed to delete admin approval message", zap.Error(deleteErr))
+		}
+	}
+
+	if approved {
+		d.logger.Info("Song addition approved",
+			zap.String("user", originalMsg.SenderName),
+			zap.String("song", songInfo),
+			zap.String("approval_source", approvalSource))
+
+		// Skip individual approval message - will be combined with success message
+		d.executePlaylistAddAfterApproval(ctx, msgCtx, originalMsg, trackID)
+	} else {
+		d.logger.Info("Song addition denied",
+			zap.String("user", originalMsg.SenderName),
+			zap.String("song", songInfo),
+			zap.String("approval_source", approvalSource))
+
+		// Notify user of denial
+		denialMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("admin.denied"))
+		if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, denialMessage); err != nil {
+			d.logger.Error("Failed to notify user about denial", zap.Error(err))
+		}
 	}
 }
 
@@ -1100,4 +1205,67 @@ func (d *Dispatcher) formatUserMention(msg *chat.Message) string {
 func (d *Dispatcher) formatMessageWithMention(msg *chat.Message, messageText string) string {
 	mention := d.formatUserMention(msg)
 	return fmt.Sprintf("%s %s", mention, messageText)
+}
+
+// formatAdminApprovalMessage creates an enhanced admin approval message with song details
+func (d *Dispatcher) formatAdminApprovalMessage(originalMsg *chat.Message, track *Track) string {
+	// Format album and year information
+	albumInfo := ""
+	if track.Album != "" {
+		albumInfo = d.localizer.T("format.album", track.Album)
+	}
+
+	yearInfo := ""
+	if track.Year > 0 {
+		yearInfo = d.localizer.T("format.year", track.Year)
+	}
+
+	urlInfo := ""
+	if track.URL != "" {
+		urlInfo = d.localizer.T("format.url", track.URL)
+	}
+
+	// Check if community approval is enabled and supported
+	communityApprovalThreshold := d.config.Telegram.CommunityApproval
+	supportsCommunityApproval := false
+	if _, ok := d.frontend.(interface {
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions, timeoutSec int) (bool, error)
+	}); ok {
+		supportsCommunityApproval = true
+	}
+
+	var message string
+	if supportsCommunityApproval && communityApprovalThreshold > 0 {
+		// Enhanced message with community approval instructions
+		message = d.localizer.T("admin.approval_required_community",
+			track.Artist, track.Title, albumInfo, yearInfo, urlInfo, communityApprovalThreshold)
+	} else {
+		// Enhanced message without community approval
+		message = d.localizer.T("admin.approval_required_enhanced",
+			track.Artist, track.Title, albumInfo, yearInfo, urlInfo)
+	}
+
+	return d.formatMessageWithMention(originalMsg, message)
+}
+
+// addApprovalReactions adds 👍 reaction button to admin approval messages to encourage community voting
+func (d *Dispatcher) addApprovalReactions(ctx context.Context, chatID, msgID string) {
+	// Check if community approval is enabled
+	communityApprovalThreshold := d.config.Telegram.CommunityApproval
+	if communityApprovalThreshold <= 0 {
+		return // Community approval disabled, no need for reaction buttons
+	}
+
+	// Add 👍 reaction to encourage users to vote for community approval
+	// This shows users they can react with 👍 to support the song
+	if err := d.frontend.React(ctx, chatID, msgID, chat.ReactionThumbsUp); err != nil {
+		d.logger.Warn("Failed to add thumbs up reaction to approval message", zap.Error(err))
+	} else {
+		d.logger.Debug("Successfully added 👍 reaction to encourage community voting", zap.String("message_id", msgID))
+	}
+
+	d.logger.Info("Added 👍 reaction to admin approval message to encourage community voting",
+		zap.String("chat_id", chatID),
+		zap.String("message_id", msgID),
+		zap.Int("community_threshold", communityApprovalThreshold))
 }

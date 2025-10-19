@@ -16,9 +16,9 @@ var englishMessages = map[string]string{
 
 	// Questions and prompts
 	"prompt.which_song":        "Which song do you mean by that?",
-	"prompt.enhanced_approval": "🎵 Found: **%s - %s**%s%s%s\n\nIs this what you're looking for?",
-	"prompt.basic_approval":    "Did you mean **%s - %s**%s%s?",
-	"prompt.clarification":     "Did you mean **%s - %s**? If not, please clarify.",
+	"prompt.enhanced_approval": "🎵 Found: %s - %s%s%s%s\n\nIs this what you're looking for?",
+	"prompt.basic_approval":    "Did you mean %s - %s%s%s?",
+	"prompt.clarification":     "Did you mean %s - %s? If not, please clarify.",
 
 	// Format helpers for prompts
 	"format.album": " (Album: %s)",
@@ -26,8 +26,11 @@ var englishMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required": "⏳ Admin approval required. Waiting for group admin approval...",
-	"admin.denied":            "❌ Admin denied the song request.",
+	"admin.approval_required":          "⏳ Admin approval required. Waiting for group admin approval...",
+	"admin.approval_required_enhanced": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\nWaiting for admin approval...",
+	"admin.approval_required_community": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\n" +
+		"Waiting for admin approval or react with 👍 below if you like this as well (%d+ reactions needed for community approval).",
+	"admin.denied": "❌ Admin denied the song request.",
 	"admin.approval_prompt": "🎵 *Admin Approval Required*\n\n" +
 		"User: %s\nSong: %s\nLink: %s\n\n" +
 		"Do you approve adding this song to the playlist?",
@@ -53,6 +56,9 @@ var englishMessages = map[string]string{
 	// Button texts
 	"button.confirm":  "👍 Confirm",
 	"button.not_this": "👎 Not this",
+
+	// Success messages for community approval
+	"success.community_approved": "🎉 Community approved via %d 👍 reactions!",
 
 	// Bot status messages
 	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",

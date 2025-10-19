@@ -75,6 +75,7 @@ func init() {
 	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Bool("admin-needs-approval", false, "Require approval even for admins (for testing)")
+	rootCmd.PersistentFlags().Int("community-approval", 0, "Number of 👍 reactions needed to bypass admin approval (0 disables feature)")
 	supportedLangs := strings.Join(i18n.GetSupportedLanguages(), ", ")
 	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", supportedLangs))
 
@@ -139,6 +140,7 @@ func configureTelegram(cfg *core.Config) {
 	}
 	cfg.Telegram.AdminApproval = viper.GetBool("admin-approval")
 	cfg.Telegram.AdminNeedsApproval = viper.GetBool("admin-needs-approval")
+	cfg.Telegram.CommunityApproval = viper.GetInt("community-approval")
 }
 
 func configureSpotify(cfg *core.Config) {
@@ -312,6 +314,7 @@ func createChatFrontend() (chat.Frontend, error) {
 			ReactionSupport:    config.Telegram.ReactionSupport,
 			AdminApproval:      config.Telegram.AdminApproval,
 			AdminNeedsApproval: config.Telegram.AdminNeedsApproval,
+			CommunityApproval:  config.Telegram.CommunityApproval,
 			Language:           config.App.Language,
 		}
 		frontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
@@ -409,6 +412,7 @@ func promptForTelegramGroup() (int64, error) {
 		ReactionSupport:    config.Telegram.ReactionSupport,
 		AdminApproval:      config.Telegram.AdminApproval,
 		AdminNeedsApproval: config.Telegram.AdminNeedsApproval,
+		CommunityApproval:  config.Telegram.CommunityApproval,
 		Language:           config.App.Language,
 	}
 

@@ -49,4 +49,8 @@ type Frontend interface {
 
 	// DeleteMessage deletes a message by its ID
 	DeleteMessage(ctx context.Context, chatID, msgID string) error
+
+	// AwaitCommunityApproval waits for enough community 👍 reactions to bypass admin approval
+	// Returns true if enough reactions received within timeout, false otherwise
+	AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (approved bool, err error)
 }

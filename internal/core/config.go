@@ -43,6 +43,7 @@ type TelegramConfig struct {
 	ReactionSupport    bool
 	AdminApproval      bool
 	AdminNeedsApproval bool
+	CommunityApproval  int
 }
 
 type SpotifyConfig struct {
