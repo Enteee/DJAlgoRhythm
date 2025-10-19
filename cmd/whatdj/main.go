@@ -281,14 +281,14 @@ func initializeServices(ctx context.Context) (*services, error) {
 		return nil, err
 	}
 
-	spotifyClient := spotify.NewClient(&config.Spotify, logger.Named("spotify"))
-	if authErr := spotifyClient.Authenticate(ctx); authErr != nil {
-		return nil, fmt.Errorf("failed to authenticate with Spotify: %w", authErr)
-	}
-
 	llmProvider, err := createLLMProvider()
 	if err != nil {
 		return nil, err
+	}
+
+	spotifyClient := spotify.NewClient(&config.Spotify, logger.Named("spotify"), llmProvider)
+	if authErr := spotifyClient.Authenticate(ctx); authErr != nil {
+		return nil, fmt.Errorf("failed to authenticate with Spotify: %w", authErr)
 	}
 
 	httpServer := httpserver.NewServer(&config.Server, logger.Named("http"))

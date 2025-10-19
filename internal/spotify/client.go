@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,8 +27,20 @@ const (
 	MinValidYear = 1950
 	// FilePermission is the permission for token files
 	FilePermission = 0600
+	// MinTracksForEndDetection is the minimum tracks needed for end-of-playlist detection
+	MinTracksForEndDetection = 3
+	// EndOfPlaylistThreshold is the number of tracks from the end to consider "near end"
+	EndOfPlaylistThreshold = 3
+	// RecommendationSeedTracks is the number of recent tracks to use as seeds for recommendations
+	RecommendationSeedTracks = 5
+	// SpotifyIDLength is the expected length of a Spotify track/artist/album ID
+	SpotifyIDLength = 22
 	// MaxSearchResults is the maximum number of search results to return
 	MaxSearchResults = 10
+	// SearchResultsMultiplier is used to get more search results for better filtering
+	SearchResultsMultiplier = 2
+	// MaxPlaylistTracks is a reasonable upper bound for playlist track count conversion
+	MaxPlaylistTracks = 1000
 	// ReleaseDateYearLength is the expected length of a release date year string
 	ReleaseDateYearLength = 4
 	// URLResolveTimeout is the timeout for resolving shortened URLs
@@ -42,6 +53,8 @@ const (
 	SpotifyAppLinkDomain = "spotify.app.link"
 	// PlaylistCacheDuration is how long to cache playlist contents
 	PlaylistCacheDuration = 5 * time.Minute
+	// UnknownArtist is the default value when artist name is not available
+	UnknownArtist = "Unknown"
 	// PlaybackStartDelay is the delay to wait for playback to start
 	PlaybackStartDelay = 500 * time.Millisecond
 	// SkipDelay is the delay between track skips to avoid rate limiting
@@ -73,17 +86,18 @@ type Client struct {
 	client             *spotify.Client
 	normalizer         *fuzzy.Normalizer
 	auth               *spotifyauth.Authenticator
-	targetPlaylist     string          // Playlist ID we're managing
-	lastKnownVolume    int             // Store last volume for fade recovery
-	playlistTrackCache map[string]bool // Cache of track IDs in our playlist
-	cacheLastUpdated   time.Time       // When cache was last updated
+	llm                core.LLMProvider // LLM provider for search query generation
+	targetPlaylist     string           // Playlist ID we're managing
+	lastKnownVolume    int              // Store last volume for fade recovery
+	playlistTrackCache map[string]bool  // Cache of track IDs in our playlist
+	cacheLastUpdated   time.Time        // When cache was last updated
 }
 
 type TokenData struct {
 	Token *oauth2.Token `json:"token"`
 }
 
-func NewClient(config *core.SpotifyConfig, logger *zap.Logger) *Client {
+func NewClient(config *core.SpotifyConfig, logger *zap.Logger, llm core.LLMProvider) *Client {
 	auth := spotifyauth.New(
 		spotifyauth.WithRedirectURL(config.RedirectURL),
 		spotifyauth.WithScopes(
@@ -103,6 +117,7 @@ func NewClient(config *core.SpotifyConfig, logger *zap.Logger) *Client {
 		logger:             logger,
 		normalizer:         fuzzy.NewNormalizer(),
 		auth:               auth,
+		llm:                llm,
 		playlistTrackCache: make(map[string]bool),
 	}
 }
@@ -154,6 +169,93 @@ func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, e
 	}
 
 	return c.rankTracks(tracks, query), nil
+}
+
+// SearchPlaylist searches for playlists based on a query string
+func (c *Client) SearchPlaylist(ctx context.Context, query string) ([]core.Playlist, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("client not authenticated")
+	}
+
+	normalizedQuery := c.normalizer.NormalizeTitle(query)
+
+	results, err := c.client.Search(ctx, normalizedQuery, spotify.SearchTypePlaylist)
+	if err != nil {
+		return nil, fmt.Errorf("playlist search failed: %w", err)
+	}
+
+	if results.Playlists == nil || len(results.Playlists.Playlists) == 0 {
+		return nil, fmt.Errorf("no playlists found")
+	}
+
+	var playlists []core.Playlist
+	for i := range results.Playlists.Playlists {
+		if len(playlists) >= MaxSearchResults {
+			break
+		}
+
+		playlist := &results.Playlists.Playlists[i]
+		// Safe conversion with bounds checking
+		var trackCount int
+		if playlist.Tracks.Total > MaxPlaylistTracks {
+			trackCount = MaxPlaylistTracks
+		} else {
+			trackCount = int(playlist.Tracks.Total) //nolint:gosec // Bounded by check above
+		}
+
+		corePlaylists := core.Playlist{
+			ID:          string(playlist.ID),
+			Name:        playlist.Name,
+			Description: playlist.Description,
+			TrackCount:  trackCount,
+			Owner:       playlist.Owner.DisplayName,
+		}
+		playlists = append(playlists, corePlaylists)
+	}
+
+	return playlists, nil
+}
+
+// GetRandomTrackFromPlaylist gets a random track from the specified playlist, excluding duplicates
+func (c *Client) GetRandomTrackFromPlaylist(ctx context.Context, playlistID string, excludeSet map[string]bool) (*core.Track, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("client not authenticated")
+	}
+
+	// Get all track IDs from the playlist
+	trackIDs, err := c.GetPlaylistTracks(ctx, playlistID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	if len(trackIDs) == 0 {
+		return nil, fmt.Errorf("playlist is empty")
+	}
+
+	// Filter out excluded tracks
+	var availableTrackIDs []string
+	for _, trackID := range trackIDs {
+		if !excludeSet[trackID] {
+			availableTrackIDs = append(availableTrackIDs, trackID)
+		}
+	}
+
+	if len(availableTrackIDs) == 0 {
+		return nil, fmt.Errorf("no non-duplicate tracks available in playlist")
+	}
+
+	// Pick a random track from available tracks
+	// Use a simple approach with time-based seeding
+	randomIndex := int(time.Now().UnixNano()) % len(availableTrackIDs)
+	selectedTrackID := availableTrackIDs[randomIndex]
+
+	// Get track details
+	track, err := c.GetTrack(ctx, selectedTrackID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get track details: %w", err)
+	}
+
+	return track, nil
 }
 
 func (c *Client) GetTrack(ctx context.Context, trackID string) (*core.Track, error) {
@@ -742,8 +844,8 @@ func (c *Client) EnsureTrackInQueue(ctx context.Context, trackID string) error {
 	return nil
 }
 
-// IsNearPlaylistEnd checks if we're playing the last track of the playlist
-// Returns true if currently playing the very last track
+// IsNearPlaylistEnd checks if we're playing near the end of the playlist
+// Returns true if currently playing within EndOfPlaylistThreshold tracks from the end
 func (c *Client) IsNearPlaylistEnd(ctx context.Context) (bool, error) {
 	if c.client == nil {
 		return false, fmt.Errorf("client not authenticated")
@@ -776,98 +878,271 @@ func (c *Client) IsNearPlaylistEnd(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
+	// If playlist has fewer tracks than threshold, consider it always "near end"
+	if len(playlistTracks) < MinTracksForEndDetection {
+		return true, nil
+	}
+
 	// Find current track position in playlist
 	for i, trackID := range playlistTracks {
 		if trackID == currentTrackID {
-			// Consider "near end" only if we're playing the very last track
-			return i == len(playlistTracks)-1, nil
+			// Consider "near end" if we're within EndOfPlaylistThreshold tracks from the end
+			return i >= len(playlistTracks)-EndOfPlaylistThreshold, nil
 		}
 	}
 
 	return false, nil // Current track not found in playlist
 }
 
-// GetAutoPlayPreventionTrack gets a track ID from Spotify's prepared auto-play queue for prevention
+// GetAutoPlayPreventionTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
 func (c *Client) GetAutoPlayPreventionTrack(ctx context.Context) (string, error) {
 	if c.client == nil {
 		return "", fmt.Errorf("client not authenticated")
 	}
 
-	// Get the current queue to see what Spotify has prepared for auto-play
-	queue, err := c.client.GetQueue(ctx)
-	if err != nil {
-		return "", fmt.Errorf("failed to get current queue: %w", err)
-	}
-
-	c.logger.Debug("Checking queue for auto-play tracks",
-		zap.Int("queueLength", len(queue.Items)),
-		zap.String("currentlyPlaying", func() string {
-			if queue.CurrentlyPlaying.ID != "" {
-				return string(queue.CurrentlyPlaying.ID)
-			}
-			return DefaultStatusNone
-		}()))
-
-	// Get current playlist tracks to determine which queue items are auto-play
+	// Get current playlist tracks
 	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
 	if err != nil {
 		return "", fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
-	// Create a set for fast lookup of playlist tracks
-	playlistTrackSet := make(map[string]bool)
-	for _, trackID := range playlistTracks {
-		playlistTrackSet[trackID] = true
+	if len(playlistTracks) == 0 {
+		return "", fmt.Errorf("playlist is empty, cannot generate recommendations")
 	}
 
-	// Find all queued tracks that are NOT in our playlist (these would be auto-play)
-	var autoPlayTracks []spotify.FullTrack
-	for i := range queue.Items {
-		trackID := string(queue.Items[i].ID)
-		if !playlistTrackSet[trackID] {
-			autoPlayTracks = append(autoPlayTracks, queue.Items[i])
+	// Build seed tracks from recent playlist tracks
+	seedTrackIDs := c.buildSeedTracks(playlistTracks)
+	if len(seedTrackIDs) == 0 {
+		c.logger.Warn("No valid seed tracks found, using generic search")
+		return c.getLLMSearchFallbackTrack(ctx, nil, "no valid seed tracks")
+	}
+
+	c.logger.Info("Getting track recommendations using LLM-enhanced search",
+		zap.Int("seedTrackCount", len(seedTrackIDs)),
+		zap.Strings("seedTracks", func() []string {
+			var tracks []string
+			for _, id := range seedTrackIDs {
+				tracks = append(tracks, string(id))
+			}
+			return tracks
+		}()))
+
+	// Validate track IDs
+	validSeedTracks := c.validateSeedTracks(seedTrackIDs)
+	if len(validSeedTracks) == 0 {
+		c.logger.Warn("No valid seed tracks after validation, using generic search")
+		return c.getLLMSearchFallbackTrack(ctx, nil, "no valid seed tracks after validation")
+	}
+
+	// Convert track IDs to Track objects for LLM processing
+	seedTracks := c.getSeedTracksAsObjects(ctx, func() []string {
+		tracks := make([]string, len(validSeedTracks))
+		for i, id := range validSeedTracks {
+			tracks[i] = string(id)
+		}
+		return tracks
+	}())
+
+	// Use LLM to generate search query and find track
+	return c.getLLMSearchFallbackTrack(ctx, seedTracks, "primary LLM-enhanced search")
+}
+
+// buildSeedTracks extracts and validates seed tracks from playlist
+func (c *Client) buildSeedTracks(playlistTracks []string) []spotify.ID {
+	var seedTracks []spotify.ID
+	numSeeds := RecommendationSeedTracks
+	if len(playlistTracks) < numSeeds {
+		numSeeds = len(playlistTracks)
+	}
+
+	// Take the last numSeeds tracks from the playlist and validate them
+	for i := len(playlistTracks) - numSeeds; i < len(playlistTracks); i++ {
+		trackID := playlistTracks[i]
+		// Basic validation - Spotify track IDs should be 22 characters long
+		if len(trackID) == SpotifyIDLength {
+			seedTracks = append(seedTracks, spotify.ID(trackID))
+		} else {
+			c.logger.Warn("Skipping invalid track ID for recommendations seed",
+				zap.String("trackID", trackID),
+				zap.Int("length", len(trackID)))
 		}
 	}
 
-	if len(autoPlayTracks) > 0 {
-		// Pick a random track from the auto-play candidates
-		randomIndex := rand.IntN(len(autoPlayTracks)) //nolint:gosec // Non-cryptographic randomness is sufficient for song selection
-		selectedTrack := autoPlayTracks[randomIndex]
-		trackID := string(selectedTrack.ID)
+	return seedTracks
+}
 
-		c.logger.Info("Found auto-play tracks in queue, selecting random one",
-			zap.Int("totalAutoPlayTracks", len(autoPlayTracks)),
-			zap.String("selectedTrackID", trackID),
-			zap.String("title", selectedTrack.Name),
-			zap.String("artist", func() string {
-				if len(selectedTrack.Artists) > 0 {
-					return selectedTrack.Artists[0].Name
-				}
-				return "Unknown"
-			}()))
+// Deprecated: selectFirstNonDuplicateTrack was used with the deprecated recommendations API
 
-		c.logger.Info("Selected random auto-play prevention track",
-			zap.String("trackID", trackID))
-		return trackID, nil
+// validateSeedTracks filters and validates Spotify track IDs for use as recommendation seeds
+func (c *Client) validateSeedTracks(seedTracks []spotify.ID) []spotify.ID {
+	validSeedTracks := make([]spotify.ID, 0, len(seedTracks))
+	for i, trackID := range seedTracks {
+		trackIDStr := string(trackID)
+
+		// Check length
+		if len(trackIDStr) != SpotifyIDLength {
+			c.logger.Warn("Invalid seed track ID length, skipping",
+				zap.Int("index", i),
+				zap.String("trackID", trackIDStr),
+				zap.Int("length", len(trackIDStr)),
+				zap.Int("expected", SpotifyIDLength))
+			continue
+		}
+
+		// Check for valid characters (alphanumeric)
+		isValid := true
+		for _, char := range trackIDStr {
+			if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9')) {
+				isValid = false
+				break
+			}
+		}
+
+		if !isValid {
+			c.logger.Warn("Invalid seed track ID characters, skipping",
+				zap.Int("index", i),
+				zap.String("trackID", trackIDStr))
+			continue
+		}
+
+		validSeedTracks = append(validSeedTracks, trackID)
 	}
 
-	// If no auto-play tracks found in queue, fall back to search
-	c.logger.Info("No auto-play tracks found in queue, using search fallback")
+	if len(validSeedTracks) < len(seedTracks) {
+		c.logger.Warn("Some seed tracks were invalid and filtered out",
+			zap.Int("originalCount", len(seedTracks)),
+			zap.Int("validCount", len(validSeedTracks)))
+	}
 
-	tracks, err := c.SearchTrack(ctx, "popular music")
+	return validSeedTracks
+}
+
+// getLLMSearchFallbackTrack gets a track using LLM-generated playlist search query when recommendations fail
+func (c *Client) getLLMSearchFallbackTrack(ctx context.Context, seedTracks []core.Track, reason string) (string, error) {
+	// Get current playlist tracks to check for duplicates
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
 	if err != nil {
-		return "", fmt.Errorf("failed to search for fallback track: %w", err)
+		c.logger.Warn("Failed to get playlist tracks for duplicate check, proceeding without duplicate filtering", zap.Error(err))
+		playlistTracks = []string{} // Continue without duplicate checking
 	}
 
-	if len(tracks) == 0 {
-		return "", fmt.Errorf("no tracks found in search")
+	// Create set for fast duplicate lookup (includes both playlist tracks and seed tracks)
+	excludeSet := make(map[string]bool)
+	for _, trackID := range playlistTracks {
+		excludeSet[trackID] = true
+	}
+	for _, track := range seedTracks {
+		if track.ID != "" {
+			excludeSet[track.ID] = true
+		}
 	}
 
-	// Use the first search result
-	trackID := tracks[0].ID
-	c.logger.Info("Selected fallback track for auto-play prevention",
-		zap.String("trackID", trackID))
-	return trackID, nil
+	if c.llm == nil {
+		// Fallback to generic playlist search if no LLM available
+		playlists, searchErr := c.SearchPlaylist(ctx, "popular music playlist")
+		if searchErr != nil {
+			return "", fmt.Errorf("playlist search fallback failed (no LLM): %w", searchErr)
+		}
+
+		return c.selectRandomTrackFromPlaylistResults(ctx, playlists, excludeSet, reason, "generic playlist search")
+	}
+
+	// Generate playlist search query using LLM based on seed tracks
+	searchQuery, err := c.llm.GenerateSearchQuery(ctx, seedTracks)
+	if err != nil {
+		c.logger.Warn("Failed to generate LLM search query, using generic fallback",
+			zap.Error(err))
+		searchQuery = "popular music playlist"
+	} else if !strings.Contains(strings.ToLower(searchQuery), "playlist") {
+		// Ensure the query is for playlists
+		searchQuery += " playlist"
+	}
+
+	c.logger.Info("Generated LLM playlist search query for auto-play prevention",
+		zap.String("reason", reason),
+		zap.String("searchQuery", searchQuery),
+		zap.Int("seedTrackCount", len(seedTracks)))
+
+	playlists, err := c.SearchPlaylist(ctx, searchQuery)
+	if err != nil {
+		return "", fmt.Errorf("LLM playlist search failed: %w", err)
+	}
+
+	return c.selectRandomTrackFromPlaylistResults(ctx, playlists, excludeSet, reason, searchQuery)
+}
+
+// selectRandomTrackFromPlaylistResults selects the best matching playlist and picks a random track from it
+func (c *Client) selectRandomTrackFromPlaylistResults(
+	ctx context.Context,
+	playlists []core.Playlist,
+	excludeSet map[string]bool,
+	reason, searchQuery string,
+) (string, error) {
+	if len(playlists) == 0 {
+		return "", fmt.Errorf("no playlists found in search results")
+	}
+
+	// Try each playlist in order (first is best match) until we find a non-duplicate track
+	for i, playlist := range playlists {
+		c.logger.Debug("Attempting to get random track from playlist",
+			zap.String("playlistID", playlist.ID),
+			zap.String("playlistName", playlist.Name),
+			zap.String("owner", playlist.Owner),
+			zap.Int("trackCount", playlist.TrackCount),
+			zap.Int("position", i+1))
+
+		// Skip playlists that are too small
+		if playlist.TrackCount < 1 {
+			c.logger.Debug("Skipping empty playlist",
+				zap.String("playlistID", playlist.ID),
+				zap.String("playlistName", playlist.Name))
+			continue
+		}
+
+		track, err := c.GetRandomTrackFromPlaylist(ctx, playlist.ID, excludeSet)
+		if err != nil {
+			c.logger.Debug("Failed to get random track from playlist, trying next",
+				zap.String("playlistID", playlist.ID),
+				zap.String("playlistName", playlist.Name),
+				zap.Error(err))
+			continue
+		}
+
+		c.logger.Info("Selected random track from playlist for auto-play prevention",
+			zap.String("reason", reason),
+			zap.String("searchQuery", searchQuery),
+			zap.String("selectedPlaylistID", playlist.ID),
+			zap.String("selectedPlaylistName", playlist.Name),
+			zap.String("playlistOwner", playlist.Owner),
+			zap.Int("playlistTrackCount", playlist.TrackCount),
+			zap.String("selectedTrackID", track.ID),
+			zap.String("title", track.Title),
+			zap.String("artist", track.Artist),
+			zap.Int("playlistPosition", i+1),
+			zap.Int("totalPlaylists", len(playlists)))
+
+		return track.ID, nil
+	}
+
+	return "", fmt.Errorf("no suitable tracks found in any of the %d playlists", len(playlists))
+}
+
+// Deprecated: selectFirstNonDuplicateFromSearch was used with direct track search approach
+
+// getSeedTracksAsObjects converts track IDs to Track objects for LLM processing
+func (c *Client) getSeedTracksAsObjects(ctx context.Context, trackIDs []string) []core.Track {
+	var tracks []core.Track
+	for _, trackID := range trackIDs {
+		track, err := c.GetTrack(ctx, trackID)
+		if err != nil {
+			c.logger.Warn("Failed to get track details for seed",
+				zap.String("trackID", trackID),
+				zap.Error(err))
+			continue
+		}
+		tracks = append(tracks, *track)
+	}
+	return tracks
 }
 
 // AddAutoPlayPreventionTrack gets and adds a track from Spotify's auto-play queue (legacy method)

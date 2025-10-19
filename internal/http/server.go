@@ -215,38 +215,6 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) GetMetrics() *Metrics {
-	return s.metrics
-}
-
-func (s *Server) RecordMessage(msgType, status string) {
-	s.metrics.MessagesTotal.WithLabelValues(msgType, status).Inc()
-}
-
-func (s *Server) RecordAdd(source string) {
-	s.metrics.AddsTotal.WithLabelValues(source).Inc()
-}
-
-func (s *Server) RecordDuplicate() {
-	s.metrics.DuplicatesTotal.Inc()
-}
-
-func (s *Server) RecordLLMCall(provider, status string) {
-	s.metrics.LLMCallsTotal.WithLabelValues(provider, status).Inc()
-}
-
-func (s *Server) RecordError(component, errorType string) {
-	s.metrics.ErrorsTotal.WithLabelValues(component, errorType).Inc()
-}
-
-func (s *Server) RecordProcessingTime(msgType string, duration time.Duration) {
-	s.metrics.ProcessingTime.WithLabelValues(msgType).Observe(duration.Seconds())
-}
-
 func (s *Server) SetPlaylistSize(size int) {
 	s.metrics.PlaylistSize.Set(float64(size))
-}
-
-func (s *Server) SetActiveSessions(count int) {
-	s.metrics.ActiveSessions.Set(float64(count))
 }

@@ -41,10 +41,12 @@ type SongExtractResponse struct {
 }
 
 const (
-	defaultTemperature  = 0.1
-	maxTokensRanking    = 1000
-	maxTokensExtraction = 500
-	defaultModel        = "gpt-3.5-turbo"
+	defaultTemperature    = 0.1
+	maxTokensRanking      = 1000
+	maxTokensExtraction   = 500
+	maxTokensSearchQuery  = 50
+	maxSeedTracksInPrompt = 3
+	defaultModel          = "gpt-3.5-turbo"
 )
 
 func NewOpenAIClient(config *core.LLMConfig, logger *zap.Logger) (*OpenAIClient, error) {
@@ -307,6 +309,57 @@ func (o *OpenAIClient) IsPriorityRequest(ctx context.Context, text string) (bool
 		zap.String("reasoning", response.Reasoning))
 
 	return response.IsPriorityRequest, nil
+}
+
+func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []core.Track) (string, error) {
+	if len(seedTracks) == 0 {
+		return fallbackSearchQuery, nil
+	}
+
+	// Create a prompt describing the seed tracks
+	prompt := "Based on these recent songs in a playlist:\n"
+	for i, track := range seedTracks {
+		if i >= maxSeedTracksInPrompt {
+			break
+		}
+		prompt += fmt.Sprintf("- %s by %s", track.Title, track.Artist)
+		if track.Album != "" {
+			prompt += fmt.Sprintf(" (from %s)", track.Album)
+		}
+		prompt += "\n"
+	}
+	prompt += "\nGenerate a short, specific search query (3-6 words) to find similar music on Spotify. "
+	prompt += "Focus on genre, mood, or artist style. Respond with just the search query, no other text."
+
+	o.logger.Debug("Calling OpenAI for search query generation",
+		zap.Int("seedTracks", len(seedTracks)),
+		zap.String("model", o.config.Model))
+
+	// Use OpenAI to generate a search query
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a music expert helping to generate search queries for Spotify."),
+			openai.UserMessage(prompt),
+		},
+		Model:       o.getModel(),
+		Temperature: openai.Float(defaultTemperature),
+		MaxTokens:   openai.Int(maxTokensSearchQuery),
+	})
+	if err != nil {
+		o.logger.Warn("Failed to generate search query with OpenAI, using fallback", zap.Error(err))
+		return fallbackSearchQuery, nil
+	}
+
+	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
+		return fallbackSearchQuery, nil
+	}
+
+	searchQuery := strings.TrimSpace(resp.Choices[0].Message.Content)
+	o.logger.Debug("Generated search query with OpenAI",
+		zap.String("query", searchQuery),
+		zap.Int("seedTracks", len(seedTracks)))
+
+	return searchQuery, nil
 }
 
 func (o *OpenAIClient) getModel() shared.ChatModel {

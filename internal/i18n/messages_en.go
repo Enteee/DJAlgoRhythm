@@ -65,5 +65,5 @@ var englishMessages = map[string]string{
 	"bot.shutdown": "🎵 I am going offline. See you later!\n\n📀 All songs from this session: %s",
 
 	// Auto-play prevention messages
-	"bot.autoplay_prevention": "🤖 Playlist is running low! Added: %s - %s\n\n💭 Please add more songs to keep the music going!",
+	"bot.autoplay_prevention": "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
 }

@@ -180,3 +180,17 @@ func (o *OllamaClient) IsPriorityRequest(_ context.Context, _ string) (bool, err
 	// TODO: Implement Ollama priority detection when needed
 	return false, fmt.Errorf("ollama priority detection not yet implemented")
 }
+
+func (o *OllamaClient) GenerateSearchQuery(_ context.Context, seedTracks []core.Track) (string, error) {
+	// TODO: Implement Ollama search query generation when needed
+	if len(seedTracks) == 0 {
+		return fallbackSearchQuery, nil
+	}
+
+	// Simple fallback based on first track's artist for now
+	if len(seedTracks) > 0 && seedTracks[0].Artist != "" {
+		return fmt.Sprintf("%s similar music", seedTracks[0].Artist), nil
+	}
+
+	return fallbackSearchQuery, nil
+}

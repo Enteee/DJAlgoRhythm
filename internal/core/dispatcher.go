@@ -1388,7 +1388,7 @@ func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
 
 	// Send message to chat about the auto-added track
 	if groupID := d.getGroupID(); groupID != "" {
-		message := d.localizer.T("bot.autoplay_prevention", track.Artist, track.Title)
+		message := d.localizer.T("bot.autoplay_prevention", track.Artist, track.Title, track.URL)
 
 		if _, err := d.frontend.SendText(ctx, groupID, "", message); err != nil {
 			d.logger.Warn("Failed to send auto-play prevention message", zap.Error(err))

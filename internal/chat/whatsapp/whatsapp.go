@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -332,40 +331,6 @@ func (f *Frontend) handleReceiptEvent(_ *events.Receipt) {
 	// if evt.Type == types.ReceiptTypeReacted {
 	//     f.handleReactionEvent(evt)
 	// }
-}
-
-// handleReactionEvent processes reaction events
-// Currently unused but kept for future implementation
-//
-//nolint:unused
-func (f *Frontend) handleReactionEvent(evt *events.Receipt) {
-	// Find matching approval context based on message ID
-	var matchingApproval *approvalContext
-
-	f.approvalMutex.RLock()
-	for key, approval := range f.pendingApprovals {
-		// This is simplified - in practice you'd need to match the message ID properly
-		if strings.Contains(key, evt.MessageIDs[0]) && approval.originUserID == evt.SourceString() {
-			matchingApproval = approval
-			_ = key // Avoid unused variable warning
-			break
-		}
-	}
-	f.approvalMutex.RUnlock()
-
-	if matchingApproval == nil {
-		return
-	}
-
-	// Determine if this is approval or rejection
-	// Note: WhatsApp receipt events don't carry the actual reaction emoji
-	// This would need to be implemented differently in a real system
-	approved := true // Simplified - assume any reaction is approval
-
-	select {
-	case matchingApproval.approved <- approved:
-	case <-matchingApproval.cancelCtx.Done():
-	}
 }
 
 // stop closes the WhatsApp client connection

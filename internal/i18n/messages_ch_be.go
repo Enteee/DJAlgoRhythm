@@ -64,6 +64,6 @@ var berneseGermanMessages = map[string]string{
 	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!\n\n📀 Aui Lieder vo dere Session: %s",
 
 	// Auto-play prevention messages
-	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n\n" +
+	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
 		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
 }

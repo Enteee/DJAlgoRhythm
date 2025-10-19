@@ -65,3 +65,17 @@ func (a *AnthropicClient) IsPriorityRequest(_ context.Context, _ string) (bool, 
 	// TODO: Implement Anthropic priority detection when main integration is complete
 	return false, fmt.Errorf("anthropic priority detection not yet implemented")
 }
+
+func (a *AnthropicClient) GenerateSearchQuery(_ context.Context, seedTracks []core.Track) (string, error) {
+	// TODO: Implement Anthropic search query generation when main integration is complete
+	if len(seedTracks) == 0 {
+		return fallbackSearchQuery, nil
+	}
+
+	// Simple fallback based on first track's artist for now
+	if len(seedTracks) > 0 && seedTracks[0].Artist != "" {
+		return fmt.Sprintf("%s similar music", seedTracks[0].Artist), nil
+	}
+
+	return "popular music", nil
+}

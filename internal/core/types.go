@@ -36,6 +36,14 @@ type Track struct {
 	URL      string
 }
 
+type Playlist struct {
+	ID          string
+	Name        string
+	Description string
+	TrackCount  int
+	Owner       string
+}
+
 type LLMCandidate struct {
 	Track      Track
 	Confidence float64
@@ -126,6 +134,7 @@ type LLMProvider interface {
 	ExtractSongInfo(ctx context.Context, text string) (*Track, error)
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
+	GenerateSearchQuery(ctx context.Context, seedTracks []Track) (string, error)
 }
 
 type DedupStore interface {
