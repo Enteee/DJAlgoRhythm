@@ -408,7 +408,7 @@ func (c *Client) GetPlaylistPosition(ctx context.Context, trackID string) (int, 
 		return -1, fmt.Errorf("no target playlist set")
 	}
 
-	currentTrackID, err := c.getCurrentTrackID(ctx)
+	currentTrackID, err := c.GetCurrentTrackID(ctx)
 	if err != nil {
 		// No track playing, fallback to queue-based position
 		return c.GetQueuePosition(ctx, trackID)
@@ -417,8 +417,26 @@ func (c *Client) GetPlaylistPosition(ctx context.Context, trackID string) (int, 
 	return c.calculatePlaylistPosition(ctx, currentTrackID, trackID)
 }
 
-// getCurrentTrackID gets the currently playing track ID, returns error if no track is playing
-func (c *Client) getCurrentTrackID(ctx context.Context) (string, error) {
+// GetPlaylistPositionRelativeTo calculates the position of a track relative to a specific reference track in the playlist
+func (c *Client) GetPlaylistPositionRelativeTo(ctx context.Context, trackID, referenceTrackID string) (int, error) {
+	if c.client == nil {
+		return -1, fmt.Errorf("client not authenticated")
+	}
+
+	if c.targetPlaylist == "" {
+		return -1, fmt.Errorf("no target playlist set")
+	}
+
+	if referenceTrackID == "" {
+		// No reference track, fallback to queue-based position
+		return c.GetQueuePosition(ctx, trackID)
+	}
+
+	return c.calculatePlaylistPosition(ctx, referenceTrackID, trackID)
+}
+
+// GetCurrentTrackID gets the currently playing track ID, returns error if no track is playing
+func (c *Client) GetCurrentTrackID(ctx context.Context) (string, error) {
 	currently, err := c.client.PlayerCurrentlyPlaying(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get currently playing: %w", err)

@@ -50,6 +50,11 @@ type Dispatcher struct {
 	autoPlayReplacementCount int                                 // tracks how many replacements have been attempted in current workflow
 	autoPlayMutex            sync.RWMutex
 	autoPlayActive           bool // tracks if auto-play prevention is currently running
+
+	// Priority track tracking for queue position calculation
+	priorityTracks     map[string]bool // trackID -> true for tracks that were priority queued
+	lastRegularTrackID string          // last non-priority track that was playing (for queue position calculation)
+	queuePositionMutex sync.RWMutex
 }
 
 // NewDispatcher creates a new dispatcher with the provided chat frontend
@@ -72,6 +77,7 @@ func NewDispatcher(
 		messageContexts:         make(map[string]*MessageContext),
 		pendingAutoPlayTracks:   make(map[string]string),
 		pendingApprovalMessages: make(map[string]*autoPlayApprovalContext),
+		priorityTracks:          make(map[string]bool),
 	}
 
 	return d
@@ -750,6 +756,11 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	d.logger.Info("Priority track added to queue",
 		zap.String("trackID", trackID))
 
+	// Track this as a priority track for queue position calculation
+	d.queuePositionMutex.Lock()
+	d.priorityTracks[trackID] = true
+	d.queuePositionMutex.Unlock()
+
 	// Add to playlist at position 0 (top) for history/deduplication to avoid replaying later
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
 		if err := d.spotify.AddToPlaylistAtPosition(ctx, d.config.Spotify.PlaylistID, trackID, 0); err != nil {
@@ -1013,13 +1024,15 @@ func (d *Dispatcher) reactAddedWithMessage(
 	}
 
 	// React with thumbs up
-	if err := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsUpReaction); err != nil {
-		d.logger.Error("Failed to react with thumbs up", zap.Error(err))
+	if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsUpReaction); reactErr != nil {
+		d.logger.Error("Failed to react with thumbs up", zap.Error(reactErr))
 	}
 
-	// Try to get playlist position for added track (more reliable than queue position)
+	// Try to get playlist position for added track relative to last regular track (more reliable than queue position)
 	var replyText string
-	if playlistPosition, err := d.spotify.GetPlaylistPosition(ctx, trackID); err == nil && playlistPosition >= 0 {
+	lastRegularTrackID := d.getLastRegularTrackID()
+	playlistPosition, err := d.spotify.GetPlaylistPositionRelativeTo(ctx, trackID, lastRegularTrackID)
+	if err == nil && playlistPosition >= 0 {
 		// Track found in playlist - use message with queue position
 		var queueMessageKey string
 		switch messageKey {
@@ -1698,8 +1711,81 @@ func (d *Dispatcher) runPlaylistMonitoring(ctx context.Context) {
 	}
 }
 
+// updateLastRegularTrack tracks the currently playing track if it's not a priority track
+func (d *Dispatcher) updateLastRegularTrack(ctx context.Context) {
+	// Get currently playing track ID
+	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
+	if err != nil {
+		// No track playing or error getting track, keep the last known regular track
+		return
+	}
+
+	d.queuePositionMutex.Lock()
+	defer d.queuePositionMutex.Unlock()
+
+	// Check if this is a priority track
+	if d.priorityTracks[currentTrackID] {
+		// This is a priority track, don't update lastRegularTrackID
+		d.logger.Debug("Currently playing track is a priority track, not updating last regular track",
+			zap.String("currentTrackID", currentTrackID))
+		return
+	}
+
+	// This is a regular track, update the last regular track ID
+	if d.lastRegularTrackID != currentTrackID {
+		d.logger.Debug("Updating last regular track",
+			zap.String("previousRegularTrackID", d.lastRegularTrackID),
+			zap.String("newRegularTrackID", currentTrackID))
+		d.lastRegularTrackID = currentTrackID
+
+		// Clean up old priority tracks that are no longer relevant
+		d.cleanupOldPriorityTracks(ctx)
+	}
+}
+
+// getLastRegularTrackID returns the last non-priority track that was playing
+func (d *Dispatcher) getLastRegularTrackID() string {
+	d.queuePositionMutex.RLock()
+	defer d.queuePositionMutex.RUnlock()
+	return d.lastRegularTrackID
+}
+
+// cleanupOldPriorityTracks removes priority tracks that are no longer in the current playlist from tracking
+func (d *Dispatcher) cleanupOldPriorityTracks(ctx context.Context) {
+	// Get current playlist tracks to see which priority tracks are still relevant
+	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	if err != nil {
+		d.logger.Debug("Could not get playlist tracks for priority track cleanup", zap.Error(err))
+		return
+	}
+
+	// Create a set of current playlist tracks for fast lookup
+	playlistTrackSet := make(map[string]bool)
+	for _, trackID := range playlistTracks {
+		playlistTrackSet[trackID] = true
+	}
+
+	// Remove priority tracks that are no longer in the playlist
+	var removedCount int
+	for trackID := range d.priorityTracks {
+		if !playlistTrackSet[trackID] {
+			delete(d.priorityTracks, trackID)
+			removedCount++
+		}
+	}
+
+	if removedCount > 0 {
+		d.logger.Debug("Cleaned up old priority tracks",
+			zap.Int("removedCount", removedCount),
+			zap.Int("remainingPriorityTracks", len(d.priorityTracks)))
+	}
+}
+
 // checkPlaylistCompliance checks if we're playing from the correct playlist and sends warnings if needed
 func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
+	// Update last regular track for queue position calculation
+	d.updateLastRegularTrack(ctx)
+
 	// Check comprehensive playback compliance
 	compliance, err := d.spotify.CheckPlaybackCompliance(ctx)
 	if err != nil {

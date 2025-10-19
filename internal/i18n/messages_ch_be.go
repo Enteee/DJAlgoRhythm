@@ -62,7 +62,7 @@ var berneseGermanMessages = map[string]string{
 	// Auto-play prevention messages
 	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
 		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
-	"bot.autoplay_replacement":        "🔄 Ersatz-Track vorgeschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
+	"bot.autoplay_replacement":        "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
 	"bot.autoplay_replacement_failed": "❌ Ha kei Ersatz-Auto-Play-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
 
 	// Playlist monitoring messages
