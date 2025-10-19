@@ -41,7 +41,7 @@ func NewDispatcher(
 	dedup DedupStore,
 	logger *zap.Logger,
 ) *Dispatcher {
-	return &Dispatcher{
+	d := &Dispatcher{
 		config:          config,
 		frontend:        frontend,
 		spotify:         spotify,
@@ -51,6 +51,8 @@ func NewDispatcher(
 		localizer:       i18n.NewLocalizer(config.App.Language),
 		messageContexts: make(map[string]*MessageContext),
 	}
+
+	return d
 }
 
 // Start initializes the dispatcher and begins processing messages
@@ -74,6 +76,9 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 
 	// Send startup message to the group
 	d.sendStartupMessage(ctx)
+
+	// Start auto-play prevention monitoring
+	go d.runAutoPlayPrevention(ctx)
 
 	// Begin listening for messages
 	return d.frontend.Listen(ctx, d.handleMessage)
@@ -703,7 +708,7 @@ func (d *Dispatcher) isUserAdmin(ctx context.Context, msg *chat.Message) bool {
 func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.State = StateAddToPlaylist
 
-	// First, add to queue for priority playback (will play next)
+	// Add priority track to queue (will play next)
 	queueErr := d.spotify.AddToQueue(ctx, trackID)
 	if queueErr != nil {
 		d.logger.Warn("Failed to add priority track to queue, proceeding with playlist only",
@@ -969,6 +974,7 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 		}
 
 		d.dedup.Add(trackID)
+
 		if wasAdminApproved {
 			d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
 		} else {
@@ -1300,4 +1306,97 @@ func (d *Dispatcher) addApprovalReactions(ctx context.Context, chatID, msgID str
 		zap.String("chat_id", chatID),
 		zap.String("message_id", msgID),
 		zap.Int("community_threshold", communityApprovalThreshold))
+}
+
+const (
+	autoPlayCheckInterval = 30 * time.Second
+)
+
+// runAutoPlayPrevention monitors for playlist end and adds tracks to prevent auto-play
+func (d *Dispatcher) runAutoPlayPrevention(ctx context.Context) {
+	d.logger.Info("Starting auto-play prevention monitoring")
+
+	ticker := time.NewTicker(autoPlayCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			d.logger.Info("Auto-play prevention monitoring stopped")
+			return
+		case <-ticker.C:
+			d.checkAndPreventAutoPlay(ctx)
+		}
+	}
+}
+
+// checkAndPreventAutoPlay checks if we're near the end of the playlist and adds a track if needed
+func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
+	// Check if we're near the end of the playlist
+	nearEnd, err := d.spotify.IsNearPlaylistEnd(ctx)
+	if err != nil {
+		d.logger.Debug("Could not check playlist end status", zap.Error(err))
+		return
+	}
+
+	if !nearEnd {
+		return // Not near the end, nothing to do
+	}
+
+	d.logger.Info("Near end of playlist detected, adding auto-play prevention track")
+
+	// Get a track from auto-play recommendations
+	trackID, err := d.spotify.GetAutoPlayPreventionTrack(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to get auto-play prevention track", zap.Error(err))
+		return
+	}
+
+	// Add track to playlist with retry logic (same as user requests)
+	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
+		err = d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID)
+		if err != nil {
+			d.logger.Error("Failed to add auto-play prevention track to playlist",
+				zap.String("trackID", trackID),
+				zap.Int("retry", retry),
+				zap.Error(err))
+
+			if retry == d.config.App.MaxRetries-1 {
+				d.logger.Warn("Failed to add auto-play prevention track after all retries", zap.Error(err))
+				return
+			}
+
+			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
+			continue
+		}
+
+		d.logger.Info("Successfully added auto-play prevention track",
+			zap.String("trackID", trackID),
+			zap.Int("attempt", retry+1))
+		break
+	}
+
+	// Add to dedup store
+	d.dedup.Add(trackID)
+
+	// Get track info for the message
+	track, err := d.spotify.GetTrack(ctx, trackID)
+	if err != nil {
+		d.logger.Warn("Could not get track info for auto-play prevention message", zap.Error(err))
+		track = &Track{Title: "Unknown", Artist: "Unknown"}
+	}
+
+	// Send message to chat about the auto-added track
+	if groupID := d.getGroupID(); groupID != "" {
+		message := d.localizer.T("bot.autoplay_prevention", track.Artist, track.Title)
+
+		if _, err := d.frontend.SendText(ctx, groupID, "", message); err != nil {
+			d.logger.Warn("Failed to send auto-play prevention message", zap.Error(err))
+		} else {
+			d.logger.Info("Sent auto-play prevention message",
+				zap.String("trackID", trackID),
+				zap.String("artist", track.Artist),
+				zap.String("title", track.Title))
+		}
+	}
 }

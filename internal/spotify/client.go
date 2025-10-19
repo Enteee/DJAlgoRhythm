@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -43,6 +44,22 @@ const (
 	PlaylistCacheDuration = 5 * time.Minute
 	// PlaybackStartDelay is the delay to wait for playback to start
 	PlaybackStartDelay = 500 * time.Millisecond
+	// SkipDelay is the delay between track skips to avoid rate limiting
+	SkipDelay = 100 * time.Millisecond
+
+	// RepeatStateTrack represents the "track" repeat state
+	RepeatStateTrack = "track"
+	// RepeatStateOff represents the "off" repeat state
+	RepeatStateOff = "off"
+	// RepeatStateContext represents the "context" repeat state
+	RepeatStateContext = "context"
+	// DefaultStatusNone represents the default "none" status
+	DefaultStatusNone = "none"
+
+	// QueueClearDelay is the delay to wait for queue clearing
+	QueueClearDelay = 500 * time.Millisecond
+	// TrackAddDelay is the delay between track additions to avoid rate limits
+	TrackAddDelay = 100 * time.Millisecond
 )
 
 var (
@@ -441,6 +458,84 @@ func (c *Client) getTrackPositionInPlaylist(ctx context.Context, trackID string)
 	return -1, fmt.Errorf("track %s not found in playlist", trackID)
 }
 
+// verifyPlaybackState checks and logs the current playback state after recovery
+func (c *Client) verifyPlaybackState(ctx context.Context) error {
+	state, err := c.client.PlayerState(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	if state == nil {
+		c.logger.Warn("No current playback after recovery")
+		return nil
+	}
+
+	contextURI := ""
+	contextType := ""
+	if state.PlaybackContext.URI != "" {
+		contextURI = string(state.PlaybackContext.URI)
+		contextType = state.PlaybackContext.Type
+	}
+
+	trackID := ""
+	trackName := ""
+	if state.Item != nil {
+		trackID = string(state.Item.ID)
+		trackName = state.Item.Name
+	}
+
+	c.logger.Info("Playback state after recovery",
+		zap.String("contextURI", contextURI),
+		zap.String("contextType", contextType),
+		zap.String("trackID", trackID),
+		zap.String("trackName", trackName),
+		zap.Bool("isPlaying", state.Playing),
+		zap.Bool("shuffleState", state.ShuffleState),
+		zap.String("repeatState", state.RepeatState))
+
+	// Check if shuffle is enabled and log a warning
+	if state.ShuffleState {
+		c.logger.Warn("Shuffle is enabled - this may prevent new tracks from being added to queue in order")
+	}
+
+	// Check repeat state
+	if state.RepeatState != "off" {
+		c.logger.Info("Repeat mode is active", zap.String("repeatState", state.RepeatState))
+	}
+
+	return nil
+}
+
+// ensureOptimalPlaybackSettings ensures shuffle is off and repeat is appropriate for queueing
+func (c *Client) ensureOptimalPlaybackSettings(ctx context.Context) error {
+	state, err := c.client.PlayerState(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	if state == nil {
+		return nil // No playback to adjust
+	}
+
+	// Disable shuffle if it's enabled (shuffle prevents proper queueing)
+	if state.ShuffleState {
+		c.logger.Info("Disabling shuffle to ensure proper track queueing")
+		if err := c.client.Shuffle(ctx, false); err != nil {
+			c.logger.Warn("Failed to disable shuffle", zap.Error(err))
+		}
+	}
+
+	// Set repeat to context (playlist) if it's not already optimal
+	if state.RepeatState == RepeatStateTrack {
+		c.logger.Info("Changing repeat from track to context for better queueing")
+		if err := c.client.Repeat(ctx, RepeatStateContext); err != nil {
+			c.logger.Warn("Failed to set repeat to context", zap.Error(err))
+		}
+	}
+
+	return nil
+}
+
 // RecoverFromAutoPlay returns playback to our target playlist
 // Uses fade-out strategy: add track to playlist, fade out, start new track, restore volume
 func (c *Client) RecoverFromAutoPlay(ctx context.Context, newTrackID string) error {
@@ -456,68 +551,430 @@ func (c *Client) RecoverFromAutoPlay(ctx context.Context, newTrackID string) err
 		zap.String("trackID", newTrackID),
 		zap.String("targetPlaylist", c.targetPlaylist))
 
-	// Step 0: Add track to playlist first
-	if err := c.AddToPlaylist(ctx, c.targetPlaylist, newTrackID); err != nil {
-		return fmt.Errorf("failed to add track to playlist during recovery: %w", err)
+	// Step 1: Add track to playlist with snapshot tracking
+	if err := c.addTrackWithSnapshotTracking(ctx, newTrackID); err != nil {
+		return fmt.Errorf("failed to add track during recovery: %w", err)
 	}
+
+	// Step 2: Prepare for playback switch
+	c.preparePlaybackSwitch(ctx)
+
+	// Step 3: Switch to playlist playback
+	if err := c.switchToPlaylistPlayback(ctx, newTrackID); err != nil {
+		return fmt.Errorf("failed to switch to playlist playback: %w", err)
+	}
+
+	// Step 4: Finalize recovery
+	c.finalizeRecovery(ctx)
+
+	c.logger.Info("Auto-play recovery completed successfully")
+	return nil
+}
+
+// addTrackWithSnapshotTracking adds track to playlist and tracks snapshot changes
+func (c *Client) addTrackWithSnapshotTracking(ctx context.Context, trackID string) error {
+	c.logger.Info("Getting current playlist state for snapshot tracking")
+
+	// Get current playlist to see the snapshot before adding
+	currentPlaylist, err := c.client.GetPlaylist(ctx, spotify.ID(c.targetPlaylist))
+	if err != nil {
+		c.logger.Warn("Could not get current playlist state", zap.Error(err))
+	} else {
+		c.logger.Info("Current playlist state",
+			zap.String("snapshotID", currentPlaylist.SnapshotID),
+			zap.Int("trackCount", currentPlaylist.Tracks.Total))
+	}
+
+	// Add track and capture new snapshot ID
+	c.logger.Info("Adding track to playlist with snapshot tracking")
+	newSnapshotID, err := c.client.AddTracksToPlaylist(ctx, spotify.ID(c.targetPlaylist), spotify.ID(trackID))
+	if err != nil {
+		return fmt.Errorf("failed to add track to playlist: %w", err)
+	}
+
+	c.logger.Info("Track added to playlist",
+		zap.String("newSnapshotID", newSnapshotID),
+		zap.String("trackID", trackID))
+
+	// Invalidate our cache since we just added a track
+	c.invalidatePlaylistCache()
 
 	// Give Spotify API time to update the playlist
 	time.Sleep(PlaybackStartDelay)
 
-	// Step 1: Get current volume from device
-	if err := c.getCurrentVolume(ctx); err != nil {
-		c.logger.Warn("Failed to get current volume, using default", zap.Error(err))
+	// Verify playlist state after adding
+	c.verifyPlaylistUpdate(ctx, currentPlaylist)
+	return nil
+}
+
+// preparePlaybackSwitch prepares for switching playback (volume, fade out)
+func (c *Client) preparePlaybackSwitch(ctx context.Context) {
+	// Get current volume from device
+	if volumeErr := c.getCurrentVolume(ctx); volumeErr != nil {
+		c.logger.Warn("Failed to get current volume, using default", zap.Error(volumeErr))
 		c.lastKnownVolume = 50 // Default fallback
 	}
 
-	// Step 2: Fade out current track
+	// Fade out current track
 	c.fadeOut(ctx)
+}
 
-	// Step 3: Start new track directly in playlist context
-	// First get the track position in the playlist
-	trackPosition, err := c.getTrackPositionInPlaylist(ctx, newTrackID)
+// switchToPlaylistPlayback switches playback to the target track in the playlist
+func (c *Client) switchToPlaylistPlayback(ctx context.Context, trackID string) error {
+	// Find the track position in the playlist first
+	trackPosition, err := c.getTrackPositionInPlaylist(ctx, trackID)
 	if err != nil {
-		c.logger.Warn("Failed to find track position, trying direct track play", zap.Error(err))
-		// Fallback: play track directly
-		trackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", newTrackID))
-		trackPlayOpts := &spotify.PlayOptions{
-			URIs: []spotify.URI{trackURI},
+		c.logger.Warn("Could not find track position, falling back to direct track play", zap.Error(err))
+		return c.playTrackDirectly(ctx, trackID)
+	}
+
+	// Play playlist starting at the specific track position
+	playlistURI := spotify.URI(fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist))
+	playOpts := &spotify.PlayOptions{
+		PlaybackContext: &playlistURI,
+		PlaybackOffset: &spotify.PlaybackOffset{
+			Position: &trackPosition,
+		},
+	}
+
+	c.logger.Info("Playing playlist at track position",
+		zap.String("trackID", trackID),
+		zap.String("playlistURI", string(playlistURI)),
+		zap.Int("position", trackPosition))
+
+	if err := c.client.PlayOpt(ctx, playOpts); err != nil {
+		c.logger.Warn("Failed to play playlist at position, falling back to direct track", zap.Error(err))
+		return c.playTrackDirectly(ctx, trackID)
+	}
+
+	c.logger.Info("Successfully started playlist at track position")
+	return nil
+}
+
+// playTrackDirectly plays a track directly as fallback
+func (c *Client) playTrackDirectly(ctx context.Context, trackID string) error {
+	trackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", trackID))
+	fallbackOpts := &spotify.PlayOptions{
+		URIs: []spotify.URI{trackURI},
+	}
+	if err := c.client.PlayOpt(ctx, fallbackOpts); err != nil {
+		return fmt.Errorf("failed to start track playback: %w", err)
+	}
+	c.logger.Info("Started direct track playback as fallback")
+	return nil
+}
+
+// verifyPlaylistUpdate verifies that the playlist was updated correctly
+func (c *Client) verifyPlaylistUpdate(ctx context.Context, currentPlaylist *spotify.FullPlaylist) {
+	updatedPlaylist, err := c.client.GetPlaylist(ctx, spotify.ID(c.targetPlaylist))
+	if err != nil {
+		c.logger.Warn("Could not get updated playlist state", zap.Error(err))
+		return
+	}
+
+	snapshotChanged := false
+	if currentPlaylist != nil {
+		snapshotChanged = updatedPlaylist.SnapshotID != currentPlaylist.SnapshotID
+	}
+	c.logger.Info("Updated playlist state after adding track",
+		zap.String("snapshotID", updatedPlaylist.SnapshotID),
+		zap.Int("trackCount", updatedPlaylist.Tracks.Total),
+		zap.Bool("snapshotChanged", snapshotChanged))
+}
+
+// finalizeRecovery completes the recovery process
+func (c *Client) finalizeRecovery(ctx context.Context) {
+	// Ensure optimal playback settings for proper queueing
+	if err := c.ensureOptimalPlaybackSettings(ctx); err != nil {
+		c.logger.Warn("Could not ensure optimal playback settings", zap.Error(err))
+	}
+
+	// Restore volume
+	c.fadeIn(ctx)
+
+	// Skip queue check during recovery since track is currently playing
+	c.logger.Info("Skipping queue check during auto-play recovery since track is now playing")
+
+	// Verify the final playback state
+	if err := c.verifyPlaybackState(ctx); err != nil {
+		c.logger.Warn("Could not verify playback state after recovery", zap.Error(err))
+	}
+}
+
+// EnsureTrackInQueue checks if a track is in the queue and adds it if not
+// This should be called after adding tracks to playlist to ensure proper queueing
+func (c *Client) EnsureTrackInQueue(ctx context.Context, trackID string) error {
+	c.logger.Info("Checking if track is in queue", zap.String("trackID", trackID))
+
+	queuePosition, err := c.GetQueuePosition(ctx, trackID)
+	if err != nil {
+		c.logger.Warn("Could not check queue position", zap.Error(err))
+		return err
+	}
+
+	if queuePosition == -1 {
+		c.logger.Info("Track not found in queue, adding manually", zap.String("trackID", trackID))
+
+		// Add track to queue manually
+		if queueErr := c.AddToQueue(ctx, trackID); queueErr != nil {
+			c.logger.Warn("Failed to add track to queue manually", zap.Error(queueErr))
+			return queueErr
 		}
-		if trackErr := c.client.PlayOpt(ctx, trackPlayOpts); trackErr != nil {
-			return fmt.Errorf("failed to start track playback: %w", trackErr)
+
+		c.logger.Info("Successfully added track to queue manually")
+
+		// Check queue position again after manual addition
+		time.Sleep(1 * time.Second) // Give API time to update
+		newQueuePosition, checkErr := c.GetQueuePosition(ctx, trackID)
+		if checkErr != nil {
+			c.logger.Warn("Could not verify queue position after manual addition", zap.Error(checkErr))
+		} else {
+			c.logger.Info("Track queue status after manual addition",
+				zap.String("trackID", trackID),
+				zap.Int("queuePosition", newQueuePosition))
 		}
 	} else {
-		// Start playlist directly at the new track position
-		playlistURI := spotify.URI(fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist))
-		playOpts := &spotify.PlayOptions{
-			PlaybackContext: &playlistURI,
-			PlaybackOffset: &spotify.PlaybackOffset{
-				Position: &trackPosition,
-			},
-		}
+		c.logger.Info("Track found in queue",
+			zap.String("trackID", trackID),
+			zap.Int("queuePosition", queuePosition))
+	}
 
-		playErr := c.client.PlayOpt(ctx, playOpts)
-		if playErr != nil {
-			c.logger.Warn("Failed to start playlist at track position, trying direct track play", zap.Error(playErr))
-			// Fallback: play track directly
-			trackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", newTrackID))
-			trackPlayOpts := &spotify.PlayOptions{
-				URIs: []spotify.URI{trackURI},
-			}
-			if trackErr := c.client.PlayOpt(ctx, trackPlayOpts); trackErr != nil {
-				return fmt.Errorf("failed to start track playback: %w", trackErr)
-			}
-		} else {
-			c.logger.Info("Successfully started playlist at new track position",
-				zap.String("trackID", newTrackID),
-				zap.Int("position", trackPosition))
+	return nil
+}
+
+// IsNearPlaylistEnd checks if we're playing the last track of the playlist
+// Returns true if currently playing the very last track
+func (c *Client) IsNearPlaylistEnd(ctx context.Context) (bool, error) {
+	if c.client == nil {
+		return false, fmt.Errorf("client not authenticated")
+	}
+
+	if c.targetPlaylist == "" {
+		return false, fmt.Errorf("no target playlist set")
+	}
+
+	// Get current playback state
+	state, err := c.client.PlayerState(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	if state == nil || state.Item == nil {
+		return false, nil
+	}
+
+	// Check if we're playing from our target playlist
+	playlistURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
+	if state.PlaybackContext.URI != spotify.URI(playlistURI) {
+		return false, nil // Not playing from our playlist
+	}
+
+	// Get current track ID and playlist tracks
+	currentTrackID := string(state.Item.ID)
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return false, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	// Find current track position in playlist
+	for i, trackID := range playlistTracks {
+		if trackID == currentTrackID {
+			// Consider "near end" only if we're playing the very last track
+			return i == len(playlistTracks)-1, nil
 		}
 	}
 
-	// Step 4: Restore volume
-	c.fadeIn(ctx)
+	return false, nil // Current track not found in playlist
+}
 
-	c.logger.Info("Auto-play recovery completed successfully")
+// GetAutoPlayPreventionTrack gets a track ID from Spotify's prepared auto-play queue for prevention
+func (c *Client) GetAutoPlayPreventionTrack(ctx context.Context) (string, error) {
+	if c.client == nil {
+		return "", fmt.Errorf("client not authenticated")
+	}
+
+	// Get the current queue to see what Spotify has prepared for auto-play
+	queue, err := c.client.GetQueue(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get current queue: %w", err)
+	}
+
+	c.logger.Debug("Checking queue for auto-play tracks",
+		zap.Int("queueLength", len(queue.Items)),
+		zap.String("currentlyPlaying", func() string {
+			if queue.CurrentlyPlaying.ID != "" {
+				return string(queue.CurrentlyPlaying.ID)
+			}
+			return DefaultStatusNone
+		}()))
+
+	// Get current playlist tracks to determine which queue items are auto-play
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return "", fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	// Create a set for fast lookup of playlist tracks
+	playlistTrackSet := make(map[string]bool)
+	for _, trackID := range playlistTracks {
+		playlistTrackSet[trackID] = true
+	}
+
+	// Find all queued tracks that are NOT in our playlist (these would be auto-play)
+	var autoPlayTracks []spotify.FullTrack
+	for i := range queue.Items {
+		trackID := string(queue.Items[i].ID)
+		if !playlistTrackSet[trackID] {
+			autoPlayTracks = append(autoPlayTracks, queue.Items[i])
+		}
+	}
+
+	if len(autoPlayTracks) > 0 {
+		// Pick a random track from the auto-play candidates
+		randomIndex := rand.IntN(len(autoPlayTracks)) //nolint:gosec // Non-cryptographic randomness is sufficient for song selection
+		selectedTrack := autoPlayTracks[randomIndex]
+		trackID := string(selectedTrack.ID)
+
+		c.logger.Info("Found auto-play tracks in queue, selecting random one",
+			zap.Int("totalAutoPlayTracks", len(autoPlayTracks)),
+			zap.String("selectedTrackID", trackID),
+			zap.String("title", selectedTrack.Name),
+			zap.String("artist", func() string {
+				if len(selectedTrack.Artists) > 0 {
+					return selectedTrack.Artists[0].Name
+				}
+				return "Unknown"
+			}()))
+
+		c.logger.Info("Selected random auto-play prevention track",
+			zap.String("trackID", trackID))
+		return trackID, nil
+	}
+
+	// If no auto-play tracks found in queue, fall back to search
+	c.logger.Info("No auto-play tracks found in queue, using search fallback")
+
+	tracks, err := c.SearchTrack(ctx, "popular music")
+	if err != nil {
+		return "", fmt.Errorf("failed to search for fallback track: %w", err)
+	}
+
+	if len(tracks) == 0 {
+		return "", fmt.Errorf("no tracks found in search")
+	}
+
+	// Use the first search result
+	trackID := tracks[0].ID
+	c.logger.Info("Selected fallback track for auto-play prevention",
+		zap.String("trackID", trackID))
+	return trackID, nil
+}
+
+// AddAutoPlayPreventionTrack gets and adds a track from Spotify's auto-play queue (legacy method)
+func (c *Client) AddAutoPlayPreventionTrack(ctx context.Context) (string, error) {
+	trackID, err := c.GetAutoPlayPreventionTrack(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if err := c.AddToPlaylist(ctx, c.targetPlaylist, trackID); err != nil {
+		return "", fmt.Errorf("failed to add auto-play prevention track to playlist: %w", err)
+	}
+
+	c.logger.Info("Added auto-play prevention track to playlist",
+		zap.String("trackID", trackID))
+	return trackID, nil
+}
+
+// RebuildQueueWithPriority clears the current queue and rebuilds it with the priority track first
+// This is needed because Spotify API doesn't support queue reordering
+func (c *Client) RebuildQueueWithPriority(ctx context.Context, priorityTrackID string) error {
+	if c.client == nil {
+		return fmt.Errorf("client not authenticated")
+	}
+
+	c.logger.Info("Rebuilding queue with priority track", zap.String("priorityTrackID", priorityTrackID))
+
+	// Step 1: Get current queue to preserve other tracks
+	currentQueue, err := c.client.GetQueue(ctx)
+	if err != nil {
+		c.logger.Warn("Could not get current queue for rebuilding", zap.Error(err))
+		// Continue anyway - just add priority track to current queue
+		return c.AddToQueue(ctx, priorityTrackID)
+	}
+
+	// Extract track IDs from current queue (excluding currently playing track)
+	var queuedTrackIDs []string
+	for i := range currentQueue.Items {
+		if currentQueue.Items[i].ID != "" {
+			queuedTrackIDs = append(queuedTrackIDs, string(currentQueue.Items[i].ID))
+		}
+	}
+
+	c.logger.Info("Current queue state before rebuild",
+		zap.Int("queueLength", len(queuedTrackIDs)),
+		zap.String("currentlyPlaying", func() string {
+			if currentQueue.CurrentlyPlaying.ID != "" {
+				return string(currentQueue.CurrentlyPlaying.ID)
+			}
+			return DefaultStatusNone
+		}()))
+
+	// Step 2: Start playing current track again to clear the queue
+	// This is a workaround since there's no direct "clear queue" API
+	if currentQueue.CurrentlyPlaying.ID != "" {
+		currentTrackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", currentQueue.CurrentlyPlaying.ID))
+		playOpts := &spotify.PlayOptions{
+			URIs: []spotify.URI{currentTrackURI},
+		}
+
+		if err := c.client.PlayOpt(ctx, playOpts); err != nil {
+			c.logger.Warn("Failed to restart current track for queue clearing", zap.Error(err))
+			// Fallback to just adding priority track to existing queue
+			return c.AddToQueue(ctx, priorityTrackID)
+		}
+
+		c.logger.Info("Restarted current track to clear queue")
+		time.Sleep(QueueClearDelay) // Give API time to clear queue
+	}
+
+	// Step 3: Add priority track first
+	if err := c.AddToQueue(ctx, priorityTrackID); err != nil {
+		return fmt.Errorf("failed to add priority track to cleared queue: %w", err)
+	}
+
+	c.logger.Info("Added priority track to queue", zap.String("trackID", priorityTrackID))
+
+	// Step 4: Re-add other tracks that were in the original queue
+	for i, trackID := range queuedTrackIDs {
+		// Skip the priority track if it was already in the queue
+		if trackID == priorityTrackID {
+			c.logger.Debug("Skipping priority track (already added)", zap.String("trackID", trackID))
+			continue
+		}
+
+		if err := c.AddToQueue(ctx, trackID); err != nil {
+			c.logger.Warn("Failed to re-add track to rebuilt queue",
+				zap.String("trackID", trackID),
+				zap.Int("position", i),
+				zap.Error(err))
+			// Continue with other tracks
+		} else {
+			c.logger.Debug("Re-added track to queue",
+				zap.String("trackID", trackID),
+				zap.Int("originalPosition", i))
+		}
+
+		// Small delay to avoid API rate limits
+		if i < len(queuedTrackIDs)-1 {
+			time.Sleep(TrackAddDelay)
+		}
+	}
+
+	c.logger.Info("Queue rebuild completed",
+		zap.String("priorityTrackID", priorityTrackID),
+		zap.Int("readdedTracks", len(queuedTrackIDs)))
+
 	return nil
 }
 

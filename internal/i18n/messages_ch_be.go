@@ -60,6 +60,10 @@ var berneseGermanMessages = map[string]string{
 	"success.community_approved": "🎉 Vo dr Community guetgeheisse mit %d 👍 Reaktione!",
 
 	// Bot status messages
-	"bot.startup":  "🎵 Ig bi jetzt online und bereit für öii Musigwünsch!\n\n📀 Playlist: %s",
+	"bot.startup":  "🎵 Ig bi jetzt online und bereit för öii Musigwünsch!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!\n\n📀 Aui Lieder vo dere Session: %s",
+
+	// Auto-play prevention messages
+	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n\n" +
+		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
 }
