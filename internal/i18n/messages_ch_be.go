@@ -26,7 +26,6 @@ var berneseGermanMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required":          "⏳ Admin-Freigab nötig. Wart bis dr Gruppe-Admin zueseit...",
 	"admin.approval_required_enhanced": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\nWart uf Admin-Freigab...",
 	"admin.approval_required_community": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\n" +
 		"Wart uf Admin-Freigab oder reagier mit 👍 unde we das o guet fingsch (%d+ Reaktione für Community-Freigab nötig).",
@@ -55,9 +54,6 @@ var berneseGermanMessages = map[string]string{
 	// Button texts
 	"button.confirm":  "👍 Ja, das isch's",
 	"button.not_this": "👎 Nö, nid das",
-
-	// Success messages for community approval
-	"success.community_approved": "🎉 Vo dr Community guetgeheisse mit %d 👍 Reaktione!",
 
 	// Bot status messages
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit för öii Musigwünsch!\n\n📀 Playlist: %s",
@@ -92,6 +88,5 @@ var berneseGermanMessages = map[string]string{
 	"button.autoplay_deny":               "❌ Ou nei",
 	"callback.autoplay_approved":         "✅ Auto-Play-Track isch guetgeheisse worde",
 	"callback.autoplay_denied":           "❌ Auto-Play-Track isch abglehnt worde",
-	"callback.autoplay_expired":          "Die Auto-Play-Freigab isch abgloffe.",
 	"bot.autoplay_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
 }

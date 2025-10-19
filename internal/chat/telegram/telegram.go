@@ -856,9 +856,9 @@ func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, updat
 	// Answer the callback query immediately
 	var responseText string
 	if approved {
-		responseText = f.localizer.T("autoplay.callback_approved")
+		responseText = f.localizer.T("callback.autoplay_approved")
 	} else {
-		responseText = f.localizer.T("autoplay.callback_denied")
+		responseText = f.localizer.T("callback.autoplay_denied")
 	}
 
 	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{

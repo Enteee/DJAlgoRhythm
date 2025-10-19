@@ -26,7 +26,6 @@ var englishMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required":          "⏳ Admin approval required. Waiting for group admin approval...",
 	"admin.approval_required_enhanced": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\nWaiting for admin approval...",
 	"admin.approval_required_community": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\n" +
 		"Waiting for admin approval or react with 👍 below if you like this as well (%d+ reactions needed for community approval).",
@@ -56,9 +55,6 @@ var englishMessages = map[string]string{
 	// Button texts
 	"button.confirm":  "👍 Confirm",
 	"button.not_this": "👎 Not this",
-
-	// Success messages for community approval
-	"success.community_approved": "🎉 Community approved via %d 👍 reactions!",
 
 	// Bot status messages
 	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",
@@ -92,6 +88,5 @@ var englishMessages = map[string]string{
 	"button.autoplay_deny":               "❌ Deny",
 	"callback.autoplay_approved":         "✅ Auto-play track approved",
 	"callback.autoplay_denied":           "❌ Auto-play track denied",
-	"callback.autoplay_expired":          "This auto-play approval has expired.",
 	"bot.autoplay_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
 }
