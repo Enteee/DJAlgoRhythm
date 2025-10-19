@@ -50,6 +50,18 @@ type LLMCandidate struct {
 	Reasoning  string
 }
 
+type PlaybackCompliance struct {
+	IsCorrectPlaylist bool
+	IsCorrectShuffle  bool
+	IsCorrectRepeat   bool
+	Issues            []string
+}
+
+// IsOptimalForAutoDJ returns true if all settings are optimal for auto-DJing
+func (pc PlaybackCompliance) IsOptimalForAutoDJ() bool {
+	return pc.IsCorrectPlaylist && pc.IsCorrectShuffle && pc.IsCorrectRepeat
+}
+
 type MessageState int
 
 const (
@@ -127,6 +139,7 @@ type SpotifyClient interface {
 	AddAutoPlayPreventionTrack(ctx context.Context) (string, error)
 	// Playlist monitoring
 	IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error)
+	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
 }
 
 type LLMProvider interface {

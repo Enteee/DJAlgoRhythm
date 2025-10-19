@@ -71,4 +71,17 @@ var berneseGermanMessages = map[string]string{
 	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playlist!\n\n" +
 		"🎵 Bitte wächsle zrügg zu dr richtige Playlist: %s\n\n" +
 		"💡 Klick uf de Link obe zum schnäu zrügg zu der Playliste z cho.",
+	"bot.shuffle_warning": "⚠️ Warnig: Shuffle isch igschalte!\n\n" +
+		"🔀 Bitte schalt Shuffle us für optimals Auto-DJing. " +
+		"Shuffle stört d Track-Reihefolg und s Queueing.",
+	"bot.repeat_warning": "⚠️ Warnig: Repeat isch uf Track gstellt!\n\n" +
+		"🔁 Bitte ändere d Repeat-Modus uf 'us' oder 'Playlist' fürs Auto-DJing. " +
+		"Track-Repeat verhinderet Playlist-Fortschritt.",
+	"bot.playback_compliance_warning": "⚠️ Warnig: Playback-Iistellige müesse agpasst werde!\n\n" +
+		"🎵 Ziel-Playlist: %s\n\n" +
+		"Bitte prüef dini Spotify-Iistellige:\n" +
+		"• Wächsle zu dr richtige Playlist\n" +
+		"• Schalt Shuffle us (🔀)\n" +
+		"• Stell Repeat uf us oder Playlist (🔁)\n\n" +
+		"💡 Die Iistellige sorged für optimals Auto-DJing.",
 }

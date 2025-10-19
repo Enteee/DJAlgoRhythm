@@ -71,4 +71,17 @@ var englishMessages = map[string]string{
 	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
 		"🎵 Please switch back to the correct playlist: %s\n\n" +
 		"💡 Click the link above to quickly return to the tracked playlist.",
+	"bot.shuffle_warning": "⚠️ Warning: Shuffle is enabled!\n\n" +
+		"🔀 Please turn off shuffle for optimal auto-DJing. " +
+		"Shuffle interferes with track order and queueing.",
+	"bot.repeat_warning": "⚠️ Warning: Repeat is set to track!\n\n" +
+		"🔁 Please change repeat mode to 'off' or 'playlist' for auto-DJing. " +
+		"Track repeat prevents playlist progression.",
+	"bot.playback_compliance_warning": "⚠️ Warning: Playback settings need adjustment!\n\n" +
+		"🎵 Target playlist: %s\n\n" +
+		"Please check your Spotify settings:\n" +
+		"• Switch to the correct playlist\n" +
+		"• Turn off shuffle (🔀)\n" +
+		"• Set repeat to off or playlist (🔁)\n\n" +
+		"💡 These settings ensure optimal auto-DJing experience.",
 }

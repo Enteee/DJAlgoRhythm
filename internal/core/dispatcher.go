@@ -1404,14 +1404,14 @@ func (d *Dispatcher) runPlaylistMonitoring(ctx context.Context) {
 
 // checkPlaylistCompliance checks if we're playing from the correct playlist and sends warnings if needed
 func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
-	// Check if we're playing from the correct playlist
-	playingCorrect, err := d.spotify.IsPlayingFromCorrectPlaylist(ctx)
+	// Check comprehensive playback compliance
+	compliance, err := d.spotify.CheckPlaybackCompliance(ctx)
 	if err != nil {
-		d.logger.Debug("Could not check playlist compliance", zap.Error(err))
+		d.logger.Debug("Could not check playback compliance", zap.Error(err))
 		return
 	}
 
-	if playingCorrect {
+	if compliance.IsOptimalForAutoDJ() {
 		// Everything is fine
 		return
 	}
@@ -1423,13 +1423,15 @@ func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
 
 	if timeSinceLastWarning < playlistWarningDebounce {
 		// Too soon to send another warning
-		d.logger.Debug("Playlist compliance issue detected but warning debounced",
+		d.logger.Debug("Playback compliance issues detected but warning debounced",
 			zap.Duration("timeSinceLastWarning", timeSinceLastWarning),
-			zap.Duration("debounceThreshold", playlistWarningDebounce))
+			zap.Duration("debounceThreshold", playlistWarningDebounce),
+			zap.Strings("issues", compliance.Issues))
 		return
 	}
 
-	d.logger.Info("Playlist compliance issue detected, sending admin warning")
+	d.logger.Info("Playback compliance issues detected, sending admin warning",
+		zap.Strings("issues", compliance.Issues))
 
 	// Get group ID and admin IDs
 	groupID := d.getGroupID()
@@ -1453,8 +1455,8 @@ func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
 	// Generate Spotify playlist URL for easy recovery
 	playlistURL := fmt.Sprintf("https://open.spotify.com/playlist/%s", d.config.Spotify.PlaylistID)
 
-	// Send direct messages to all admins
-	message := d.localizer.T("bot.playlist_warning", playlistURL)
+	// Generate detailed warning message based on compliance issues
+	message := d.generateComplianceWarningMessage(compliance, playlistURL)
 	successCount := 0
 	var errors []string
 
@@ -1483,4 +1485,34 @@ func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
 	d.playlistWarningMutex.Unlock()
 
 	d.logger.Info("Sent playlist compliance warning message")
+}
+
+// generateComplianceWarningMessage creates a detailed warning message based on compliance issues
+func (d *Dispatcher) generateComplianceWarningMessage(compliance *PlaybackCompliance, playlistURL string) string {
+	var parts []string
+
+	// Add appropriate warning based on specific issues
+	if !compliance.IsCorrectPlaylist {
+		parts = append(parts, d.localizer.T("bot.playlist_warning", playlistURL))
+	}
+
+	if !compliance.IsCorrectShuffle {
+		parts = append(parts, d.localizer.T("bot.shuffle_warning"))
+	}
+
+	if !compliance.IsCorrectRepeat {
+		parts = append(parts, d.localizer.T("bot.repeat_warning"))
+	}
+
+	// If we have multiple issues, combine them; otherwise use the single issue message
+	if len(parts) > 1 {
+		// Multiple issues - use comprehensive warning
+		return d.localizer.T("bot.playback_compliance_warning", playlistURL)
+	} else if len(parts) == 1 {
+		// Single issue
+		return parts[0]
+	}
+
+	// Fallback (shouldn't happen)
+	return d.localizer.T("bot.playlist_warning", playlistURL)
 }

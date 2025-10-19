@@ -568,54 +568,112 @@ func (c *Client) IsNearPlaylistEnd(ctx context.Context) (bool, error) {
 	return false, nil // Current track not found in playlist
 }
 
-// IsPlayingFromCorrectPlaylist checks if we're currently playing from the target playlist
-func (c *Client) IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error) {
+// CheckPlaybackCompliance checks if current playback settings are optimal for auto-DJing
+func (c *Client) CheckPlaybackCompliance(ctx context.Context) (*core.PlaybackCompliance, error) {
 	if c.client == nil {
-		return false, fmt.Errorf("client not authenticated")
+		return nil, fmt.Errorf("client not authenticated")
 	}
 
 	if c.targetPlaylist == "" {
-		return false, fmt.Errorf("no target playlist set")
+		return nil, fmt.Errorf("no target playlist set")
 	}
 
 	// Get current playback state
 	state, err := c.client.PlayerState(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to get player state: %w", err)
+		return nil, fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	compliance := &core.PlaybackCompliance{
+		IsCorrectPlaylist: true,
+		IsCorrectShuffle:  true,
+		IsCorrectRepeat:   true,
+		Issues:            []string{},
 	}
 
 	if state == nil || state.Item == nil {
-		return true, nil // No playback active, consider this OK
+		return compliance, nil // No playback active, consider this OK
 	}
 
-	// Check if we're playing from our target playlist
-	playlistURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
-	if state.PlaybackContext.URI != spotify.URI(playlistURI) {
-		c.logger.Debug("Not playing from target playlist",
-			zap.String("currentContext", string(state.PlaybackContext.URI)),
-			zap.String("targetPlaylist", playlistURI))
-		return false, nil
+	// Check playlist compliance
+	playlistOK := c.checkPlaylistCompliance(ctx, state, compliance)
+
+	// Check settings compliance
+	c.checkSettingsCompliance(state, compliance)
+
+	// If playlist is wrong, don't bother checking track membership
+	if !playlistOK {
+		return compliance, nil
 	}
 
 	// Check if current track is actually in our playlist
+	c.checkTrackMembership(ctx, state, compliance)
+
+	return compliance, nil
+}
+
+// IsPlayingFromCorrectPlaylist checks if current playback is from the target playlist
+// Kept for backward compatibility
+func (c *Client) IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error) {
+	compliance, err := c.CheckPlaybackCompliance(ctx)
+	if err != nil {
+		return false, err
+	}
+	return compliance.IsCorrectPlaylist, nil
+}
+
+// checkPlaylistCompliance verifies the current playback context
+func (c *Client) checkPlaylistCompliance(_ context.Context, state *spotify.PlayerState, compliance *core.PlaybackCompliance) bool {
+	playlistURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
+	if state.PlaybackContext.URI != spotify.URI(playlistURI) {
+		compliance.IsCorrectPlaylist = false
+		compliance.Issues = append(compliance.Issues, "Not playing from target playlist")
+		c.logger.Debug("Not playing from target playlist",
+			zap.String("currentContext", string(state.PlaybackContext.URI)),
+			zap.String("targetPlaylist", playlistURI))
+		return false
+	}
+	return true
+}
+
+// checkSettingsCompliance verifies shuffle and repeat settings
+func (c *Client) checkSettingsCompliance(state *spotify.PlayerState, compliance *core.PlaybackCompliance) {
+	// Check shuffle setting (should be off for auto-DJing)
+	if state.ShuffleState {
+		compliance.IsCorrectShuffle = false
+		compliance.Issues = append(compliance.Issues, "Shuffle is enabled (should be off for auto-DJing)")
+		c.logger.Debug("Shuffle is enabled, which may interfere with auto-DJing")
+	}
+
+	// Check repeat setting (should be off or context, not track)
+	if state.RepeatState == RepeatStateTrack {
+		compliance.IsCorrectRepeat = false
+		compliance.Issues = append(compliance.Issues, "Repeat is set to track (should be off or context for auto-DJing)")
+		c.logger.Debug("Repeat is set to track, which will prevent auto-DJing")
+	}
+}
+
+// checkTrackMembership verifies the current track is in the target playlist
+func (c *Client) checkTrackMembership(ctx context.Context, state *spotify.PlayerState, compliance *core.PlaybackCompliance) {
 	currentTrackID := string(state.Item.ID)
 	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
 	if err != nil {
 		c.logger.Warn("Failed to verify track is in playlist", zap.Error(err))
-		return true, nil // Assume OK if we can't verify
+		return // Assume OK if we can't verify
 	}
 
 	// Check if current track exists in playlist
 	for _, trackID := range playlistTracks {
 		if trackID == currentTrackID {
-			return true, nil // Found the track in playlist
+			return // Found the track in playlist
 		}
 	}
 
+	compliance.IsCorrectPlaylist = false
+	compliance.Issues = append(compliance.Issues, "Current track not found in target playlist")
 	c.logger.Debug("Current track not found in target playlist",
 		zap.String("currentTrackID", currentTrackID),
 		zap.String("targetPlaylist", c.targetPlaylist))
-	return false, nil
 }
 
 // GetAutoPlayPreventionTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
