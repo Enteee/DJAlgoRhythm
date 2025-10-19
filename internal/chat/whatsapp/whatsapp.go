@@ -473,3 +473,39 @@ func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) e
 
 	return nil
 }
+
+// SendAutoPlayApproval sends an auto-play prevention message with approve/deny buttons
+// WhatsApp doesn't support inline buttons like Telegram, so this falls back to regular text
+func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, _ /* trackID */, message string) (string, error) {
+	if !f.config.Enabled {
+		return "", fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// WhatsApp doesn't support inline buttons, so we'll send the message as regular text
+	// Users would need to reply with specific text or reactions for approval/denial
+	fullMessage := message + "\n\n" + f.localizer.T("bot.autoplay_whatsapp_instructions")
+
+	return f.SendText(ctx, chatID, "", fullMessage)
+}
+
+// SetAutoPlayDecisionHandler sets the handler for auto-play approval/denial decisions
+// This is a stub implementation for WhatsApp since it doesn't support inline buttons
+func (f *Frontend) SetAutoPlayDecisionHandler(_ func(trackID string, approved bool)) {
+	// WhatsApp doesn't support inline button callbacks like Telegram
+	// This would need to be implemented through message parsing or reactions
+	// For now, this is just a stub to satisfy the interface
+	f.logger.Debug("SetAutoPlayDecisionHandler called on WhatsApp frontend (stub implementation)")
+}
+
+// EditMessage edits an existing message by ID
+// WhatsApp doesn't support message editing like Telegram, so this is a stub implementation
+func (f *Frontend) EditMessage(_ context.Context, _, _, _ string) error {
+	if !f.config.Enabled {
+		return fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// WhatsApp doesn't support message editing, so this is a no-op
+	// This gracefully satisfies the interface without causing errors
+	f.logger.Debug("EditMessage called on WhatsApp frontend (not supported, gracefully ignored)")
+	return nil
+}

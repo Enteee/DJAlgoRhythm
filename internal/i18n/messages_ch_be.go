@@ -47,10 +47,10 @@ var berneseGermanMessages = map[string]string{
 	// Callback messages
 	"callback.approved":       "✅ Lied isch vom Admin guet geheisse worde.",
 	"callback.denied":         "❌ Lied isch vom Admin abglehnt worde.",
-	"callback.expired":        "D Freigab-Afroge isch abgloffe.",
+	"callback.expired":        "D Freigab-Afrag isch abgloffe.",
 	"callback.unauthorized":   "Nur Gruppe-Admins chöi do druf antworte.",
 	"callback.sender_only":    "Nur dä, wo s Lied gschickt het, cha da antworte.",
-	"callback.prompt_expired": "Die Afroge isch abgloffe.",
+	"callback.prompt_expired": "Die Afrag isch abgloffe.",
 
 	// Button texts
 	"button.confirm":  "👍 Ja, das isch's",
@@ -66,6 +66,8 @@ var berneseGermanMessages = map[string]string{
 	// Auto-play prevention messages
 	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
 		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
+	"bot.autoplay_replacement":        "🔄 Ersatz-Track vorgeschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
+	"bot.autoplay_replacement_failed": "❌ Ha kei Ersatz-Auto-Play-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
 
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playlist!\n\n" +
@@ -84,4 +86,12 @@ var berneseGermanMessages = map[string]string{
 		"• Schalt Shuffle us (🔀)\n" +
 		"• Stell Repeat uf us oder Playlist (🔁)\n\n" +
 		"💡 Die Iistellige sorged für optimals Auto-DJing.",
+
+	// Auto-play approval messages
+	"button.autoplay_approve":            "✅ Isch ok",
+	"button.autoplay_deny":               "❌ Ou nei",
+	"callback.autoplay_approved":         "✅ Auto-Play-Track isch guetgeheisse worde",
+	"callback.autoplay_denied":           "❌ Auto-Play-Track isch abglehnt worde",
+	"callback.autoplay_expired":          "Die Auto-Play-Freigab isch abgloffe.",
+	"bot.autoplay_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
 }

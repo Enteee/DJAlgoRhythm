@@ -18,6 +18,15 @@ const (
 	thumbsDownReaction = chat.ReactionThumbsDown
 )
 
+// autoPlayApprovalContext tracks pending auto-play approval messages with timeout information
+type autoPlayApprovalContext struct {
+	trackID    string
+	chatID     string
+	messageID  string
+	expiresAt  time.Time
+	cancelFunc context.CancelFunc
+}
+
 // Dispatcher handles messages from any chat frontend using the unified interface
 type Dispatcher struct {
 	config    *Config
@@ -34,6 +43,13 @@ type Dispatcher struct {
 	// Playlist monitoring
 	lastPlaylistWarning  time.Time
 	playlistWarningMutex sync.RWMutex
+
+	// Auto-play approval tracking
+	pendingAutoPlayTracks    map[string]string                   // trackID -> track name for pending approvals
+	pendingApprovalMessages  map[string]*autoPlayApprovalContext // messageID -> approval context for timeout tracking
+	autoPlayReplacementCount int                                 // tracks how many replacements have been attempted in current workflow
+	autoPlayMutex            sync.RWMutex
+	autoPlayActive           bool // tracks if auto-play prevention is currently running
 }
 
 // NewDispatcher creates a new dispatcher with the provided chat frontend
@@ -46,14 +62,16 @@ func NewDispatcher(
 	logger *zap.Logger,
 ) *Dispatcher {
 	d := &Dispatcher{
-		config:          config,
-		frontend:        frontend,
-		spotify:         spotify,
-		llm:             llm,
-		dedup:           dedup,
-		logger:          logger,
-		localizer:       i18n.NewLocalizer(config.App.Language),
-		messageContexts: make(map[string]*MessageContext),
+		config:                  config,
+		frontend:                frontend,
+		spotify:                 spotify,
+		llm:                     llm,
+		dedup:                   dedup,
+		logger:                  logger,
+		localizer:               i18n.NewLocalizer(config.App.Language),
+		messageContexts:         make(map[string]*MessageContext),
+		pendingAutoPlayTracks:   make(map[string]string),
+		pendingApprovalMessages: make(map[string]*autoPlayApprovalContext),
 	}
 
 	return d
@@ -77,6 +95,9 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 	if err := d.frontend.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start chat frontend: %w", err)
 	}
+
+	// Set up auto-play decision handler
+	d.frontend.SetAutoPlayDecisionHandler(d.handleAutoPlayDecision)
 
 	// Send startup message to the group
 	d.sendStartupMessage(ctx)
@@ -1315,15 +1336,28 @@ func (d *Dispatcher) runAutoPlayPrevention(ctx context.Context) {
 
 // checkAndPreventAutoPlay checks if we're near the end of the playlist and adds a track if needed
 func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
+	// Check if auto-play prevention is already active
+	d.autoPlayMutex.Lock()
+	if d.autoPlayActive {
+		d.autoPlayMutex.Unlock()
+		d.logger.Debug("Auto-play prevention already active, skipping")
+		return
+	}
+	d.autoPlayActive = true
+	d.autoPlayMutex.Unlock()
+
 	// Check if we're near the end of the playlist
 	nearEnd, err := d.spotify.IsNearPlaylistEnd(ctx)
 	if err != nil {
 		d.logger.Debug("Could not check playlist end status", zap.Error(err))
+		d.resetAutoPlayFlag()
 		return
 	}
 
 	if !nearEnd {
-		return // Not near the end, nothing to do
+		// Not near the end, reset flag and return
+		d.resetAutoPlayFlag()
+		return
 	}
 
 	d.logger.Info("Near end of playlist detected, adding auto-play prevention track")
@@ -1332,6 +1366,7 @@ func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
 	trackID, err := d.spotify.GetAutoPlayPreventionTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get auto-play prevention track", zap.Error(err))
+		d.resetAutoPlayFlag()
 		return
 	}
 
@@ -1346,6 +1381,7 @@ func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
 
 			if retry == d.config.App.MaxRetries-1 {
 				d.logger.Warn("Failed to add auto-play prevention track after all retries", zap.Error(err))
+				d.resetAutoPlayFlag()
 				return
 			}
 
@@ -1369,19 +1405,275 @@ func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
 		track = &Track{Title: "Unknown", Artist: "Unknown"}
 	}
 
-	// Send message to chat about the auto-added track
-	if groupID := d.getGroupID(); groupID != "" {
-		message := d.localizer.T("bot.autoplay_prevention", track.Artist, track.Title, track.URL)
+	// Track this auto-play track for approval
+	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+	d.autoPlayMutex.Lock()
+	d.pendingAutoPlayTracks[trackID] = trackName
+	d.autoPlayMutex.Unlock()
 
-		if _, err := d.frontend.SendText(ctx, groupID, "", message); err != nil {
-			d.logger.Warn("Failed to send auto-play prevention message", zap.Error(err))
-		} else {
-			d.logger.Info("Sent auto-play prevention message",
-				zap.String("trackID", trackID),
-				zap.String("artist", track.Artist),
-				zap.String("title", track.Title))
+	// Send message to chat about the auto-added track with approval buttons
+	d.sendAutoPlayApprovalMessage(ctx, trackID, track, "bot.autoplay_prevention", "auto-play prevention")
+}
+
+// handleAutoPlayDecision processes auto-play approval/denial decisions
+func (d *Dispatcher) handleAutoPlayDecision(trackID string, approved bool) {
+	ctx := context.Background()
+
+	d.autoPlayMutex.Lock()
+	trackName, exists := d.pendingAutoPlayTracks[trackID]
+	if exists {
+		delete(d.pendingAutoPlayTracks, trackID)
+	}
+
+	// Cancel any pending timeout for this track
+	var messageToCancel string
+	for messageID, approvalCtx := range d.pendingApprovalMessages {
+		if approvalCtx.trackID == trackID {
+			approvalCtx.cancelFunc() // Cancel the timeout
+			delete(d.pendingApprovalMessages, messageID)
+			messageToCancel = messageID
+			break
 		}
 	}
+	d.autoPlayMutex.Unlock()
+
+	if !exists {
+		d.logger.Warn("Received auto-play decision for unknown track", zap.String("trackID", trackID))
+		return
+	}
+
+	if messageToCancel != "" {
+		d.logger.Debug("Canceled auto-play approval timeout",
+			zap.String("trackID", trackID),
+			zap.String("messageID", messageToCancel))
+	}
+
+	if approved {
+		d.logger.Info("Auto-play track approved",
+			zap.String("trackID", trackID),
+			zap.String("trackName", trackName))
+		// No message sent - the frontend handles the visual feedback (thumbs up reaction)
+
+		// Auto-play workflow is complete, reset the flag
+		d.resetAutoPlayFlag()
+	} else {
+		d.logger.Info("Auto-play track denied, removing from playlist",
+			zap.String("trackID", trackID),
+			zap.String("trackName", trackName))
+
+		// Remove the denied track from the playlist
+		if err := d.spotify.RemoveFromPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+			d.logger.Warn("Failed to remove denied auto-play track from playlist",
+				zap.String("trackID", trackID),
+				zap.Error(err))
+		} else {
+			// Remove from dedup store so it can be added again if requested
+			d.dedup.Remove(trackID)
+		}
+
+		// Try to get a new auto-play prevention track to replace the denied one
+		go d.findAndSuggestReplacementTrack(ctx)
+	}
+}
+
+// resetAutoPlayFlag resets the auto-play active flag and replacement count
+func (d *Dispatcher) resetAutoPlayFlag() {
+	d.autoPlayMutex.Lock()
+	d.autoPlayActive = false
+	d.autoPlayReplacementCount = 0
+	d.autoPlayMutex.Unlock()
+}
+
+// findAndSuggestReplacementTrack finds a replacement auto-play track and suggests it for approval
+func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
+	d.logger.Info("Attempting to find replacement auto-play track")
+
+	// Increment replacement count and check if we've exceeded the maximum
+	d.autoPlayMutex.Lock()
+	d.autoPlayReplacementCount++
+	replacementCount := d.autoPlayReplacementCount
+	maxReplacements := d.config.App.MaxAutoPlayReplacements
+	d.autoPlayMutex.Unlock()
+
+	// Get a replacement track
+	newTrackID, err := d.spotify.GetAutoPlayPreventionTrack(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to get replacement auto-play track", zap.Error(err))
+
+		// Inform users that we couldn't find a replacement
+		if groupID := d.getGroupID(); groupID != "" {
+			message := d.localizer.T("bot.autoplay_replacement_failed")
+			if _, sendErr := d.frontend.SendText(ctx, groupID, "", message); sendErr != nil {
+				d.logger.Warn("Failed to send replacement failure message", zap.Error(sendErr))
+			}
+		}
+
+		// Auto-play workflow failed, reset the flag
+		d.resetAutoPlayFlag()
+		return
+	}
+
+	// Add the replacement track to the playlist
+	if addErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, newTrackID); addErr != nil {
+		d.logger.Warn("Failed to add replacement auto-play track", zap.Error(addErr))
+
+		// Inform users that we couldn't add the replacement
+		if groupID := d.getGroupID(); groupID != "" {
+			message := d.localizer.T("bot.autoplay_replacement_failed")
+			if _, sendErr := d.frontend.SendText(ctx, groupID, "", message); sendErr != nil {
+				d.logger.Warn("Failed to send replacement failure message", zap.Error(sendErr))
+			}
+		}
+
+		// Auto-play workflow failed, reset the flag
+		d.resetAutoPlayFlag()
+		return
+	}
+
+	// Add to dedup store
+	d.dedup.Add(newTrackID)
+
+	// Get track info for the replacement message
+	track, err := d.spotify.GetTrack(ctx, newTrackID)
+	if err != nil {
+		d.logger.Warn("Could not get track info for replacement auto-play track", zap.Error(err))
+		track = &Track{Title: "Unknown", Artist: "Unknown"}
+	}
+
+	// Check if we've reached the maximum replacement attempts
+	if replacementCount >= maxReplacements && maxReplacements > 0 {
+		d.logger.Info("Maximum auto-play replacements reached, auto-accepting track",
+			zap.Int("replacementCount", replacementCount),
+			zap.Int("maxReplacements", maxReplacements),
+			zap.String("trackID", newTrackID))
+
+		// Send notification that track was auto-accepted due to max replacements
+		if groupID := d.getGroupID(); groupID != "" {
+			message := d.localizer.T("success.track_added", track.Artist, track.Title, track.URL)
+			if _, sendErr := d.frontend.SendText(ctx, groupID, "", message); sendErr != nil {
+				d.logger.Warn("Failed to send auto-accepted track message", zap.Error(sendErr))
+			}
+		}
+
+		// Auto-play workflow complete, reset the flag
+		d.resetAutoPlayFlag()
+		return
+	}
+
+	// Track this replacement for approval
+	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+	d.autoPlayMutex.Lock()
+	d.pendingAutoPlayTracks[newTrackID] = trackName
+	d.autoPlayMutex.Unlock()
+
+	// Send message to chat about the replacement track with approval buttons
+	d.sendAutoPlayApprovalMessage(ctx, newTrackID, track, "bot.autoplay_replacement", "replacement auto-play track")
+}
+
+// sendAutoPlayApprovalMessage sends an auto-play approval message with fallback to regular text
+func (d *Dispatcher) sendAutoPlayApprovalMessage(ctx context.Context, trackID string, track *Track, messageKey, logContext string) {
+	groupID := d.getGroupID()
+	if groupID == "" {
+		return
+	}
+
+	message := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+
+	if messageID, err := d.frontend.SendAutoPlayApproval(ctx, groupID, trackID, message); err != nil {
+		d.logger.Warn("Failed to send "+logContext+" message", zap.Error(err))
+		// If sending approval message fails, fall back to regular text
+		if _, fallbackErr := d.frontend.SendText(ctx, groupID, "", message); fallbackErr != nil {
+			d.logger.Warn("Failed to send fallback "+logContext+" message", zap.Error(fallbackErr))
+		}
+	} else {
+		// Start timeout tracking for this approval message
+		d.startAutoPlayApprovalTimeout(ctx, messageID, trackID, groupID)
+
+		d.logger.Info("Sent "+logContext+" message with approval buttons",
+			zap.String("trackID", trackID),
+			zap.String("messageID", messageID),
+			zap.String("artist", track.Artist),
+			zap.String("title", track.Title))
+	}
+}
+
+// startAutoPlayApprovalTimeout starts timeout tracking for an auto-play approval message
+func (d *Dispatcher) startAutoPlayApprovalTimeout(ctx context.Context, messageID, trackID, chatID string) {
+	timeoutSecs := d.config.App.AutoPlayApprovalTimeoutSecs
+	if timeoutSecs <= 0 {
+		return // Timeout disabled
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSecs)*time.Second)
+
+	approvalCtx := &autoPlayApprovalContext{
+		trackID:    trackID,
+		chatID:     chatID,
+		messageID:  messageID,
+		expiresAt:  time.Now().Add(time.Duration(timeoutSecs) * time.Second),
+		cancelFunc: cancel,
+	}
+
+	d.autoPlayMutex.Lock()
+	d.pendingApprovalMessages[messageID] = approvalCtx
+	d.autoPlayMutex.Unlock()
+
+	// Start timeout goroutine
+	go d.handleAutoPlayApprovalTimeout(timeoutCtx, messageID)
+}
+
+// handleAutoPlayApprovalTimeout handles timeout expiry for auto-play approval messages
+func (d *Dispatcher) handleAutoPlayApprovalTimeout(ctx context.Context, messageID string) {
+	<-ctx.Done()
+
+	// Check if timeout expired (not canceled by approval/denial)
+	if ctx.Err() == context.DeadlineExceeded {
+		d.autoPlayMutex.Lock()
+		approvalCtx, exists := d.pendingApprovalMessages[messageID]
+		if !exists {
+			d.autoPlayMutex.Unlock()
+			return // Already handled
+		}
+
+		trackID := approvalCtx.trackID
+		chatID := approvalCtx.chatID
+
+		// Clean up pending approval
+		delete(d.pendingApprovalMessages, messageID)
+		d.autoPlayMutex.Unlock()
+
+		d.logger.Info("Auto-play approval timed out, auto-accepting track",
+			zap.String("trackID", trackID),
+			zap.String("messageID", messageID))
+
+		// Auto-accept the track by removing buttons and keeping the track in playlist
+		d.removeAutoPlayApprovalButtons(context.Background(), chatID, messageID)
+
+		// Reset auto-play flag to allow new workflows
+		d.resetAutoPlayFlag()
+	}
+}
+
+// removeAutoPlayApprovalButtons removes approval buttons from an auto-play message
+func (d *Dispatcher) removeAutoPlayApprovalButtons(ctx context.Context, chatID, messageID string) {
+	// For Telegram, we can edit the message to remove the inline keyboard
+	// For WhatsApp, this is a no-op since it doesn't support inline buttons
+
+	// Get the message content without buttons
+	expiredMessage := d.localizer.T("callback.autoplay_expired")
+
+	// Try to edit the message to remove buttons (Telegram-specific)
+	// This will gracefully fail for WhatsApp and other platforms that don't support message editing
+	if err := d.editMessageToRemoveButtons(ctx, chatID, messageID, expiredMessage); err != nil {
+		d.logger.Debug("Could not edit message to remove buttons (expected for WhatsApp)",
+			zap.String("messageID", messageID),
+			zap.Error(err))
+	}
+}
+
+// editMessageToRemoveButtons attempts to edit a message to remove inline buttons (Telegram-specific)
+func (d *Dispatcher) editMessageToRemoveButtons(ctx context.Context, chatID, messageID, newText string) error {
+	return d.frontend.EditMessage(ctx, chatID, messageID, newText)
 }
 
 // runPlaylistMonitoring monitors if we're playing from the correct playlist

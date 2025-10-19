@@ -65,7 +65,9 @@ var englishMessages = map[string]string{
 	"bot.shutdown": "🎵 I am going offline. See you later!\n\n📀 All songs from this session: %s",
 
 	// Auto-play prevention messages
-	"bot.autoplay_prevention": "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
+	"bot.autoplay_prevention":         "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
+	"bot.autoplay_replacement":        "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Do you approve this replacement?",
+	"bot.autoplay_replacement_failed": "❌ Failed to find a replacement auto-play track. Please add more songs manually!",
 
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
@@ -84,4 +86,12 @@ var englishMessages = map[string]string{
 		"• Turn off shuffle (🔀)\n" +
 		"• Set repeat to off or playlist (🔁)\n\n" +
 		"💡 These settings ensure optimal auto-DJing experience.",
+
+	// Auto-play approval messages
+	"button.autoplay_approve":            "✅ Approve",
+	"button.autoplay_deny":               "❌ Deny",
+	"callback.autoplay_approved":         "✅ Auto-play track approved",
+	"callback.autoplay_denied":           "❌ Auto-play track denied",
+	"callback.autoplay_expired":          "This auto-play approval has expired.",
+	"bot.autoplay_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
 }

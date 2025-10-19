@@ -9,14 +9,16 @@ import (
 
 // Default configuration values
 const (
-	DefaultLLMThreshold            = 0.65
-	DefaultMaxCandidates           = 3
-	DefaultServerPort              = 8080
-	DefaultTimeoutSeconds          = 10
-	DefaultConfirmTimeoutSecs      = 120
-	DefaultConfirmAdminTimeoutSecs = 3600
-	DefaultMaxRetries              = 3
-	DefaultRetryDelaySecs          = 5
+	DefaultLLMThreshold                = 0.65
+	DefaultMaxCandidates               = 3
+	DefaultServerPort                  = 8080
+	DefaultTimeoutSeconds              = 10
+	DefaultConfirmTimeoutSecs          = 120
+	DefaultConfirmAdminTimeoutSecs     = 3600
+	DefaultAutoPlayApprovalTimeoutSecs = 30
+	DefaultMaxAutoPlayReplacements     = 3
+	DefaultMaxRetries                  = 3
+	DefaultRetryDelaySecs              = 5
 )
 
 type Config struct {
@@ -76,11 +78,13 @@ type LogConfig struct {
 }
 
 type AppConfig struct {
-	ConfirmTimeoutSecs      int
-	ConfirmAdminTimeoutSecs int
-	MaxRetries              int
-	RetryDelaySecs          int
-	Language                string // Bot language for user-facing messages
+	ConfirmTimeoutSecs          int
+	ConfirmAdminTimeoutSecs     int
+	AutoPlayApprovalTimeoutSecs int
+	MaxAutoPlayReplacements     int
+	MaxRetries                  int
+	RetryDelaySecs              int
+	Language                    string // Bot language for user-facing messages
 }
 
 func DefaultConfig() *Config {
@@ -115,11 +119,13 @@ func DefaultConfig() *Config {
 			Format: "json",
 		},
 		App: AppConfig{
-			ConfirmTimeoutSecs:      DefaultConfirmTimeoutSecs,
-			ConfirmAdminTimeoutSecs: DefaultConfirmAdminTimeoutSecs,
-			MaxRetries:              DefaultMaxRetries,
-			RetryDelaySecs:          DefaultRetryDelaySecs,
-			Language:                i18n.DefaultLanguage, // Default to English
+			ConfirmTimeoutSecs:          DefaultConfirmTimeoutSecs,
+			ConfirmAdminTimeoutSecs:     DefaultConfirmAdminTimeoutSecs,
+			AutoPlayApprovalTimeoutSecs: DefaultAutoPlayApprovalTimeoutSecs,
+			MaxAutoPlayReplacements:     DefaultMaxAutoPlayReplacements,
+			MaxRetries:                  DefaultMaxRetries,
+			RetryDelaySecs:              DefaultRetryDelaySecs,
+			Language:                    i18n.DefaultLanguage, // Default to English
 		},
 	}
 }

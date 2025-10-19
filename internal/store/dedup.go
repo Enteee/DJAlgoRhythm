@@ -63,6 +63,20 @@ func (ds *DedupStore) Add(trackID string) {
 	}
 }
 
+func (ds *DedupStore) Remove(trackID string) {
+	ds.mutex.Lock()
+	defer ds.mutex.Unlock()
+
+	if _, exists := ds.trackIDs[trackID]; !exists {
+		return // Track not in store, nothing to remove
+	}
+
+	delete(ds.trackIDs, trackID)
+	ds.lru.Remove(trackID)
+	// Note: We can't remove from bloom filter as it doesn't support removal
+	// This may cause false positives, but that's acceptable for this use case
+}
+
 func (ds *DedupStore) Load(trackIDs []string) {
 	ds.mutex.Lock()
 	defer ds.mutex.Unlock()

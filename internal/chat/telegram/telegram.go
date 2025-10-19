@@ -53,6 +53,9 @@ type Frontend struct {
 	// Message handling
 	messageHandler func(*chat.Message)
 
+	// Auto-play decision handling
+	autoPlayDecisionHandler func(trackID string, approved bool)
+
 	// Approval tracking
 	approvalMutex    sync.RWMutex
 	pendingApprovals map[string]*approvalContext
@@ -132,6 +135,8 @@ func (f *Frontend) Start(ctx context.Context) error {
 		bot.WithCallbackQueryDataHandler("reject_", bot.MatchTypePrefix, f.handleRejectCallback),
 		bot.WithCallbackQueryDataHandler("admin_approve_", bot.MatchTypePrefix, f.handleAdminApproveCallback),
 		bot.WithCallbackQueryDataHandler("admin_deny_", bot.MatchTypePrefix, f.handleAdminDenyCallback),
+		bot.WithCallbackQueryDataHandler("autoplay_approve_", bot.MatchTypePrefix, f.handleAutoPlayApproveCallback),
+		bot.WithCallbackQueryDataHandler("autoplay_deny_", bot.MatchTypePrefix, f.handleAutoPlayDenyCallback),
 	}
 
 	b, err := bot.New(f.config.BotToken, opts...)
@@ -827,6 +832,90 @@ func (f *Frontend) extractAdminApprovalKey(callbackData string, approved bool) s
 	return ""
 }
 
+// handleAutoPlayApproveCallback handles auto-play approval button clicks
+func (f *Frontend) handleAutoPlayApproveCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
+	f.handleAutoPlayCallback(ctx, b, update, true)
+}
+
+// handleAutoPlayDenyCallback handles auto-play denial button clicks
+func (f *Frontend) handleAutoPlayDenyCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
+	f.handleAutoPlayCallback(ctx, b, update, false)
+}
+
+// handleAutoPlayCallback handles both auto-play approve and deny callbacks
+func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, update *models.Update, approved bool) {
+	if update.CallbackQuery == nil {
+		return
+	}
+
+	trackID := f.extractAutoPlayTrackID(update.CallbackQuery.Data, approved)
+	if trackID == "" {
+		return
+	}
+
+	// Answer the callback query immediately
+	var responseText string
+	if approved {
+		responseText = f.localizer.T("autoplay.callback_approved")
+	} else {
+		responseText = f.localizer.T("autoplay.callback_denied")
+	}
+
+	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: update.CallbackQuery.ID,
+		Text:            responseText,
+	}); err != nil {
+		f.logger.Debug("Failed to answer callback query", zap.Error(err))
+	}
+
+	if approved {
+		// React with thumbs up emoji to show approval
+		if err := f.React(ctx, strconv.FormatInt(update.CallbackQuery.Message.Message.Chat.ID, 10),
+			strconv.Itoa(update.CallbackQuery.Message.Message.ID), chat.ReactionThumbsUp); err != nil {
+			f.logger.Debug("Failed to add thumbs up reaction to auto-play message", zap.Error(err))
+		}
+
+		// Remove the inline keyboard by editing the message
+		if _, err := b.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
+			ChatID:    update.CallbackQuery.Message.Message.Chat.ID,
+			MessageID: update.CallbackQuery.Message.Message.ID,
+			ReplyMarkup: &models.InlineKeyboardMarkup{
+				InlineKeyboard: [][]models.InlineKeyboardButton{},
+			},
+		}); err != nil {
+			f.logger.Debug("Failed to remove buttons from auto-play message", zap.Error(err))
+		}
+	} else {
+		// Delete the message on denial
+		if _, err := b.DeleteMessage(ctx, &bot.DeleteMessageParams{
+			ChatID:    update.CallbackQuery.Message.Message.Chat.ID,
+			MessageID: update.CallbackQuery.Message.Message.ID,
+		}); err != nil {
+			f.logger.Debug("Failed to delete auto-play message", zap.Error(err))
+		}
+	}
+
+	// Notify the dispatcher about the decision
+	if f.autoPlayDecisionHandler != nil {
+		f.autoPlayDecisionHandler(trackID, approved)
+	}
+
+	f.logger.Info("Auto-play decision processed",
+		zap.String("trackID", trackID),
+		zap.Bool("approved", approved),
+		zap.String("userID", strconv.FormatInt(update.CallbackQuery.From.ID, 10)))
+}
+
+func (f *Frontend) extractAutoPlayTrackID(callbackData string, approved bool) string {
+	if approved && strings.HasPrefix(callbackData, "autoplay_approve_") {
+		return strings.TrimPrefix(callbackData, "autoplay_approve_")
+	}
+	if !approved && strings.HasPrefix(callbackData, "autoplay_deny_") {
+		return strings.TrimPrefix(callbackData, "autoplay_deny_")
+	}
+	return ""
+}
+
 func (f *Frontend) getAdminApproval(approvalKey string) *adminApprovalContext {
 	f.adminApprovalMutex.RLock()
 	approval, exists := f.pendingAdminApprovals[approvalKey]
@@ -1206,4 +1295,85 @@ func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, req
 			zap.Int("required_reactions", requiredReactions))
 		return false, nil
 	}
+}
+
+// SendAutoPlayApproval sends an auto-play prevention message with approve/deny buttons
+func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, trackID, message string) (string, error) {
+	if !f.config.Enabled {
+		return "", nil
+	}
+
+	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	keyboard := [][]models.InlineKeyboardButton{
+		{
+			{
+				Text:         f.localizer.T("button.autoplay_approve"),
+				CallbackData: "autoplay_approve_" + trackID,
+			},
+			{
+				Text:         f.localizer.T("button.autoplay_deny"),
+				CallbackData: "autoplay_deny_" + trackID,
+			},
+		},
+	}
+
+	// Disable link previews for auto-play messages since they contain Spotify links
+	disabled := true
+	sentMsg, err := f.bot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:             chatIDInt,
+		Text:               message,
+		ReplyMarkup:        models.InlineKeyboardMarkup{InlineKeyboard: keyboard},
+		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: &disabled},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to send auto-play approval message: %w", err)
+	}
+
+	f.logger.Debug("Sent auto-play approval message",
+		zap.String("chatID", chatID),
+		zap.String("trackID", trackID),
+		zap.Int("messageID", sentMsg.ID))
+
+	return strconv.Itoa(sentMsg.ID), nil
+}
+
+// SetAutoPlayDecisionHandler sets the handler for auto-play approval/denial decisions
+func (f *Frontend) SetAutoPlayDecisionHandler(handler func(trackID string, approved bool)) {
+	f.autoPlayDecisionHandler = handler
+}
+
+// EditMessage edits an existing message by ID
+func (f *Frontend) EditMessage(ctx context.Context, chatID, messageID, newText string) error {
+	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	messageIDInt, err := strconv.Atoi(messageID)
+	if err != nil {
+		return fmt.Errorf("invalid message ID: %w", err)
+	}
+
+	// Edit the message to remove inline keyboard and update text
+	_, err = f.bot.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    chatIDInt,
+		MessageID: messageIDInt,
+		Text:      newText,
+		// No ReplyMarkup means removing the inline keyboard
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to edit message: %w", err)
+	}
+
+	f.logger.Debug("Edited message",
+		zap.String("chatID", chatID),
+		zap.String("messageID", messageID),
+		zap.String("newText", newText))
+
+	return nil
 }

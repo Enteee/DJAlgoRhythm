@@ -124,6 +124,7 @@ type SpotifyClient interface {
 	SearchTrack(ctx context.Context, query string) ([]Track, error)
 	GetTrack(ctx context.Context, trackID string) (*Track, error)
 	AddToPlaylist(ctx context.Context, playlistID, trackID string) error
+	RemoveFromPlaylist(ctx context.Context, playlistID, trackID string) error
 	AddToPlaylistAtPosition(ctx context.Context, playlistID, trackID string, position int) error
 	AddToQueue(ctx context.Context, trackID string) error
 	GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error)
@@ -153,6 +154,7 @@ type LLMProvider interface {
 type DedupStore interface {
 	Has(trackID string) bool
 	Add(trackID string)
+	Remove(trackID string)
 	Load(trackIDs []string)
 	Size() int
 	Clear()

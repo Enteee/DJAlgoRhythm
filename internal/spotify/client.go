@@ -335,6 +335,27 @@ func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackI
 	return nil
 }
 
+func (c *Client) RemoveFromPlaylist(ctx context.Context, playlistID, trackID string) error {
+	if c.client == nil {
+		return fmt.Errorf("client not authenticated")
+	}
+
+	spotifyTrackID := spotify.ID(trackID)
+	spotifyPlaylistID := spotify.ID(playlistID)
+
+	// Remove all instances of the track from the playlist
+	_, err := c.client.RemoveTracksFromPlaylist(ctx, spotifyPlaylistID, spotifyTrackID)
+	if err != nil {
+		return fmt.Errorf("failed to remove track from playlist: %w", err)
+	}
+
+	c.logger.Info("Track removed from playlist",
+		zap.String("trackID", trackID),
+		zap.String("playlistID", playlistID))
+
+	return nil
+}
+
 func (c *Client) AddToQueue(ctx context.Context, trackID string) error {
 	if c.client == nil {
 		return fmt.Errorf("client not authenticated")
