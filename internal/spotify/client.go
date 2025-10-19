@@ -39,6 +39,10 @@ const (
 	ReadBufferSize = 8192
 	// SpotifyAppLinkDomain is the domain for Spotify app links
 	SpotifyAppLinkDomain = "spotify.app.link"
+	// PlaylistCacheDuration is how long to cache playlist contents
+	PlaylistCacheDuration = 5 * time.Minute
+	// PlaybackStartDelay is the delay to wait for playback to start
+	PlaybackStartDelay = 500 * time.Millisecond
 )
 
 var (
@@ -47,11 +51,15 @@ var (
 )
 
 type Client struct {
-	config     *core.SpotifyConfig
-	logger     *zap.Logger
-	client     *spotify.Client
-	normalizer *fuzzy.Normalizer
-	auth       *spotifyauth.Authenticator
+	config             *core.SpotifyConfig
+	logger             *zap.Logger
+	client             *spotify.Client
+	normalizer         *fuzzy.Normalizer
+	auth               *spotifyauth.Authenticator
+	targetPlaylist     string          // Playlist ID we're managing
+	lastKnownVolume    int             // Store last volume for fade recovery
+	playlistTrackCache map[string]bool // Cache of track IDs in our playlist
+	cacheLastUpdated   time.Time       // When cache was last updated
 }
 
 type TokenData struct {
@@ -74,10 +82,11 @@ func NewClient(config *core.SpotifyConfig, logger *zap.Logger) *Client {
 	)
 
 	return &Client{
-		config:     config,
-		logger:     logger,
-		normalizer: fuzzy.NewNormalizer(),
-		auth:       auth,
+		config:             config,
+		logger:             logger,
+		normalizer:         fuzzy.NewNormalizer(),
+		auth:               auth,
+		playlistTrackCache: make(map[string]bool),
 	}
 }
 
@@ -163,6 +172,8 @@ func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackI
 			return fmt.Errorf("failed to add track to playlist: %w", err)
 		}
 
+		// Invalidate cache since we added a track
+		c.invalidatePlaylistCache()
 		c.logger.Info("Track added to playlist",
 			zap.String("trackID", trackID),
 			zap.String("playlistID", playlistID),
@@ -205,6 +216,8 @@ func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackI
 		return nil
 	}
 
+	// Invalidate cache since we added a track
+	c.invalidatePlaylistCache()
 	c.logger.Info("Track added to playlist with priority positioning",
 		zap.String("trackID", trackID),
 		zap.String("playlistID", playlistID),
@@ -252,6 +265,303 @@ func (c *Client) GetQueuePosition(ctx context.Context, trackID string) (int, err
 
 	// Track not found in queue
 	return -1, nil
+}
+
+// IsInAutoPlay detects if Spotify is currently in auto-play mode
+// Returns true if the currently playing track is not in our managed playlist,
+// even if the context still shows our playlist URI
+func (c *Client) IsInAutoPlay(ctx context.Context) (bool, error) {
+	if c.client == nil {
+		return false, fmt.Errorf("client not authenticated")
+	}
+
+	currently, err := c.client.PlayerCurrentlyPlaying(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get currently playing: %w", err)
+	}
+
+	// No playback active
+	if currently == nil || !currently.Playing {
+		return false, nil
+	}
+
+	// Get the currently playing track ID
+	if currently.Item == nil {
+		return true, nil // No track info likely means auto-play
+	}
+
+	currentTrackID := string(currently.Item.ID)
+	if currentTrackID == "" {
+		return true, nil // No track ID likely means auto-play
+	}
+
+	// If no target playlist set, use context-based detection as fallback
+	if c.targetPlaylist == "" {
+		if currently.PlaybackContext.URI == "" {
+			return true, nil // No context likely means auto-play
+		}
+		return false, nil // Can't determine without target playlist
+	}
+
+	// Check if the currently playing track exists in our playlist
+	trackInPlaylist, err := c.isTrackInPlaylist(ctx, currentTrackID)
+	if err != nil {
+		c.logger.Warn("Failed to check if track is in playlist, falling back to context check",
+			zap.Error(err))
+		// Fallback to context-based detection
+		contextURI := string(currently.PlaybackContext.URI)
+		expectedURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
+		return contextURI != expectedURI, nil
+	}
+
+	contextURI := string(currently.PlaybackContext.URI)
+	expectedURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
+	isContextCorrect := contextURI == expectedURI
+
+	// Auto-play detected if:
+	// 1. Track is not in our playlist, OR
+	// 2. Context doesn't match our playlist
+	isAutoPlay := !trackInPlaylist || !isContextCorrect
+
+	c.logger.Debug("Auto-play detection",
+		zap.String("currentTrackID", currentTrackID),
+		zap.Bool("trackInPlaylist", trackInPlaylist),
+		zap.String("currentContext", contextURI),
+		zap.String("expectedContext", expectedURI),
+		zap.Bool("isContextCorrect", isContextCorrect),
+		zap.Bool("isAutoPlay", isAutoPlay))
+
+	return isAutoPlay, nil
+}
+
+// SetTargetPlaylist sets the playlist ID that we're managing for auto-play detection
+func (c *Client) SetTargetPlaylist(playlistID string) {
+	c.targetPlaylist = playlistID
+	// Clear cache when target playlist changes
+	c.playlistTrackCache = make(map[string]bool)
+	c.cacheLastUpdated = time.Time{}
+	c.logger.Info("Target playlist set for auto-play detection", zap.String("playlistID", playlistID))
+}
+
+// refreshPlaylistCache updates the cached playlist tracks if cache is stale
+func (c *Client) refreshPlaylistCache(ctx context.Context) error {
+	if c.targetPlaylist == "" {
+		return fmt.Errorf("no target playlist set")
+	}
+
+	// Check if cache is still valid
+	if time.Since(c.cacheLastUpdated) < PlaylistCacheDuration {
+		return nil // Cache is still fresh
+	}
+
+	// Fetch fresh playlist tracks
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return fmt.Errorf("failed to refresh playlist cache: %w", err)
+	}
+
+	// Update cache
+	c.playlistTrackCache = make(map[string]bool)
+	for _, trackID := range playlistTracks {
+		c.playlistTrackCache[trackID] = true
+	}
+	c.cacheLastUpdated = time.Now()
+
+	c.logger.Debug("Playlist cache refreshed",
+		zap.String("playlistID", c.targetPlaylist),
+		zap.Int("trackCount", len(playlistTracks)))
+
+	return nil
+}
+
+// isTrackInPlaylist checks if a track is in our cached playlist
+func (c *Client) isTrackInPlaylist(ctx context.Context, trackID string) (bool, error) {
+	if err := c.refreshPlaylistCache(ctx); err != nil {
+		return false, err
+	}
+	return c.playlistTrackCache[trackID], nil
+}
+
+// invalidatePlaylistCache clears the playlist cache to force refresh
+func (c *Client) invalidatePlaylistCache() {
+	c.playlistTrackCache = make(map[string]bool)
+	c.cacheLastUpdated = time.Time{}
+}
+
+// getCurrentVolume gets the current volume from the active device
+func (c *Client) getCurrentVolume(ctx context.Context) error {
+	devices, err := c.client.PlayerDevices(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get devices: %w", err)
+	}
+
+	// Find the active device
+	for _, device := range devices {
+		if device.Active {
+			c.lastKnownVolume = device.Volume
+			c.logger.Debug("Got current volume from active device",
+				zap.String("deviceName", device.Name),
+				zap.Int("volume", device.Volume))
+			return nil
+		}
+	}
+
+	// No active device found
+	return fmt.Errorf("no active device found")
+}
+
+// getTrackPositionInPlaylist finds the position of a track in the current playlist
+func (c *Client) getTrackPositionInPlaylist(ctx context.Context, trackID string) (int, error) {
+	// Invalidate cache to get fresh playlist data since we just added a track
+	c.invalidatePlaylistCache()
+
+	// Get current playlist tracks to find the position of our track
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return -1, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	c.logger.Debug("Searching for track in playlist",
+		zap.String("trackID", trackID),
+		zap.Int("playlistLength", len(playlistTracks)))
+
+	// Find the track position in the playlist (should be at the end since we just added it)
+	for i, id := range playlistTracks {
+		if id == trackID {
+			c.logger.Debug("Found track in playlist",
+				zap.String("trackID", trackID),
+				zap.Int("position", i))
+			return i, nil
+		}
+	}
+
+	c.logger.Warn("Track not found in playlist",
+		zap.String("trackID", trackID),
+		zap.Int("playlistLength", len(playlistTracks)))
+	return -1, fmt.Errorf("track %s not found in playlist", trackID)
+}
+
+// RecoverFromAutoPlay returns playback to our target playlist
+// Uses fade-out strategy: add track to playlist, fade out, start new track, restore volume
+func (c *Client) RecoverFromAutoPlay(ctx context.Context, newTrackID string) error {
+	if c.client == nil {
+		return fmt.Errorf("client not authenticated")
+	}
+
+	if c.targetPlaylist == "" {
+		return fmt.Errorf("no target playlist set")
+	}
+
+	c.logger.Info("Starting auto-play recovery",
+		zap.String("trackID", newTrackID),
+		zap.String("targetPlaylist", c.targetPlaylist))
+
+	// Step 0: Add track to playlist first
+	if err := c.AddToPlaylist(ctx, c.targetPlaylist, newTrackID); err != nil {
+		return fmt.Errorf("failed to add track to playlist during recovery: %w", err)
+	}
+
+	// Give Spotify API time to update the playlist
+	time.Sleep(PlaybackStartDelay)
+
+	// Step 1: Get current volume from device
+	if err := c.getCurrentVolume(ctx); err != nil {
+		c.logger.Warn("Failed to get current volume, using default", zap.Error(err))
+		c.lastKnownVolume = 50 // Default fallback
+	}
+
+	// Step 2: Fade out current track
+	c.fadeOut(ctx)
+
+	// Step 3: Start new track directly in playlist context
+	// First get the track position in the playlist
+	trackPosition, err := c.getTrackPositionInPlaylist(ctx, newTrackID)
+	if err != nil {
+		c.logger.Warn("Failed to find track position, trying direct track play", zap.Error(err))
+		// Fallback: play track directly
+		trackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", newTrackID))
+		trackPlayOpts := &spotify.PlayOptions{
+			URIs: []spotify.URI{trackURI},
+		}
+		if trackErr := c.client.PlayOpt(ctx, trackPlayOpts); trackErr != nil {
+			return fmt.Errorf("failed to start track playback: %w", trackErr)
+		}
+	} else {
+		// Start playlist directly at the new track position
+		playlistURI := spotify.URI(fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist))
+		playOpts := &spotify.PlayOptions{
+			PlaybackContext: &playlistURI,
+			PlaybackOffset: &spotify.PlaybackOffset{
+				Position: &trackPosition,
+			},
+		}
+
+		playErr := c.client.PlayOpt(ctx, playOpts)
+		if playErr != nil {
+			c.logger.Warn("Failed to start playlist at track position, trying direct track play", zap.Error(playErr))
+			// Fallback: play track directly
+			trackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", newTrackID))
+			trackPlayOpts := &spotify.PlayOptions{
+				URIs: []spotify.URI{trackURI},
+			}
+			if trackErr := c.client.PlayOpt(ctx, trackPlayOpts); trackErr != nil {
+				return fmt.Errorf("failed to start track playback: %w", trackErr)
+			}
+		} else {
+			c.logger.Info("Successfully started playlist at new track position",
+				zap.String("trackID", newTrackID),
+				zap.Int("position", trackPosition))
+		}
+	}
+
+	// Step 4: Restore volume
+	c.fadeIn(ctx)
+
+	c.logger.Info("Auto-play recovery completed successfully")
+	return nil
+}
+
+// fadeOut gradually reduces volume to 0
+func (c *Client) fadeOut(ctx context.Context) {
+	const fadeSteps = 10
+	const stepDuration = 200 * time.Millisecond
+
+	// Ensure we have a valid starting volume
+	if c.lastKnownVolume <= 0 {
+		c.lastKnownVolume = 50 // Reasonable default
+	}
+
+	c.logger.Debug("Starting fade out", zap.Int("fromVolume", c.lastKnownVolume))
+
+	for i := fadeSteps; i >= 0; i-- {
+		volumePercent := (c.lastKnownVolume * i) / fadeSteps
+		if err := c.client.Volume(ctx, volumePercent); err != nil {
+			c.logger.Warn("Failed to set volume during fade out",
+				zap.Int("targetVolume", volumePercent),
+				zap.Error(err))
+			// Continue with fade even if volume control fails
+		}
+		time.Sleep(stepDuration)
+	}
+}
+
+// fadeIn gradually restores volume
+func (c *Client) fadeIn(ctx context.Context) {
+	const fadeSteps = 10
+	const stepDuration = 200 * time.Millisecond
+
+	c.logger.Debug("Starting fade in", zap.Int("toVolume", c.lastKnownVolume))
+
+	for i := 0; i <= fadeSteps; i++ {
+		volumePercent := (c.lastKnownVolume * i) / fadeSteps
+		if err := c.client.Volume(ctx, volumePercent); err != nil {
+			c.logger.Warn("Failed to set volume during fade in",
+				zap.Int("targetVolume", volumePercent),
+				zap.Error(err))
+			// Continue with fade even if volume control fails
+		}
+		time.Sleep(stepDuration)
+	}
 }
 
 // Note: Immediate playbook methods removed in favor of simpler queue-based priority approach

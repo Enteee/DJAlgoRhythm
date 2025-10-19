@@ -57,6 +57,11 @@ func NewDispatcher(
 func (d *Dispatcher) Start(ctx context.Context) error {
 	d.logger.Info("Starting message dispatcher")
 
+	// Set target playlist for auto-play detection
+	if spotifyClient, ok := d.spotify.(interface{ SetTargetPlaylist(string) }); ok {
+		spotifyClient.SetTargetPlaylist(d.config.Spotify.PlaylistID)
+	}
+
 	// Load existing playlist tracks into dedup store
 	if err := d.loadPlaylistSnapshot(ctx); err != nil {
 		d.logger.Warn("Failed to load playlist snapshot", zap.Error(err))
@@ -920,6 +925,33 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string, wasAdminApproved bool) {
 	msgCtx.State = StateAddToPlaylist
 
+	// Check for auto-play before adding track
+	if autoPlayClient, ok := d.spotify.(interface {
+		IsInAutoPlay(context.Context) (bool, error)
+	}); ok {
+		if isAutoPlay, err := autoPlayClient.IsInAutoPlay(ctx); err == nil && isAutoPlay {
+			d.logger.Info("Auto-play detected, triggering recovery", zap.String("trackID", trackID))
+			// Use recovery method if available
+			if recoveryClient, ok := d.spotify.(interface {
+				RecoverFromAutoPlay(context.Context, string) error
+			}); ok {
+				if err := recoveryClient.RecoverFromAutoPlay(ctx, trackID); err != nil {
+					d.logger.Warn("Auto-play recovery failed, falling back to normal addition", zap.Error(err))
+				} else {
+					// Recovery successful, track was added to playlist and should be playing
+					d.dedup.Add(trackID)
+					if wasAdminApproved {
+						d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
+					} else {
+						d.reactAdded(ctx, msgCtx, originalMsg, trackID)
+					}
+					return
+				}
+			}
+		}
+	}
+
+	// Normal playlist addition (no auto-play or recovery failed)
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
 		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
 			d.logger.Error("Failed to add to playlist",

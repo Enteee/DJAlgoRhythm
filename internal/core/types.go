@@ -109,6 +109,10 @@ type SpotifyClient interface {
 	GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error)
 	GetQueuePosition(ctx context.Context, trackID string) (int, error)
 	ExtractTrackID(url string) (string, error)
+	// Auto-play detection and recovery
+	IsInAutoPlay(ctx context.Context) (bool, error)
+	SetTargetPlaylist(playlistID string)
+	RecoverFromAutoPlay(ctx context.Context, trackID string) error
 }
 
 type LLMProvider interface {
