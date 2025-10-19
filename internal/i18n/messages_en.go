@@ -66,4 +66,9 @@ var englishMessages = map[string]string{
 
 	// Auto-play prevention messages
 	"bot.autoplay_prevention": "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
+
+	// Playlist monitoring messages
+	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
+		"🎵 Please switch back to the correct playlist: %s\n\n" +
+		"💡 Click the link above to quickly return to the tracked playlist.",
 }

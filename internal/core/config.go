@@ -47,14 +47,11 @@ type TelegramConfig struct {
 }
 
 type SpotifyConfig struct {
-	ClientID         string
-	ClientSecret     string
-	RedirectURL      string
-	PlaylistID       string
-	TokenPath        string
-	AutoPlayRecovery bool   // Enable auto-play detection and recovery
-	FadeTimeMs       int    // Duration of fade in/out in milliseconds
-	RecoveryStrategy string // "fade" or "immediate"
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	PlaylistID   string
+	TokenPath    string
 }
 
 type LLMConfig struct {

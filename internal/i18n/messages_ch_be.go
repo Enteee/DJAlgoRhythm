@@ -66,4 +66,9 @@ var berneseGermanMessages = map[string]string{
 	// Auto-play prevention messages
 	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
 		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
+
+	// Playlist monitoring messages
+	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playlist!\n\n" +
+		"🎵 Bitte wächsle zrügg zu dr richtige Playlist: %s\n\n" +
+		"💡 Klick uf de Link obe zum schnäu zrügg zu der Playliste z cho.",
 }

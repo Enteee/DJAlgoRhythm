@@ -879,6 +879,73 @@ func (f *Frontend) IsUserAdmin(ctx context.Context, chatID, userID string) (bool
 	return f.isUserAdmin(userIDInt, adminIDs), nil
 }
 
+// GetAdminUserIDs implements the chat.Frontend interface to get admin user IDs as strings
+func (f *Frontend) GetAdminUserIDs(ctx context.Context, chatID string) ([]string, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	// Parse chat ID
+	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid chat ID: %w", err)
+	}
+
+	// Only get admins for the configured group
+	if chatIDInt != f.config.GroupID {
+		return nil, fmt.Errorf("chat ID %s does not match configured group ID %d", chatID, f.config.GroupID)
+	}
+
+	// Use existing GetGroupAdmins method
+	adminIDs, err := f.GetGroupAdmins(ctx)
+	if err != nil {
+		return nil, err // Error already includes context from GetGroupAdmins
+	}
+
+	// Convert int64 admin IDs to strings
+	adminUserIDs := make([]string, len(adminIDs))
+	for i, adminID := range adminIDs {
+		adminUserIDs[i] = strconv.FormatInt(adminID, 10)
+	}
+
+	return adminUserIDs, nil
+}
+
+// SendDirectMessage implements the chat.Frontend interface to send direct messages to users
+func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) error {
+	if !f.config.Enabled {
+		return fmt.Errorf("telegram frontend is disabled")
+	}
+
+	// Parse user ID
+	userIDInt, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	params := &bot.SendMessageParams{
+		ChatID: userIDInt,
+		Text:   text,
+	}
+
+	// Disable link previews for direct messages
+	disabled := true
+	params.LinkPreviewOptions = &models.LinkPreviewOptions{
+		IsDisabled: &disabled,
+	}
+
+	_, err = f.bot.SendMessage(ctx, params)
+	if err != nil {
+		return fmt.Errorf("failed to send direct message to user %s: %w", userID, err)
+	}
+
+	f.logger.Debug("Sent direct message to user",
+		zap.String("userID", userID),
+		zap.String("text", text))
+
+	return nil
+}
+
 func (f *Frontend) answerExpiredCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {
 	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
 		CallbackQueryID: callbackQueryID,

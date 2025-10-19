@@ -119,14 +119,13 @@ type SpotifyClient interface {
 	EnsureTrackInQueue(ctx context.Context, trackID string) error
 	RebuildQueueWithPriority(ctx context.Context, priorityTrackID string) error
 	ExtractTrackID(url string) (string, error)
-	// Auto-play detection and recovery
-	IsInAutoPlay(ctx context.Context) (bool, error)
 	SetTargetPlaylist(playlistID string)
-	RecoverFromAutoPlay(ctx context.Context, trackID string) error
 	// Auto-play prevention
 	IsNearPlaylistEnd(ctx context.Context) (bool, error)
 	GetAutoPlayPreventionTrack(ctx context.Context) (string, error)
 	AddAutoPlayPreventionTrack(ctx context.Context) (string, error)
+	// Playlist monitoring
+	IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error)
 }
 
 type LLMProvider interface {

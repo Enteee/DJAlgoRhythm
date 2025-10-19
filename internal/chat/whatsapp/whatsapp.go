@@ -421,3 +421,55 @@ func (f *Frontend) IsUserAdmin(_ context.Context, chatID, userID string) (bool, 
 
 	return false, nil
 }
+
+// GetAdminUserIDs implements the chat.Frontend interface to get admin user IDs
+// For WhatsApp, this is a stub implementation since admin detection is not fully implemented
+func (f *Frontend) GetAdminUserIDs(_ context.Context, chatID string) ([]string, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// WhatsApp admin detection is not implemented, return empty list
+	f.logger.Debug("WhatsApp admin detection not implemented, returning empty admin list",
+		zap.String("chatID", chatID))
+
+	return []string{}, nil
+}
+
+// SendDirectMessage implements the chat.Frontend interface to send direct messages
+// For WhatsApp, this sends a message to the user's phone number as JID
+func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) error {
+	if !f.config.Enabled {
+		return fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	if f.client == nil {
+		return fmt.Errorf("whatsapp client not initialized")
+	}
+
+	// Convert userID to WhatsApp JID format (phone number)
+	userJID, err := types.ParseJID(userID)
+	if err != nil {
+		// Try adding @s.whatsapp.net if not already formatted
+		userJID, err = types.ParseJID(userID + "@s.whatsapp.net")
+		if err != nil {
+			return fmt.Errorf("invalid user ID format: %w", err)
+		}
+	}
+
+	message := &waE2E.Message{
+		Conversation: &text,
+	}
+
+	_, err = f.client.SendMessage(ctx, userJID, message)
+	if err != nil {
+		return fmt.Errorf("failed to send direct message to user %s: %w", userID, err)
+	}
+
+	f.logger.Debug("Sent direct message to user",
+		zap.String("userID", userID),
+		zap.String("userJID", userJID.String()),
+		zap.String("text", text))
+
+	return nil
+}

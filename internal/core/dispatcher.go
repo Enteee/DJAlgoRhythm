@@ -30,6 +30,10 @@ type Dispatcher struct {
 
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
+
+	// Playlist monitoring
+	lastPlaylistWarning  time.Time
+	playlistWarningMutex sync.RWMutex
 }
 
 // NewDispatcher creates a new dispatcher with the provided chat frontend
@@ -59,7 +63,7 @@ func NewDispatcher(
 func (d *Dispatcher) Start(ctx context.Context) error {
 	d.logger.Info("Starting message dispatcher")
 
-	// Set target playlist for auto-play detection
+	// Set target playlist
 	if spotifyClient, ok := d.spotify.(interface{ SetTargetPlaylist(string) }); ok {
 		spotifyClient.SetTargetPlaylist(d.config.Spotify.PlaylistID)
 	}
@@ -79,6 +83,9 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 
 	// Start auto-play prevention monitoring
 	go d.runAutoPlayPrevention(ctx)
+
+	// Start playlist monitoring
+	go d.runPlaylistMonitoring(ctx)
 
 	// Begin listening for messages
 	return d.frontend.Listen(ctx, d.handleMessage)
@@ -930,33 +937,7 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string, wasAdminApproved bool) {
 	msgCtx.State = StateAddToPlaylist
 
-	// Check for auto-play before adding track
-	if autoPlayClient, ok := d.spotify.(interface {
-		IsInAutoPlay(context.Context) (bool, error)
-	}); ok {
-		if isAutoPlay, err := autoPlayClient.IsInAutoPlay(ctx); err == nil && isAutoPlay {
-			d.logger.Info("Auto-play detected, triggering recovery", zap.String("trackID", trackID))
-			// Use recovery method if available
-			if recoveryClient, ok := d.spotify.(interface {
-				RecoverFromAutoPlay(context.Context, string) error
-			}); ok {
-				if err := recoveryClient.RecoverFromAutoPlay(ctx, trackID); err != nil {
-					d.logger.Warn("Auto-play recovery failed, falling back to normal addition", zap.Error(err))
-				} else {
-					// Recovery successful, track was added to playlist and should be playing
-					d.dedup.Add(trackID)
-					if wasAdminApproved {
-						d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
-					} else {
-						d.reactAdded(ctx, msgCtx, originalMsg, trackID)
-					}
-					return
-				}
-			}
-		}
-	}
-
-	// Normal playlist addition (no auto-play or recovery failed)
+	// Add track to playlist
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
 		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
 			d.logger.Error("Failed to add to playlist",
@@ -1309,7 +1290,9 @@ func (d *Dispatcher) addApprovalReactions(ctx context.Context, chatID, msgID str
 }
 
 const (
-	autoPlayCheckInterval = 30 * time.Second
+	autoPlayCheckInterval   = 30 * time.Second
+	playlistCheckInterval   = 15 * time.Second // Check playlist more frequently
+	playlistWarningDebounce = 5 * time.Minute  // Wait 5 minutes between warnings
 )
 
 // runAutoPlayPrevention monitors for playlist end and adds tracks to prevent auto-play
@@ -1399,4 +1382,105 @@ func (d *Dispatcher) checkAndPreventAutoPlay(ctx context.Context) {
 				zap.String("title", track.Title))
 		}
 	}
+}
+
+// runPlaylistMonitoring monitors if we're playing from the correct playlist
+func (d *Dispatcher) runPlaylistMonitoring(ctx context.Context) {
+	d.logger.Info("Starting playlist monitoring")
+
+	ticker := time.NewTicker(playlistCheckInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			d.logger.Info("Playlist monitoring stopped")
+			return
+		case <-ticker.C:
+			d.checkPlaylistCompliance(ctx)
+		}
+	}
+}
+
+// checkPlaylistCompliance checks if we're playing from the correct playlist and sends warnings if needed
+func (d *Dispatcher) checkPlaylistCompliance(ctx context.Context) {
+	// Check if we're playing from the correct playlist
+	playingCorrect, err := d.spotify.IsPlayingFromCorrectPlaylist(ctx)
+	if err != nil {
+		d.logger.Debug("Could not check playlist compliance", zap.Error(err))
+		return
+	}
+
+	if playingCorrect {
+		// Everything is fine
+		return
+	}
+
+	// Not playing from correct playlist - check if we should send a warning
+	d.playlistWarningMutex.RLock()
+	timeSinceLastWarning := time.Since(d.lastPlaylistWarning)
+	d.playlistWarningMutex.RUnlock()
+
+	if timeSinceLastWarning < playlistWarningDebounce {
+		// Too soon to send another warning
+		d.logger.Debug("Playlist compliance issue detected but warning debounced",
+			zap.Duration("timeSinceLastWarning", timeSinceLastWarning),
+			zap.Duration("debounceThreshold", playlistWarningDebounce))
+		return
+	}
+
+	d.logger.Info("Playlist compliance issue detected, sending admin warning")
+
+	// Get group ID and admin IDs
+	groupID := d.getGroupID()
+	if groupID == "" {
+		d.logger.Warn("No group ID available for playlist warning")
+		return
+	}
+
+	// Get list of admin user IDs
+	adminUserIDs, err := d.frontend.GetAdminUserIDs(ctx, groupID)
+	if err != nil {
+		d.logger.Warn("Failed to get admin user IDs for playlist warning", zap.Error(err))
+		return
+	}
+
+	if len(adminUserIDs) == 0 {
+		d.logger.Warn("No admin user IDs found for playlist warning")
+		return
+	}
+
+	// Generate Spotify playlist URL for easy recovery
+	playlistURL := fmt.Sprintf("https://open.spotify.com/playlist/%s", d.config.Spotify.PlaylistID)
+
+	// Send direct messages to all admins
+	message := d.localizer.T("bot.playlist_warning", playlistURL)
+	successCount := 0
+	var errors []string
+
+	for _, adminUserID := range adminUserIDs {
+		if err := d.frontend.SendDirectMessage(ctx, adminUserID, message); err != nil {
+			d.logger.Warn("Failed to send playlist warning to admin",
+				zap.String("adminUserID", adminUserID),
+				zap.Error(err))
+			errors = append(errors, err.Error())
+		} else {
+			successCount++
+			d.logger.Debug("Sent playlist warning to admin",
+				zap.String("adminUserID", adminUserID))
+		}
+	}
+
+	if successCount == 0 {
+		d.logger.Error("Failed to send playlist warning to any admins",
+			zap.Strings("errors", errors))
+		return
+	}
+
+	// Update last warning time
+	d.playlistWarningMutex.Lock()
+	d.lastPlaylistWarning = time.Now()
+	d.playlistWarningMutex.Unlock()
+
+	d.logger.Info("Sent playlist compliance warning message")
 }
