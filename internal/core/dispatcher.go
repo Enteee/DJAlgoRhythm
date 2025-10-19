@@ -980,6 +980,14 @@ func (d *Dispatcher) handleApprovalResult(
 		if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, denialMessage); err != nil {
 			d.logger.Error("Failed to notify user about denial", zap.Error(err))
 		}
+
+		// React with thumbs down on the original request
+		if err := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsDownReaction); err != nil {
+			d.logger.Warn("Failed to react with thumbs down on denied song request",
+				zap.String("chatID", originalMsg.ChatID),
+				zap.String("messageID", originalMsg.ID),
+				zap.Error(err))
+		}
 	}
 }
 

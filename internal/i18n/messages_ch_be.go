@@ -28,7 +28,7 @@ var berneseGermanMessages = map[string]string{
 	// Admin approval messages
 	"admin.approval_required_enhanced": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\nWart uf Admin-Freigab...",
 	"admin.approval_required_community": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\n" +
-		"Wart uf Admin-Freigab oder reagier mit 👍 unde we das o guet fingsch (%d+ Reaktione für Community-Freigab nötig).",
+		"Wart uf Admin-Freigab oder reagier mit 👍 we das o guet fingsch (%d+ Reaktione für Community-Freigab nötig).",
 	"admin.denied": "❌ Admin het z'Lied abglehnt.",
 	"admin.approval_prompt": "🎵 *Admin-Freigab nötig*\n\nUser: %s\nLied: %s\nLink: %s\n\n" +
 		"Wottsch das Lied zur Playlist hinzuefüege?",
@@ -68,7 +68,7 @@ var berneseGermanMessages = map[string]string{
 	"bot.autoplay_replacement_failed": "❌ Ha kei Ersatz-Auto-Play-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
 
 	// Playlist monitoring messages
-	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo de richtige Playliste!\n\n" +
+	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo dr richtige Playliste!\n\n" +
 		"🔄 Bitte wächsle zrügg zu dr richtige Playliste: %s\n\n" +
 		"🎵 Nöchschte Song zum abspile: %s - %s\n\n",
 	"bot.shuffle_warning": "⚠️ Warnig: Shuffle isch igschalte!\n\n" +
