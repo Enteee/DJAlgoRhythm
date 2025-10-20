@@ -832,7 +832,7 @@ func (c *Client) getLLMSearchFallbackTrack(ctx context.Context, seedTracks []cor
 		searchQuery += " playlist"
 	}
 
-	c.logger.Info("Generated LLM playlist search query for queue management prevention",
+	c.logger.Info("Generated LLM playlist search query for queue management",
 		zap.String("reason", reason),
 		zap.String("searchQuery", searchQuery),
 		zap.Int("seedTrackCount", len(seedTracks)))
@@ -882,7 +882,7 @@ func (c *Client) selectRandomTrackFromPlaylistResults(
 			continue
 		}
 
-		c.logger.Info("Selected random track from playlist for queue management prevention",
+		c.logger.Info("Selected random track from playlist for queue management",
 			zap.String("reason", reason),
 			zap.String("searchQuery", searchQuery),
 			zap.String("selectedPlaylistID", playlist.ID),
@@ -927,10 +927,10 @@ func (c *Client) AddQueueManagementTrack(ctx context.Context) (string, error) {
 	}
 
 	if err := c.AddToPlaylist(ctx, c.targetPlaylist, trackID); err != nil {
-		return "", fmt.Errorf("failed to add queue management prevention track to playlist: %w", err)
+		return "", fmt.Errorf("failed to add queue management track to playlist: %w", err)
 	}
 
-	c.logger.Info("Added queue management prevention track to playlist",
+	c.logger.Info("Added queue management track to playlist",
 		zap.String("trackID", trackID))
 	return trackID, nil
 }

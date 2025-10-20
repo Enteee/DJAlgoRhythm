@@ -42,9 +42,9 @@ type Dispatcher struct {
 	queuePositionMutex sync.RWMutex
 
 	// Shadow queue tracking for reliable queue management
-	shadowQueue        []ShadowQueueItem // tracks we've queued from current track to playlist end
+	shadowQueue        []ShadowQueueItem // tracks we've actually queued to Spotify
 	shadowQueueMutex   sync.RWMutex
-	lastCurrentTrackID string // track when current song changes for re-population
+	lastCurrentTrackID string // track when current song changes for progression tracking
 }
 
 // NewDispatcher creates a new dispatcher with the provided chat frontend
@@ -102,15 +102,6 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 
 	// Send startup message to the group
 	d.sendStartupMessage(ctx)
-
-	// Initialize shadow queue on startup
-	go func() {
-		initCtx, initCancel := context.WithTimeout(context.Background(), initializationTimeoutSecs*time.Second)
-		defer initCancel()
-		if err := d.populateShadowQueue(initCtx); err != nil {
-			d.logger.Warn("Failed to initialize shadow queue on startup", zap.Error(err))
-		}
-	}()
 
 	// Start queue and playlist management
 	go d.runQueueAndPlaylistManagement(ctx)

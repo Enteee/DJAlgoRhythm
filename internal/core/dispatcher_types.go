@@ -39,7 +39,7 @@ type ShadowQueueItem struct {
 	URI      string        // Full Spotify URI
 	Position int           // Position in logical queue (0 = next)
 	Duration time.Duration // Track duration
-	Source   string        // "playlist", "prevention", "priority", "manual"
+	Source   string        // "playlist", "queue-fill", "priority", "manual"
 	AddedAt  time.Time     // When we added this item
 }
 

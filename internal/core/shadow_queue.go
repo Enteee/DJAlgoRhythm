@@ -13,124 +13,6 @@ import (
 // The shadow queue maintains our own view of what's in the Spotify queue to avoid
 // relying on Spotify's often inaccurate queue duration API
 
-// populateShadowQueue builds the shadow queue from the current playing track to the end of the playlist
-func (d *Dispatcher) populateShadowQueue(ctx context.Context) error {
-	d.shadowQueueMutex.Lock()
-	defer d.shadowQueueMutex.Unlock()
-
-	d.logger.Debug("Populating shadow queue from current track to playlist end")
-
-	// Get current track
-	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
-	if err != nil {
-		d.logger.Debug("No track currently playing, cannot populate shadow queue", zap.Error(err))
-		// Clear shadow queue if no track is playing
-		d.shadowQueue = d.shadowQueue[:0]
-		return nil
-	}
-
-	// Check if current track changed - if not, we can skip rebuilding shadow queue
-	if currentTrackID == d.lastCurrentTrackID && len(d.shadowQueue) > 0 {
-		d.logger.Debug("Current track unchanged, shadow queue still valid",
-			zap.String("currentTrackID", currentTrackID),
-			zap.Int("shadowQueueLength", len(d.shadowQueue)))
-		return nil
-	}
-
-	d.logger.Debug("Current track changed or shadow queue empty, rebuilding",
-		zap.String("oldTrackID", d.lastCurrentTrackID),
-		zap.String("newTrackID", currentTrackID))
-
-	// Update last known current track
-	d.lastCurrentTrackID = currentTrackID
-
-	// Get all playlist tracks
-	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
-	if err != nil {
-		return fmt.Errorf("failed to get playlist tracks: %w", err)
-	}
-
-	// Find current track position in playlist
-	currentPosition := -1
-	for i, trackID := range playlistTracks {
-		if trackID == currentTrackID {
-			currentPosition = i
-			break
-		}
-	}
-
-	if currentPosition == -1 {
-		d.logger.Warn("Current track not found in playlist, cannot build shadow queue",
-			zap.String("currentTrackID", currentTrackID))
-		// Clear shadow queue if current track is not in playlist
-		d.shadowQueue = d.shadowQueue[:0]
-		return nil
-	}
-
-	// Get tracks from current position + 1 to end of playlist
-	remainingTracks := playlistTracks[currentPosition+1:]
-	if len(remainingTracks) == 0 {
-		d.logger.Debug("No remaining tracks in playlist after current track")
-		// Clear shadow queue if no tracks remaining
-		d.shadowQueue = d.shadowQueue[:0]
-		return nil
-	}
-
-	// Get durations for all remaining tracks
-	totalDuration, err := d.spotify.GetTracksDuration(ctx, remainingTracks)
-	var trackDurations []time.Duration
-	if err != nil {
-		d.logger.Warn("Failed to get track durations for shadow queue, using estimated durations",
-			zap.Error(err))
-		// Use estimated durations as fallback
-		trackDurations = make([]time.Duration, len(remainingTracks))
-		for i := range trackDurations {
-			trackDurations[i] = time.Duration(estimatedTrackDurationMins) * time.Minute
-		}
-	} else {
-		// Distribute total duration equally among tracks (simplified approach)
-		avgDuration := totalDuration / time.Duration(len(remainingTracks))
-		trackDurations = make([]time.Duration, len(remainingTracks))
-		for i := range trackDurations {
-			trackDurations[i] = avgDuration
-		}
-	}
-
-	// Build new shadow queue
-	newShadowQueue := make([]ShadowQueueItem, 0, len(remainingTracks))
-	for i, trackID := range remainingTracks {
-		var duration time.Duration
-		if i < len(trackDurations) {
-			duration = trackDurations[i]
-		} else {
-			duration = time.Duration(estimatedTrackDurationMins) * time.Minute
-		}
-
-		item := ShadowQueueItem{
-			TrackID:  trackID,
-			URI:      fmt.Sprintf("spotify:track:%s", trackID),
-			Position: i, // Position in logical queue (0 = next track)
-			Duration: duration,
-			Source:   "playlist",
-			AddedAt:  time.Now(),
-		}
-
-		newShadowQueue = append(newShadowQueue, item)
-	}
-
-	// Replace shadow queue
-	d.shadowQueue = newShadowQueue
-
-	d.logger.Info("Shadow queue populated",
-		zap.String("currentTrackID", currentTrackID),
-		zap.Int("currentPosition", currentPosition),
-		zap.Int("remainingTracks", len(remainingTracks)),
-		zap.Int("shadowQueueLength", len(d.shadowQueue)),
-		zap.Duration("totalShadowQueueDuration", d.getShadowQueueDurationUnsafe()))
-
-	return nil
-}
-
 // getShadowQueueDurationUnsafe returns the total duration of the shadow queue (unsafe - requires lock)
 func (d *Dispatcher) getShadowQueueDurationUnsafe() time.Duration {
 	var totalDuration time.Duration
@@ -173,7 +55,7 @@ func (d *Dispatcher) addToShadowQueue(trackID, source string, duration time.Dura
 		zap.Duration("duration", duration))
 }
 
-// checkCurrentTrackChanged checks if the current track has changed and triggers shadow queue repopulation if needed
+// checkCurrentTrackChanged checks if the current track has changed and updates shadow queue progression
 func (d *Dispatcher) checkCurrentTrackChanged(ctx context.Context) {
 	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
 	if err != nil {
@@ -185,13 +67,30 @@ func (d *Dispatcher) checkCurrentTrackChanged(ctx context.Context) {
 	d.shadowQueueMutex.RUnlock()
 
 	if currentTrackID != lastTrackID {
-		d.logger.Debug("Current track changed, repopulating shadow queue",
+		d.logger.Debug("Current track changed, updating shadow queue progression",
 			zap.String("oldTrackID", lastTrackID),
 			zap.String("newTrackID", currentTrackID))
 
-		if err := d.populateShadowQueue(ctx); err != nil {
-			d.logger.Warn("Failed to repopulate shadow queue after track change", zap.Error(err))
+		// Update the last known current track ID
+		d.shadowQueueMutex.Lock()
+		d.lastCurrentTrackID = currentTrackID
+
+		// Remove the first item from shadow queue (the track that just finished playing)
+		if len(d.shadowQueue) > 0 {
+			d.logger.Debug("Removing completed track from shadow queue",
+				zap.String("completedTrackID", d.shadowQueue[0].TrackID),
+				zap.String("source", d.shadowQueue[0].Source))
+
+			// Remove first item and update positions of remaining items
+			d.shadowQueue = d.shadowQueue[1:]
+			for i := range d.shadowQueue {
+				d.shadowQueue[i].Position = i
+			}
+
+			d.logger.Debug("Shadow queue updated after track completion",
+				zap.Int("remainingItems", len(d.shadowQueue)))
 		}
+		d.shadowQueueMutex.Unlock()
 	}
 }
 

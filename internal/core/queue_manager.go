@@ -12,7 +12,7 @@ import (
 
 // Queue Management and Track Addition
 // This module handles all queue-related operations including playlist addition,
-// priority queue management, queue filling, and prevention track logic
+// priority queue management, queue filling, and queue-fill track logic
 
 // addToPlaylist adds a track to the Spotify playlist or queue based on priority
 func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
@@ -167,11 +167,11 @@ func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 	// Check if current track has changed and update shadow queue if needed
 	d.checkCurrentTrackChanged(ctx)
 
-	// Check if queue prevention is already active
+	// Check if queue management is already active
 	d.queueManagementMutex.Lock()
 	if d.queueManagementActive {
 		d.queueManagementMutex.Unlock()
-		d.logger.Debug("Queue prevention already active, skipping queue management")
+		d.logger.Debug("Queue management already active, skipping queue management")
 		return
 	}
 	d.queueManagementActive = true
@@ -214,9 +214,9 @@ func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 		updatedDuration = currentDuration // Use previous value as fallback
 	}
 
-	// Add prevention tracks if still insufficient
+	// Fill queue to target duration if still insufficient
 	if updatedDuration < targetDuration {
-		d.addPreventionTracksIfNeeded(ctx, targetDuration, updatedDuration)
+		d.fillQueueToTargetDuration(ctx, targetDuration, updatedDuration)
 	}
 }
 
@@ -312,15 +312,15 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 	}
 }
 
-// addPreventionTracksIfNeeded adds prevention tracks if queue duration is still insufficient
-func (d *Dispatcher) addPreventionTracksIfNeeded(ctx context.Context, targetDuration, currentDuration time.Duration) {
+// fillQueueToTargetDuration adds tracks to reach the target queue duration if insufficient
+func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDuration, currentDuration time.Duration) {
 	if currentDuration >= targetDuration {
 		d.logger.Debug("Queue duration sufficient after playlist filling")
 		return
 	}
 
 	neededDuration := targetDuration - currentDuration
-	d.logger.Debug("Queue still needs more duration, adding prevention tracks",
+	d.logger.Debug("Queue still needs more duration, adding tracks to fill gap",
 		zap.Duration("neededDuration", neededDuration),
 		zap.Duration("currentDuration", currentDuration),
 		zap.Duration("targetDuration", targetDuration))
@@ -334,31 +334,31 @@ func (d *Dispatcher) addPreventionTracksIfNeeded(ctx context.Context, targetDura
 		maxTracksNeeded = d.config.App.MaxQueueTrackReplacements
 	}
 
-	d.logger.Info("Need to add prevention tracks to queue",
+	d.logger.Info("Need to add tracks to fill queue duration",
 		zap.Duration("neededDuration", neededDuration),
 		zap.Int("maxTracksNeeded", maxTracksNeeded))
 
-	// Add prevention tracks directly (simplified approach)
+	// Add queue-filling tracks directly (simplified approach)
 	for i := 0; i < maxTracksNeeded; i++ {
-		// Get a prevention track
+		// Get a queue-filling track
 		trackID, err := d.spotify.GetQueueManagementTrack(ctx)
 		if err != nil {
-			d.logger.Warn("Failed to get queue prevention track", zap.Error(err))
+			d.logger.Warn("Failed to get queue-filling track", zap.Error(err))
 			continue
 		}
 
 		// Add to queue immediately
-		if queueErr := d.AddToQueueWithShadowTracking(ctx, trackID, "prevention"); queueErr != nil {
-			d.logger.Warn("Failed to add prevention track to queue", zap.Error(queueErr))
+		if queueErr := d.AddToQueueWithShadowTracking(ctx, trackID, "queue-fill"); queueErr != nil {
+			d.logger.Warn("Failed to add queue-filling track to queue", zap.Error(queueErr))
 			continue
 		}
-		d.logger.Info("Added prevention track to queue",
+		d.logger.Info("Added queue-filling track to queue",
 			zap.String("trackID", trackID))
 
 		// Add to dedup store and playlist
 		d.dedup.Add(trackID)
 		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
-			d.logger.Warn("Failed to add prevention track to playlist", zap.Error(err))
+			d.logger.Warn("Failed to add queue-filling track to playlist", zap.Error(err))
 		}
 	}
 }
@@ -417,7 +417,7 @@ func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 			d.dedup.Remove(trackID)
 		}
 
-		// Try to get a new queue prevention track to replace the denied one
+		// Try to get a new queue-filling track to replace the denied one
 		go d.findAndSuggestReplacementTrack(ctx)
 	}
 }
