@@ -62,10 +62,10 @@ var englishMessages = map[string]string{
 	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 I am going offline. See you later!\n\n📀 All songs from this session: %s",
 
-	// Auto-play prevention messages
-	"bot.autoplay_prevention":         "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
-	"bot.autoplay_replacement":        "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Do you approve this replacement?",
-	"bot.autoplay_replacement_failed": "❌ Failed to find a replacement auto-play track. Please add more songs manually!",
+	// Queue management messages
+	"bot.queue_management":         "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
+	"bot.queue_replacement":        "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Do you approve this replacement?",
+	"bot.queue_replacement_failed": "❌ Failed to find a replacement queue track. Please add more songs manually!",
 
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
@@ -85,12 +85,12 @@ var englishMessages = map[string]string{
 		"• Set repeat to off or playlist (🔁)\n\n" +
 		"💡 These settings ensure optimal auto-DJing experience.",
 
-	// Auto-play approval messages
-	"button.autoplay_approve":            "✅ Approve",
-	"button.autoplay_deny":               "❌ Deny",
-	"callback.autoplay_approved":         "✅ Auto-play track approved",
-	"callback.autoplay_denied":           "❌ Auto-play track denied",
-	"callback.playlist_switched":         "🔄 Switched back to playlist and now playing: %s - %s",
-	"callback.playlist_stay":             "❌ Staying on current playlist",
-	"bot.autoplay_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
+	// Queue track approval messages
+	"button.queue_approve":            "✅ Approve",
+	"button.queue_deny":               "❌ Deny",
+	"callback.queue_approved":         "✅ Queue track approved",
+	"callback.queue_denied":           "❌ Queue track denied",
+	"callback.playlist_switched":      "🔄 Switched back to playlist and now playing: %s - %s",
+	"callback.playlist_stay":          "❌ Staying on current playlist",
+	"bot.queue_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
 }

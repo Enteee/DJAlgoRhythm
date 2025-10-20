@@ -231,6 +231,8 @@ never gonna give you up rick astley
 | **General** | | | |
 | `WHATDJ_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
 | `WHATDJ_CONFIRM_ADMIN_TIMEOUT_SECS` | Reaction timeout for admins (seconds) | `3600` | ❌ |
+| `WHATDJ_QUEUE_AHEAD_DURATION_SECS` | Target queue duration (seconds) | `90` | ❌ |
+| `WHATDJ_QUEUE_CHECK_INTERVAL_SECS` | Queue check interval (seconds) | `45` | ❌ |
 | `WHATDJ_SERVER_PORT` | HTTP server port | `8080` | ❌ |
 | `WHATDJ_LOG_LEVEL` | Logging level | `info` | ❌ |
 

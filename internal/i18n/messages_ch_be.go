@@ -61,11 +61,11 @@ var berneseGermanMessages = map[string]string{
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit för öii Musigwünsch!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!\n\n📀 Aui Lieder vo dere Session: %s",
 
-	// Auto-play prevention messages
-	"bot.autoplay_prevention": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
+	// Queue management messages
+	"bot.queue_management": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
 		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
-	"bot.autoplay_replacement":        "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
-	"bot.autoplay_replacement_failed": "❌ Ha kei Ersatz-Auto-Play-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
+	"bot.queue_replacement":        "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
+	"bot.queue_replacement_failed": "❌ Ha kei Ersatz-Queue-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
 
 	// Playlist monitoring messages
 	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo dr richtige Playliste!\n\n" +
@@ -85,12 +85,12 @@ var berneseGermanMessages = map[string]string{
 		"• Stell Repeat uf us oder Playliste (🔁)\n\n" +
 		"💡 Die Iistellige sorged für optimals Auto-DJing.",
 
-	// Auto-play approval messages
-	"button.autoplay_approve":            "✅ Isch ok",
-	"button.autoplay_deny":               "❌ Ou nei",
-	"callback.autoplay_approved":         "✅ Auto-Play-Track isch guetgeheisse worde",
-	"callback.autoplay_denied":           "❌ Auto-Play-Track isch abglehnt worde",
-	"callback.playlist_switched":         "🔄 Zrügg zur Playlist gwächslet und spielt jetzt: %s - %s",
-	"callback.playlist_stay":             "❌ Bliibe bi dr aktuälle Playliste",
-	"bot.autoplay_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
+	// Queue track approval messages
+	"button.queue_approve":            "✅ Isch ok",
+	"button.queue_deny":               "❌ Ou nei",
+	"callback.queue_approved":         "✅ Queue-Track isch guetgeheisse worde",
+	"callback.queue_denied":           "❌ Queue-Track isch abglehnt worde",
+	"callback.playlist_switched":      "🔄 Zrügg zur Playlist gwächslet und spielt jetzt: %s - %s",
+	"callback.playlist_stay":          "❌ Bliibe bi dr aktuälle Playliste",
+	"bot.queue_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
 }

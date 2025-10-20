@@ -74,10 +74,15 @@ func init() {
 	rootCmd.PersistentFlags().Int("server-port", 8080, "HTTP server port")
 	rootCmd.PersistentFlags().Int("confirm-timeout-secs", 120, "Confirmation timeout in seconds")
 	rootCmd.PersistentFlags().Int("confirm-admin-timeout-secs", 3600, "Admin confirmation timeout in seconds")
-	rootCmd.PersistentFlags().Int("autoplay-approval-timeout-secs", 30, "Auto-play approval timeout in seconds")
-	rootCmd.PersistentFlags().Int("max-autoplay-replacements", 3, "Maximum number of auto-play replacement attempts before auto-accepting")
+	rootCmd.PersistentFlags().Int("queue-track-approval-timeout-secs", 30, "Queue track approval timeout in seconds")
+	rootCmd.PersistentFlags().Int("max-queue-track-replacements", 3, "Maximum queue track replacement attempts before auto-accepting")
 	rootCmd.PersistentFlags().Bool("admin-needs-approval", false, "Require approval even for admins (for testing)")
 	rootCmd.PersistentFlags().Int("community-approval", 0, "Number of 👍 reactions needed to bypass admin approval (0 disables feature)")
+	rootCmd.PersistentFlags().Int("queue-ahead-duration-secs", 90, "Target queue duration in seconds")
+	rootCmd.PersistentFlags().Int("queue-check-interval-secs", 45, "Queue check interval in seconds")
+	rootCmd.PersistentFlags().Int("shadow-queue-maintenance-interval-mins", 5, "Shadow queue maintenance interval in minutes")
+	rootCmd.PersistentFlags().Int("shadow-queue-max-age-hours", 2, "Maximum age of shadow queue items in hours")
+	rootCmd.PersistentFlags().Bool("shadow-queue-preference-enabled", true, "Prefer shadow queue over Spotify API for calculations")
 	supportedLangs := strings.Join(i18n.GetSupportedLanguages(), ", ")
 	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", supportedLangs))
 
@@ -188,12 +193,21 @@ func configureServer(cfg *core.Config) {
 func configureApp(cfg *core.Config) {
 	cfg.App.ConfirmTimeoutSecs = viper.GetInt("confirm-timeout-secs")
 	cfg.App.ConfirmAdminTimeoutSecs = viper.GetInt("confirm-admin-timeout-secs")
-	cfg.App.AutoPlayApprovalTimeoutSecs = viper.GetInt("autoplay-approval-timeout-secs")
-	cfg.App.MaxAutoPlayReplacements = viper.GetInt("max-autoplay-replacements")
+	cfg.App.QueueTrackApprovalTimeoutSecs = viper.GetInt("queue-track-approval-timeout-secs")
+	cfg.App.MaxQueueTrackReplacements = viper.GetInt("max-queue-track-replacements")
 	cfg.App.MaxRetries = viper.GetInt("max-retries")
 	if cfg.App.MaxRetries == 0 {
 		cfg.App.MaxRetries = 3
 	}
+
+	// Queue-ahead configuration
+	cfg.App.QueueAheadDurationSecs = viper.GetInt("queue-ahead-duration-secs")
+	cfg.App.QueueCheckIntervalSecs = viper.GetInt("queue-check-interval-secs")
+
+	// Shadow queue configuration
+	cfg.App.ShadowQueueMaintenanceIntervalMins = viper.GetInt("shadow-queue-maintenance-interval-mins")
+	cfg.App.ShadowQueueMaxAgeHours = viper.GetInt("shadow-queue-max-age-hours")
+	cfg.App.ShadowQueuePreferenceEnabled = viper.GetBool("shadow-queue-preference-enabled")
 
 	// Language configuration with validation
 	cfg.App.Language = viper.GetString("language")

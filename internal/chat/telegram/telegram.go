@@ -53,8 +53,8 @@ type Frontend struct {
 	// Message handling
 	messageHandler func(*chat.Message)
 
-	// Auto-play decision handling
-	autoPlayDecisionHandler func(trackID string, approved bool)
+	// Queue track decision handling
+	queueTrackDecisionHandler func(trackID string, approved bool)
 
 	// Playlist switch decision handling
 	playlistSwitchDecisionHandler func(approved bool)
@@ -136,12 +136,26 @@ func (f *Frontend) Start(ctx context.Context) error {
 		bot.WithDefaultHandler(f.handleUpdate),
 		bot.WithCallbackQueryDataHandler("confirm_", bot.MatchTypePrefix, f.handleConfirmCallback),
 		bot.WithCallbackQueryDataHandler("reject_", bot.MatchTypePrefix, f.handleRejectCallback),
-		bot.WithCallbackQueryDataHandler("admin_approve_", bot.MatchTypePrefix, f.handleAdminApproveCallback),
-		bot.WithCallbackQueryDataHandler("admin_deny_", bot.MatchTypePrefix, f.handleAdminDenyCallback),
-		bot.WithCallbackQueryDataHandler("autoplay_approve_", bot.MatchTypePrefix, f.handleAutoPlayApproveCallback),
-		bot.WithCallbackQueryDataHandler("autoplay_deny_", bot.MatchTypePrefix, f.handleAutoPlayDenyCallback),
-		bot.WithCallbackQueryDataHandler("playlist_switch_approve", bot.MatchTypeExact, f.handlePlaylistSwitchApproveCallback),
-		bot.WithCallbackQueryDataHandler("playlist_switch_deny", bot.MatchTypeExact, f.handlePlaylistSwitchDenyCallback),
+		bot.WithCallbackQueryDataHandler("admin_approve_", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			f.handleAdminApprovalCallback(ctx, b, update, true)
+		}),
+		bot.WithCallbackQueryDataHandler("admin_deny_", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			f.handleAdminApprovalCallback(ctx, b, update, false)
+		}),
+		bot.WithCallbackQueryDataHandler("queue_approve_", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			f.handleQueueTrackCallback(ctx, b, update, true)
+		}),
+		bot.WithCallbackQueryDataHandler("queue_deny_", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			f.handleQueueTrackCallback(ctx, b, update, false)
+		}),
+		bot.WithCallbackQueryDataHandler("playlist_switch_approve", bot.MatchTypeExact,
+			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				f.handlePlaylistSwitchCallback(ctx, b, update, true)
+			}),
+		bot.WithCallbackQueryDataHandler("playlist_switch_deny", bot.MatchTypeExact,
+			func(ctx context.Context, b *bot.Bot, update *models.Update) {
+				f.handlePlaylistSwitchCallback(ctx, b, update, false)
+			}),
 	}
 
 	b, err := bot.New(f.config.BotToken, opts...)
@@ -792,16 +806,6 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 	return nil
 }
 
-// handleAdminApproveCallback handles admin approval button clicks
-func (f *Frontend) handleAdminApproveCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	f.handleAdminApprovalCallback(ctx, b, update, true)
-}
-
-// handleAdminDenyCallback handles admin denial button clicks
-func (f *Frontend) handleAdminDenyCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	f.handleAdminApprovalCallback(ctx, b, update, false)
-}
-
 // handleAdminApprovalCallback handles both admin approve and deny callbacks
 func (f *Frontend) handleAdminApprovalCallback(ctx context.Context, b *bot.Bot, update *models.Update, approved bool) {
 	if update.CallbackQuery == nil {
@@ -837,23 +841,13 @@ func (f *Frontend) extractAdminApprovalKey(callbackData string, approved bool) s
 	return ""
 }
 
-// handleAutoPlayApproveCallback handles auto-play approval button clicks
-func (f *Frontend) handleAutoPlayApproveCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	f.handleAutoPlayCallback(ctx, b, update, true)
-}
-
-// handleAutoPlayDenyCallback handles auto-play denial button clicks
-func (f *Frontend) handleAutoPlayDenyCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	f.handleAutoPlayCallback(ctx, b, update, false)
-}
-
-// handleAutoPlayCallback handles both auto-play approve and deny callbacks
-func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, update *models.Update, approved bool) {
+// handleQueueTrackCallback handles both queue track approve and deny callbacks
+func (f *Frontend) handleQueueTrackCallback(ctx context.Context, b *bot.Bot, update *models.Update, approved bool) {
 	if update.CallbackQuery == nil {
 		return
 	}
 
-	trackID := f.extractAutoPlayTrackID(update.CallbackQuery.Data, approved)
+	trackID := f.extractQueueTrackID(update.CallbackQuery.Data, approved)
 	if trackID == "" {
 		return
 	}
@@ -861,9 +855,9 @@ func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, updat
 	// Answer the callback query immediately
 	var responseText string
 	if approved {
-		responseText = f.localizer.T("callback.autoplay_approved")
+		responseText = f.localizer.T("callback.queue_approved")
 	} else {
-		responseText = f.localizer.T("callback.autoplay_denied")
+		responseText = f.localizer.T("callback.queue_denied")
 	}
 
 	if _, err := b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
@@ -877,7 +871,7 @@ func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, updat
 		// React with thumbs up emoji to show approval
 		if err := f.React(ctx, strconv.FormatInt(update.CallbackQuery.Message.Message.Chat.ID, 10),
 			strconv.Itoa(update.CallbackQuery.Message.Message.ID), chat.ReactionThumbsUp); err != nil {
-			f.logger.Debug("Failed to add thumbs up reaction to auto-play message", zap.Error(err))
+			f.logger.Debug("Failed to add thumbs up reaction to queue track message", zap.Error(err))
 		}
 
 		// Remove the inline keyboard by editing the message
@@ -888,7 +882,7 @@ func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, updat
 				InlineKeyboard: [][]models.InlineKeyboardButton{},
 			},
 		}); err != nil {
-			f.logger.Debug("Failed to remove buttons from auto-play message", zap.Error(err))
+			f.logger.Debug("Failed to remove buttons from queue track message", zap.Error(err))
 		}
 	} else {
 		// Delete the message on denial
@@ -896,29 +890,19 @@ func (f *Frontend) handleAutoPlayCallback(ctx context.Context, b *bot.Bot, updat
 			ChatID:    update.CallbackQuery.Message.Message.Chat.ID,
 			MessageID: update.CallbackQuery.Message.Message.ID,
 		}); err != nil {
-			f.logger.Debug("Failed to delete auto-play message", zap.Error(err))
+			f.logger.Debug("Failed to delete queue track message", zap.Error(err))
 		}
 	}
 
 	// Notify the dispatcher about the decision
-	if f.autoPlayDecisionHandler != nil {
-		f.autoPlayDecisionHandler(trackID, approved)
+	if f.queueTrackDecisionHandler != nil {
+		f.queueTrackDecisionHandler(trackID, approved)
 	}
 
-	f.logger.Info("Auto-play decision processed",
+	f.logger.Info("Queue track decision processed",
 		zap.String("trackID", trackID),
 		zap.Bool("approved", approved),
 		zap.String("userID", strconv.FormatInt(update.CallbackQuery.From.ID, 10)))
-}
-
-// handlePlaylistSwitchApproveCallback handles playlist switch approval
-func (f *Frontend) handlePlaylistSwitchApproveCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	f.handlePlaylistSwitchCallback(ctx, b, update, true)
-}
-
-// handlePlaylistSwitchDenyCallback handles playlist switch denial
-func (f *Frontend) handlePlaylistSwitchDenyCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	f.handlePlaylistSwitchCallback(ctx, b, update, false)
 }
 
 // handlePlaylistSwitchCallback handles both playlist switch approve and deny callbacks
@@ -966,12 +950,12 @@ func (f *Frontend) handlePlaylistSwitchCallback(ctx context.Context, b *bot.Bot,
 		zap.String("userID", strconv.FormatInt(update.CallbackQuery.From.ID, 10)))
 }
 
-func (f *Frontend) extractAutoPlayTrackID(callbackData string, approved bool) string {
-	if approved && strings.HasPrefix(callbackData, "autoplay_approve_") {
-		return strings.TrimPrefix(callbackData, "autoplay_approve_")
+func (f *Frontend) extractQueueTrackID(callbackData string, approved bool) string {
+	if approved && strings.HasPrefix(callbackData, "queue_approve_") {
+		return strings.TrimPrefix(callbackData, "queue_approve_")
 	}
-	if !approved && strings.HasPrefix(callbackData, "autoplay_deny_") {
-		return strings.TrimPrefix(callbackData, "autoplay_deny_")
+	if !approved && strings.HasPrefix(callbackData, "queue_deny_") {
+		return strings.TrimPrefix(callbackData, "queue_deny_")
 	}
 	return ""
 }
@@ -1357,8 +1341,8 @@ func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, req
 	}
 }
 
-// SendAutoPlayApproval sends an auto-play prevention message with approve/deny buttons
-func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, trackID, message string) (string, error) {
+// SendQueueTrackApproval sends a queue track approval message with approve/deny buttons
+func (f *Frontend) SendQueueTrackApproval(ctx context.Context, chatID, trackID, message string) (string, error) {
 	if !f.config.Enabled {
 		return "", nil
 	}
@@ -1371,17 +1355,17 @@ func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, trackID, me
 	keyboard := [][]models.InlineKeyboardButton{
 		{
 			{
-				Text:         f.localizer.T("button.autoplay_approve"),
-				CallbackData: "autoplay_approve_" + trackID,
+				Text:         f.localizer.T("button.queue_approve"),
+				CallbackData: "queue_approve_" + trackID,
 			},
 			{
-				Text:         f.localizer.T("button.autoplay_deny"),
-				CallbackData: "autoplay_deny_" + trackID,
+				Text:         f.localizer.T("button.queue_deny"),
+				CallbackData: "queue_deny_" + trackID,
 			},
 		},
 	}
 
-	// Disable link previews for auto-play messages since they contain Spotify links
+	// Disable link previews for queue track messages since they contain Spotify links
 	disabled := true
 	sentMsg, err := f.bot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:             chatIDInt,
@@ -1390,10 +1374,10 @@ func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, trackID, me
 		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: &disabled},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to send auto-play approval message: %w", err)
+		return "", fmt.Errorf("failed to send queue track approval message: %w", err)
 	}
 
-	f.logger.Debug("Sent auto-play approval message",
+	f.logger.Debug("Sent queue track approval message",
 		zap.String("chatID", chatID),
 		zap.String("trackID", trackID),
 		zap.Int("messageID", sentMsg.ID))
@@ -1401,9 +1385,9 @@ func (f *Frontend) SendAutoPlayApproval(ctx context.Context, chatID, trackID, me
 	return strconv.Itoa(sentMsg.ID), nil
 }
 
-// SetAutoPlayDecisionHandler sets the handler for auto-play approval/denial decisions
-func (f *Frontend) SetAutoPlayDecisionHandler(handler func(trackID string, approved bool)) {
-	f.autoPlayDecisionHandler = handler
+// SetQueueTrackDecisionHandler sets the handler for queue track approval/denial decisions
+func (f *Frontend) SetQueueTrackDecisionHandler(handler func(trackID string, approved bool)) {
+	f.queueTrackDecisionHandler = handler
 }
 
 // SendPlaylistSwitchApproval sends a playlist switch warning with switch/stay buttons

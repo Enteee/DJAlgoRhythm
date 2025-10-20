@@ -9,16 +9,21 @@ import (
 
 // Default configuration values
 const (
-	DefaultLLMThreshold                = 0.65
-	DefaultMaxCandidates               = 3
-	DefaultServerPort                  = 8080
-	DefaultTimeoutSeconds              = 10
-	DefaultConfirmTimeoutSecs          = 120
-	DefaultConfirmAdminTimeoutSecs     = 3600
-	DefaultAutoPlayApprovalTimeoutSecs = 30
-	DefaultMaxAutoPlayReplacements     = 3
-	DefaultMaxRetries                  = 3
-	DefaultRetryDelaySecs              = 5
+	DefaultLLMThreshold                       = 0.65
+	DefaultMaxCandidates                      = 3
+	DefaultServerPort                         = 8080
+	DefaultTimeoutSeconds                     = 10
+	DefaultConfirmTimeoutSecs                 = 120
+	DefaultConfirmAdminTimeoutSecs            = 3600
+	DefaultQueueTrackApprovalTimeoutSecs      = 30
+	DefaultMaxQueueTrackReplacements          = 3
+	DefaultMaxRetries                         = 3
+	DefaultRetryDelaySecs                     = 5
+	DefaultQueueAheadDurationSecs             = 90
+	DefaultQueueCheckIntervalSecs             = 45
+	DefaultShadowQueueMaintenanceIntervalMins = 5
+	DefaultShadowQueueMaxAgeHours             = 2
+	DefaultShadowQueuePreferenceEnabled       = true
 )
 
 type Config struct {
@@ -78,13 +83,18 @@ type LogConfig struct {
 }
 
 type AppConfig struct {
-	ConfirmTimeoutSecs          int
-	ConfirmAdminTimeoutSecs     int
-	AutoPlayApprovalTimeoutSecs int
-	MaxAutoPlayReplacements     int
-	MaxRetries                  int
-	RetryDelaySecs              int
-	Language                    string // Bot language for user-facing messages
+	ConfirmTimeoutSecs                 int
+	ConfirmAdminTimeoutSecs            int
+	QueueTrackApprovalTimeoutSecs      int
+	MaxQueueTrackReplacements          int
+	MaxRetries                         int
+	RetryDelaySecs                     int
+	Language                           string // Bot language for user-facing messages
+	QueueAheadDurationSecs             int    // Target queue duration in seconds
+	QueueCheckIntervalSecs             int    // Queue check interval in seconds
+	ShadowQueueMaintenanceIntervalMins int    // Shadow queue maintenance interval in minutes
+	ShadowQueueMaxAgeHours             int    // Maximum age of shadow queue items in hours
+	ShadowQueuePreferenceEnabled       bool   // Prefer shadow queue over Spotify API for position/duration
 }
 
 func DefaultConfig() *Config {
@@ -119,13 +129,18 @@ func DefaultConfig() *Config {
 			Format: "json",
 		},
 		App: AppConfig{
-			ConfirmTimeoutSecs:          DefaultConfirmTimeoutSecs,
-			ConfirmAdminTimeoutSecs:     DefaultConfirmAdminTimeoutSecs,
-			AutoPlayApprovalTimeoutSecs: DefaultAutoPlayApprovalTimeoutSecs,
-			MaxAutoPlayReplacements:     DefaultMaxAutoPlayReplacements,
-			MaxRetries:                  DefaultMaxRetries,
-			RetryDelaySecs:              DefaultRetryDelaySecs,
-			Language:                    i18n.DefaultLanguage, // Default to English
+			ConfirmTimeoutSecs:                 DefaultConfirmTimeoutSecs,
+			ConfirmAdminTimeoutSecs:            DefaultConfirmAdminTimeoutSecs,
+			QueueTrackApprovalTimeoutSecs:      DefaultQueueTrackApprovalTimeoutSecs,
+			MaxQueueTrackReplacements:          DefaultMaxQueueTrackReplacements,
+			MaxRetries:                         DefaultMaxRetries,
+			RetryDelaySecs:                     DefaultRetryDelaySecs,
+			Language:                           i18n.DefaultLanguage, // Default to English
+			QueueAheadDurationSecs:             DefaultQueueAheadDurationSecs,
+			QueueCheckIntervalSecs:             DefaultQueueCheckIntervalSecs,
+			ShadowQueueMaintenanceIntervalMins: DefaultShadowQueueMaintenanceIntervalMins,
+			ShadowQueueMaxAgeHours:             DefaultShadowQueueMaxAgeHours,
+			ShadowQueuePreferenceEnabled:       DefaultShadowQueuePreferenceEnabled,
 		},
 	}
 }

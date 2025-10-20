@@ -60,12 +60,12 @@ type Frontend interface {
 	// SendDirectMessage sends a direct message to a user by their user ID
 	SendDirectMessage(ctx context.Context, userID, text string) error
 
-	// SendAutoPlayApproval sends an auto-play prevention message with approve/deny buttons
+	// SendQueueTrackApproval sends a queue track approval message with approve/deny buttons
 	// Returns the message ID for tracking responses
-	SendAutoPlayApproval(ctx context.Context, chatID, trackID, message string) (string, error)
+	SendQueueTrackApproval(ctx context.Context, chatID, trackID, message string) (string, error)
 
-	// SetAutoPlayDecisionHandler sets the handler for auto-play approval/denial decisions
-	SetAutoPlayDecisionHandler(handler func(trackID string, approved bool))
+	// SetQueueTrackDecisionHandler sets the handler for queue track approval/denial decisions
+	SetQueueTrackDecisionHandler(handler func(trackID string, approved bool))
 
 	// EditMessage edits an existing message by ID (returns error if not supported)
 	EditMessage(ctx context.Context, chatID, messageID, newText string) error

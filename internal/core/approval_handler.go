@@ -1,0 +1,551 @@
+package core
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"go.uber.org/zap"
+
+	"whatdj/internal/chat"
+)
+
+// Approval Management
+// This module handles all forms of approval workflows including user confirmation,
+// admin approval, community approval, and queue track approval
+
+// promptEnhancedApproval asks for user approval with enhanced context
+func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *MessageContext,
+	originalMsg *chat.Message, candidate *LLMCandidate) {
+	msgCtx.State = StateConfirmationPrompt
+
+	// Build format components
+	albumPart := ""
+	if candidate.Track.Album != "" {
+		albumPart = d.localizer.T("format.album", candidate.Track.Album)
+	}
+
+	yearPart := ""
+	if candidate.Track.Year > 0 {
+		yearPart = d.localizer.T("format.year", candidate.Track.Year)
+	}
+
+	urlPart := ""
+	if candidate.Track.URL != "" {
+		urlPart = d.localizer.T("format.url", candidate.Track.URL)
+	}
+
+	prompt := d.localizer.T("prompt.enhanced_approval",
+		candidate.Track.Artist, candidate.Track.Title, albumPart, yearPart, urlPart)
+	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
+
+	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
+	if err != nil {
+		d.logger.Error("Failed to get enhanced approval", zap.Error(err))
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
+		return
+	}
+
+	if approved {
+		d.handleEnhancedApproval(ctx, msgCtx, originalMsg)
+	} else {
+		d.handleRejection(ctx, msgCtx, originalMsg)
+	}
+}
+
+// handleEnhancedApproval processes approval for enhanced candidates
+func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
+	if len(msgCtx.Candidates) == 0 {
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
+		return
+	}
+
+	best := msgCtx.Candidates[0]
+
+	// For enhanced candidates, we already have validated Spotify data
+	// Try to find the exact track ID from our previous search
+	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
+	if err != nil || len(tracks) == 0 {
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.not_found"))
+		return
+	}
+
+	// Find the best matching track (should be the same as our enhanced result)
+	var trackID string
+	for _, track := range tracks {
+		if track.Artist == best.Track.Artist && track.Title == best.Track.Title {
+			trackID = track.ID
+			break
+		}
+	}
+
+	// Fallback to first result if exact match not found
+	if trackID == "" {
+		trackID = tracks[0].ID
+	}
+
+	if d.dedup.Has(trackID) {
+		d.reactDuplicate(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
+}
+
+// promptApproval asks for user approval with high confidence
+func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
+	msgCtx.State = StateConfirmationPrompt
+
+	// Build format components
+	yearPart := ""
+	if candidate.Track.Year > 0 {
+		yearPart = d.localizer.T("format.year", candidate.Track.Year)
+	}
+
+	urlPart := ""
+	if candidate.Track.URL != "" {
+		urlPart = d.localizer.T("format.url", candidate.Track.URL)
+	}
+
+	prompt := d.localizer.T("prompt.basic_approval",
+		candidate.Track.Artist, candidate.Track.Title, yearPart, urlPart)
+	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
+
+	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
+	if err != nil {
+		d.logger.Error("Failed to get approval", zap.Error(err))
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
+		return
+	}
+
+	if approved {
+		d.handleApproval(ctx, msgCtx, originalMsg)
+	} else {
+		d.handleRejection(ctx, msgCtx, originalMsg)
+	}
+}
+
+// handleApproval processes user approval
+func (d *Dispatcher) handleApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
+	if len(msgCtx.Candidates) == 0 {
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
+		return
+	}
+
+	best := msgCtx.Candidates[0]
+
+	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
+	if err != nil || len(tracks) == 0 {
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.not_found"))
+		return
+	}
+
+	trackID := tracks[0].ID
+	if d.dedup.Has(trackID) {
+		d.reactDuplicate(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
+}
+
+// handleRejection processes user rejection
+func (d *Dispatcher) handleRejection(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
+	d.askWhichSong(ctx, msgCtx, originalMsg)
+}
+
+// isAdminApprovalRequired checks if admin approval is enabled
+func (d *Dispatcher) isAdminApprovalRequired() bool {
+	// Check if the frontend supports admin approval
+	if telegramFrontend, ok := d.frontend.(interface {
+		IsAdminApprovalEnabled() bool
+	}); ok {
+		return telegramFrontend.IsAdminApprovalEnabled()
+	}
+	return false
+}
+
+// isAdminNeedsApproval checks if admins also need approval
+func (d *Dispatcher) isAdminNeedsApproval() bool {
+	return d.config.Telegram.AdminNeedsApproval
+}
+
+// isUserAdmin checks if the message sender is an admin in the chat
+func (d *Dispatcher) isUserAdmin(ctx context.Context, msg *chat.Message) bool {
+	isAdmin, err := d.frontend.IsUserAdmin(ctx, msg.ChatID, msg.SenderID)
+	if err != nil {
+		d.logger.Warn("Failed to check admin status, assuming non-admin",
+			zap.String("userID", msg.SenderID),
+			zap.String("chatID", msg.ChatID),
+			zap.Error(err))
+		return false
+	}
+
+	d.logger.Debug("Admin status checked",
+		zap.String("userID", msg.SenderID),
+		zap.String("userName", msg.SenderName),
+		zap.Bool("isAdmin", isAdmin))
+
+	return isAdmin
+}
+
+// awaitAdminApproval requests admin approval before adding to playlist
+func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	msgCtx.State = StateAwaitAdminApproval
+
+	// Get track information for the approval request
+	track, err := d.spotify.GetTrack(ctx, trackID)
+	if err != nil {
+		d.logger.Error("Failed to get track info for admin approval", zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, "Failed to get track information")
+		return
+	}
+
+	songInfo := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+	songURL := track.URL
+
+	// Send notification to user that admin approval is required with song details
+	approvalMessage := d.formatAdminApprovalMessage(originalMsg, track)
+	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, approvalMessage)
+	if err != nil {
+		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
+	}
+
+	// Add reaction buttons if message was sent successfully and community approval is enabled
+	if approvalMsgID != "" {
+		d.addApprovalReactions(ctx, originalMsg.ChatID, approvalMsgID)
+	}
+
+	// Check if frontend supports both admin approval and community approval
+	telegramFrontend, supportsAdminApproval := d.frontend.(interface {
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+	})
+
+	communityApprovalFrontend, supportsCommunityApproval := d.frontend.(interface {
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (bool, error)
+	})
+
+	if !supportsAdminApproval {
+		d.logger.Error("Frontend doesn't support admin approval, proceeding without")
+		d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
+
+	// Check if community approval is enabled and supported
+	communityApprovalThreshold := d.config.Telegram.CommunityApproval
+	if supportsCommunityApproval && communityApprovalThreshold > 0 && approvalMsgID != "" {
+		// Run both admin approval and community approval concurrently
+		d.awaitConcurrentApproval(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, approvalMsgID,
+			telegramFrontend, communityApprovalFrontend, communityApprovalThreshold)
+	} else {
+		// Only admin approval
+		d.awaitAdminApprovalOnly(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, approvalMsgID, telegramFrontend)
+	}
+}
+
+// awaitConcurrentApproval runs both admin and community approval concurrently
+func (d *Dispatcher) awaitConcurrentApproval(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, approvalMsgID string,
+	adminFrontend interface {
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+	},
+	communityFrontend interface {
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (bool, error)
+	},
+	communityThreshold int,
+) {
+	// Create channels for results
+	adminResult := make(chan bool, 1)
+	communityResult := make(chan bool, 1)
+	const maxConcurrentApprovals = 2
+	errorResult := make(chan error, maxConcurrentApprovals)
+
+	// Start admin approval in goroutine
+	go func() {
+		approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
+		if err != nil {
+			errorResult <- err
+			return
+		}
+		adminResult <- approved
+	}()
+
+	// Start community approval in goroutine
+	go func() {
+		approved, err := communityFrontend.AwaitCommunityApproval(ctx, approvalMsgID, communityThreshold, d.config.App.ConfirmAdminTimeoutSecs)
+		if err != nil {
+			errorResult <- err
+			return
+		}
+		communityResult <- approved
+	}()
+
+	// Wait for first approval or timeout
+	select {
+	case approved := <-adminResult:
+		d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
+	case approved := <-communityResult:
+		if approved {
+			d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, true, "community")
+		} else {
+			// Community approval failed, still wait for admin
+			select {
+			case approved := <-adminResult:
+				d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
+			case err := <-errorResult:
+				d.logger.Error("Admin approval failed", zap.Error(err))
+				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
+			case <-ctx.Done():
+				d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, false, "timeout")
+			}
+		}
+	case err := <-errorResult:
+		d.logger.Error("Approval process failed", zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
+	case <-ctx.Done():
+		d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, false, "timeout")
+	}
+}
+
+// awaitAdminApprovalOnly handles only admin approval (legacy behavior)
+func (d *Dispatcher) awaitAdminApprovalOnly(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, approvalMsgID string,
+	adminFrontend interface {
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+	},
+) {
+	approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
+	if err != nil {
+		d.logger.Error("Admin approval failed", zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))
+		return
+	}
+
+	d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
+}
+
+// handleApprovalResult processes the approval result regardless of source
+func (d *Dispatcher) handleApprovalResult(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, approvalMsgID string,
+	approved bool, approvalSource string,
+) {
+	// Delete the admin approval required message
+	if approvalMsgID != "" {
+		if deleteErr := d.frontend.DeleteMessage(ctx, originalMsg.ChatID, approvalMsgID); deleteErr != nil {
+			d.logger.Debug("Failed to delete admin approval message", zap.Error(deleteErr))
+		}
+	}
+
+	if approved {
+		d.logger.Info("Song addition approved",
+			zap.String("user", originalMsg.SenderName),
+			zap.String("song", songInfo),
+			zap.String("approval_source", approvalSource))
+
+		// Skip individual approval message - will be combined with success message
+		d.executePlaylistAddAfterApproval(ctx, msgCtx, originalMsg, trackID)
+	} else {
+		d.logger.Info("Song addition denied",
+			zap.String("user", originalMsg.SenderName),
+			zap.String("song", songInfo),
+			zap.String("approval_source", approvalSource))
+
+		// Notify user of denial
+		denialMessage := d.formatMessageWithMention(originalMsg, d.localizer.T("admin.denied"))
+		if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, denialMessage); err != nil {
+			d.logger.Error("Failed to notify user about denial", zap.Error(err))
+		}
+
+		// React with thumbs down on the original request
+		if err := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsDownReaction); err != nil {
+			d.logger.Warn("Failed to react with thumbs down on denied song request",
+				zap.String("chatID", originalMsg.ChatID),
+				zap.String("messageID", originalMsg.ID),
+				zap.Error(err))
+		}
+	}
+}
+
+// executePlaylistAddAfterApproval performs playlist addition after admin approval
+func (d *Dispatcher) executePlaylistAddAfterApproval(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, true)
+}
+
+// sendQueueTrackApprovalMessage sends an queue approval message with fallback to regular text
+func (d *Dispatcher) sendQueueTrackApprovalMessage(ctx context.Context, trackID string, track *Track, messageKey, logContext string) {
+	groupID := d.getGroupID()
+	if groupID == "" {
+		return
+	}
+
+	message := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+
+	if messageID, err := d.frontend.SendQueueTrackApproval(ctx, groupID, trackID, message); err != nil {
+		d.logger.Warn("Failed to send "+logContext+" message", zap.Error(err))
+		// If sending approval message fails, fall back to regular text
+		if _, fallbackErr := d.frontend.SendText(ctx, groupID, "", message); fallbackErr != nil {
+			d.logger.Warn("Failed to send fallback "+logContext+" message", zap.Error(fallbackErr))
+		}
+	} else {
+		// Start timeout tracking for this approval message
+		d.startQueueTrackApprovalTimeout(ctx, messageID, trackID, groupID)
+
+		d.logger.Info("Sent "+logContext+" message with approval buttons",
+			zap.String("trackID", trackID),
+			zap.String("messageID", messageID),
+			zap.String("artist", track.Artist),
+			zap.String("title", track.Title))
+	}
+}
+
+// startQueueTrackApprovalTimeout starts timeout tracking for an queue approval message
+func (d *Dispatcher) startQueueTrackApprovalTimeout(ctx context.Context, messageID, trackID, chatID string) {
+	timeoutSecs := d.config.App.QueueTrackApprovalTimeoutSecs
+	if timeoutSecs <= 0 {
+		return // Timeout disabled
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSecs)*time.Second)
+
+	approvalCtx := &queueApprovalContext{
+		trackID:    trackID,
+		chatID:     chatID,
+		messageID:  messageID,
+		expiresAt:  time.Now().Add(time.Duration(timeoutSecs) * time.Second),
+		cancelFunc: cancel,
+	}
+
+	d.queueManagementMutex.Lock()
+	d.pendingApprovalMessages[messageID] = approvalCtx
+	d.queueManagementMutex.Unlock()
+
+	// Start timeout goroutine
+	go d.handleQueueTrackApprovalTimeout(timeoutCtx, messageID)
+}
+
+// handleQueueTrackApprovalTimeout handles timeout expiry for queue approval messages
+func (d *Dispatcher) handleQueueTrackApprovalTimeout(ctx context.Context, messageID string) {
+	<-ctx.Done()
+
+	// Check if timeout expired (not canceled by approval/denial)
+	if ctx.Err() == context.DeadlineExceeded {
+		d.queueManagementMutex.Lock()
+		approvalCtx, exists := d.pendingApprovalMessages[messageID]
+		if !exists {
+			d.queueManagementMutex.Unlock()
+			return // Already handled
+		}
+
+		trackID := approvalCtx.trackID
+		chatID := approvalCtx.chatID
+
+		// Clean up pending approval
+		delete(d.pendingApprovalMessages, messageID)
+		d.queueManagementMutex.Unlock()
+
+		d.logger.Info("Queue approval timed out, auto-accepting track",
+			zap.String("trackID", trackID),
+			zap.String("messageID", messageID))
+
+		// Auto-accept the track by removing buttons and keeping the track in playlist
+		d.removeQueueTrackApprovalButtons(context.Background(), chatID, messageID)
+
+		// Reset queue flag to allow new workflows
+		d.resetQueueManagementFlag()
+	}
+}
+
+// removeQueueTrackApprovalButtons removes approval buttons from an queue message
+func (d *Dispatcher) removeQueueTrackApprovalButtons(ctx context.Context, chatID, messageID string) {
+	// For Telegram, we can edit the message to remove the inline keyboard
+	// For WhatsApp, this is a no-op since it doesn't support inline buttons
+
+	// Try to edit the message to remove buttons without changing the text (Telegram-specific)
+	// This will gracefully fail for WhatsApp and other platforms that don't support message editing
+	if err := d.editMessageToRemoveButtons(ctx, chatID, messageID, ""); err != nil {
+		d.logger.Debug("Could not edit message to remove buttons (expected for WhatsApp)",
+			zap.String("messageID", messageID),
+			zap.Error(err))
+	}
+
+	// React with thumbs up to indicate auto-acceptance
+	if err := d.frontend.React(ctx, chatID, messageID, thumbsUpReaction); err != nil {
+		d.logger.Debug("Could not react to queue message (expected for WhatsApp)",
+			zap.String("messageID", messageID),
+			zap.Error(err))
+	}
+}
+
+// editMessageToRemoveButtons attempts to edit a message to remove inline buttons (Telegram-specific)
+func (d *Dispatcher) editMessageToRemoveButtons(ctx context.Context, chatID, messageID, newText string) error {
+	return d.frontend.EditMessage(ctx, chatID, messageID, newText)
+}
+
+// sendComplianceWarningToAdmins sends warning messages to all admin users via DM
+func (d *Dispatcher) sendComplianceWarningToAdmins(ctx context.Context, adminUserIDs []string, message string) {
+	successCount := 0
+	var errors []string
+
+	for _, adminUserID := range adminUserIDs {
+		if err := d.frontend.SendDirectMessage(ctx, adminUserID, message); err != nil {
+			d.logger.Warn("Failed to send playlist warning to admin",
+				zap.String("adminUserID", adminUserID),
+				zap.Error(err))
+			errors = append(errors, err.Error())
+		} else {
+			successCount++
+			d.logger.Debug("Sent playlist warning to admin",
+				zap.String("adminUserID", adminUserID))
+		}
+	}
+
+	if successCount == 0 {
+		d.logger.Error("Failed to send playlist warning to any admins",
+			zap.Strings("errors", errors))
+	}
+}
+
+// sendPlaylistWarningWithButtonsToAdmins sends warning messages with interactive buttons to admin users via DM
+func (d *Dispatcher) sendPlaylistWarningWithButtonsToAdmins(ctx context.Context, adminUserIDs []string, message string) {
+	successCount := 0
+	var errors []string
+
+	// Store message IDs as they are successfully sent
+	d.playlistWarningMutex.Lock()
+	defer d.playlistWarningMutex.Unlock()
+
+	for _, adminUserID := range adminUserIDs {
+		// Try to send with playlist switch buttons first
+		if messageID, err := d.frontend.SendPlaylistSwitchApproval(ctx, adminUserID, message); err != nil {
+			d.logger.Warn("Failed to send playlist warning with buttons to admin, falling back to regular message",
+				zap.String("adminUserID", adminUserID),
+				zap.Error(err))
+
+			// Fallback to regular message using SendText (which returns message ID)
+			if fallbackMessageID, fallbackErr := d.frontend.SendText(ctx, adminUserID, "", message); fallbackErr != nil {
+				d.logger.Warn("Failed to send fallback playlist warning to admin",
+					zap.String("adminUserID", adminUserID),
+					zap.Error(fallbackErr))
+				errors = append(errors, fallbackErr.Error())
+			} else {
+				successCount++
+				d.playlistWarningMessages[fallbackMessageID] = adminUserID
+				d.logger.Debug("Sent fallback playlist warning to admin",
+					zap.String("adminUserID", adminUserID),
+					zap.String("messageID", fallbackMessageID))
+			}
+		} else {
+			successCount++
+			d.playlistWarningMessages[messageID] = adminUserID
+			d.logger.Debug("Sent playlist warning with buttons to admin",
+				zap.String("adminUserID", adminUserID),
+				zap.String("messageID", messageID))
+		}
+	}
+
+	if successCount == 0 {
+		d.logger.Error("Failed to send playlist warning to any admins",
+			zap.Strings("errors", errors))
+	}
+}

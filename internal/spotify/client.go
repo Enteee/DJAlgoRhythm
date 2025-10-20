@@ -560,56 +560,6 @@ func (c *Client) EnsureTrackInQueue(ctx context.Context, trackID string) error {
 	return nil
 }
 
-// IsNearPlaylistEnd checks if we're playing near the end of the playlist
-// Returns true if currently playing within EndOfPlaylistThreshold tracks from the end
-func (c *Client) IsNearPlaylistEnd(ctx context.Context) (bool, error) {
-	if c.client == nil {
-		return false, fmt.Errorf("client not authenticated")
-	}
-
-	if c.targetPlaylist == "" {
-		return false, fmt.Errorf("no target playlist set")
-	}
-
-	// Get current playback state
-	state, err := c.client.PlayerState(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to get player state: %w", err)
-	}
-
-	if state == nil || state.Item == nil {
-		return false, nil
-	}
-
-	// Check if we're playing from our target playlist
-	playlistURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
-	if state.PlaybackContext.URI != spotify.URI(playlistURI) {
-		return false, nil // Not playing from our playlist
-	}
-
-	// Get current track ID and playlist tracks
-	currentTrackID := string(state.Item.ID)
-	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
-	if err != nil {
-		return false, fmt.Errorf("failed to get playlist tracks: %w", err)
-	}
-
-	// If playlist has fewer tracks than threshold, consider it always "near end"
-	if len(playlistTracks) < MinTracksForEndDetection {
-		return true, nil
-	}
-
-	// Find current track position in playlist
-	for i, trackID := range playlistTracks {
-		if trackID == currentTrackID {
-			// Consider "near end" if we're within EndOfPlaylistThreshold tracks from the end
-			return i >= len(playlistTracks)-EndOfPlaylistThreshold, nil
-		}
-	}
-
-	return false, nil // Current track not found in playlist
-}
-
 // CheckPlaybackCompliance checks if current playback settings are optimal for auto-DJing
 func (c *Client) CheckPlaybackCompliance(ctx context.Context) (*core.PlaybackCompliance, error) {
 	if c.client == nil {
@@ -718,8 +668,8 @@ func (c *Client) checkTrackMembership(ctx context.Context, state *spotify.Player
 		zap.String("targetPlaylist", c.targetPlaylist))
 }
 
-// GetAutoPlayPreventionTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
-func (c *Client) GetAutoPlayPreventionTrack(ctx context.Context) (string, error) {
+// GetQueueManagementTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
+func (c *Client) GetQueueManagementTrack(ctx context.Context) (string, error) {
 	if c.client == nil {
 		return "", fmt.Errorf("client not authenticated")
 	}
@@ -882,7 +832,7 @@ func (c *Client) getLLMSearchFallbackTrack(ctx context.Context, seedTracks []cor
 		searchQuery += " playlist"
 	}
 
-	c.logger.Info("Generated LLM playlist search query for auto-play prevention",
+	c.logger.Info("Generated LLM playlist search query for queue management prevention",
 		zap.String("reason", reason),
 		zap.String("searchQuery", searchQuery),
 		zap.Int("seedTrackCount", len(seedTracks)))
@@ -932,7 +882,7 @@ func (c *Client) selectRandomTrackFromPlaylistResults(
 			continue
 		}
 
-		c.logger.Info("Selected random track from playlist for auto-play prevention",
+		c.logger.Info("Selected random track from playlist for queue management prevention",
 			zap.String("reason", reason),
 			zap.String("searchQuery", searchQuery),
 			zap.String("selectedPlaylistID", playlist.ID),
@@ -969,18 +919,18 @@ func (c *Client) getSeedTracksAsObjects(ctx context.Context, trackIDs []string) 
 	return tracks
 }
 
-// AddAutoPlayPreventionTrack gets and adds a track from Spotify's auto-play queue (legacy method)
-func (c *Client) AddAutoPlayPreventionTrack(ctx context.Context) (string, error) {
-	trackID, err := c.GetAutoPlayPreventionTrack(ctx)
+// AddQueueManagementTrack gets and adds a track from Spotify's queue management queue (legacy method)
+func (c *Client) AddQueueManagementTrack(ctx context.Context) (string, error) {
+	trackID, err := c.GetQueueManagementTrack(ctx)
 	if err != nil {
 		return "", err
 	}
 
 	if err := c.AddToPlaylist(ctx, c.targetPlaylist, trackID); err != nil {
-		return "", fmt.Errorf("failed to add auto-play prevention track to playlist: %w", err)
+		return "", fmt.Errorf("failed to add queue management prevention track to playlist: %w", err)
 	}
 
-	c.logger.Info("Added auto-play prevention track to playlist",
+	c.logger.Info("Added queue management prevention track to playlist",
 		zap.String("trackID", trackID))
 	return trackID, nil
 }
@@ -1477,4 +1427,181 @@ func (c *Client) SetPlaylistContext(ctx context.Context, playlistID, trackID str
 		zap.String("trackID", trackID))
 
 	return nil
+}
+
+// GetQueueRemainingDuration calculates the remaining duration in the current queue
+// including the remaining time of the currently playing track
+func (c *Client) GetQueueRemainingDuration(ctx context.Context) (time.Duration, error) {
+	if c.client == nil {
+		return 0, fmt.Errorf("client not authenticated")
+	}
+
+	// Get current playback state
+	state, err := c.client.PlayerState(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	var currentRemaining time.Duration
+	if state != nil && state.Item != nil && state.Playing {
+		// Calculate remaining time in current track
+		currentRemaining = time.Duration(state.Item.Duration-state.Progress) * time.Millisecond
+	}
+
+	// Get queue
+	queue, err := c.client.GetQueue(ctx)
+	if err != nil {
+		c.logger.Warn("Failed to get queue for duration calculation", zap.Error(err))
+		return currentRemaining, nil // Return current track remaining as fallback
+	}
+
+	// Sum up durations of all tracks in queue
+	var queueDuration time.Duration
+	for i := range queue.Items {
+		if queue.Items[i].ID != "" {
+			track, err := c.GetTrack(ctx, string(queue.Items[i].ID))
+			if err != nil {
+				c.logger.Debug("Failed to get track duration in queue",
+					zap.String("trackID", string(queue.Items[i].ID)),
+					zap.Error(err))
+				continue // Skip this track if we can't get its duration
+			}
+			queueDuration += track.Duration
+		}
+	}
+
+	totalRemaining := currentRemaining + queueDuration
+	c.logger.Debug("Calculated queue remaining duration",
+		zap.Duration("currentRemaining", currentRemaining),
+		zap.Duration("queueDuration", queueDuration),
+		zap.Duration("totalRemaining", totalRemaining),
+		zap.Int("queueItems", len(queue.Items)))
+
+	return totalRemaining, nil
+}
+
+// GetNextPlaylistTracks gets the next N tracks from the playlist after the current position
+func (c *Client) GetNextPlaylistTracks(ctx context.Context, count int) ([]string, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("client not authenticated")
+	}
+
+	if c.targetPlaylist == "" {
+		return nil, fmt.Errorf("no target playlist set")
+	}
+
+	// Get current track ID
+	currentTrackID, err := c.GetCurrentTrackID(ctx)
+	if err != nil {
+		c.logger.Debug("No current track playing, starting from beginning of playlist")
+		// If no track is playing, start from beginning of playlist
+		playlistTracks, playlistErr := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+		if playlistErr != nil {
+			return nil, fmt.Errorf("failed to get playlist tracks: %w", playlistErr)
+		}
+
+		// Return first N tracks
+		if count > len(playlistTracks) {
+			count = len(playlistTracks)
+		}
+		return playlistTracks[:count], nil
+	}
+
+	// Get all playlist tracks
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	// Find current track position
+	currentPos := -1
+	for i, trackID := range playlistTracks {
+		if trackID == currentTrackID {
+			currentPos = i
+			break
+		}
+	}
+
+	if currentPos == -1 {
+		c.logger.Debug("Current track not found in playlist, starting from beginning")
+		// Current track not in playlist, start from beginning
+		if count > len(playlistTracks) {
+			count = len(playlistTracks)
+		}
+		return playlistTracks[:count], nil
+	}
+
+	// Get next tracks after current position
+	nextStartPos := currentPos + 1
+	var nextTracks []string
+
+	// Collect tracks after current position
+	for i := nextStartPos; i < len(playlistTracks) && len(nextTracks) < count; i++ {
+		nextTracks = append(nextTracks, playlistTracks[i])
+	}
+
+	c.logger.Debug("Found next playlist tracks",
+		zap.String("currentTrackID", currentTrackID),
+		zap.Int("currentPos", currentPos),
+		zap.Int("playlistLength", len(playlistTracks)),
+		zap.Int("requestedCount", count),
+		zap.Int("foundCount", len(nextTracks)))
+
+	return nextTracks, nil
+}
+
+// GetTracksDuration gets the total duration for a list of track IDs
+func (c *Client) GetTracksDuration(ctx context.Context, trackIDs []string) (time.Duration, error) {
+	if c.client == nil {
+		return 0, fmt.Errorf("client not authenticated")
+	}
+
+	var totalDuration time.Duration
+	for _, trackID := range trackIDs {
+		track, err := c.GetTrack(ctx, trackID)
+		if err != nil {
+			c.logger.Debug("Failed to get track duration",
+				zap.String("trackID", trackID),
+				zap.Error(err))
+			continue // Skip tracks we can't get duration for
+		}
+		totalDuration += track.Duration
+	}
+
+	c.logger.Debug("Calculated total tracks duration",
+		zap.Int("trackCount", len(trackIDs)),
+		zap.Duration("totalDuration", totalDuration))
+
+	return totalDuration, nil
+}
+
+// GetCurrentTrackRemainingTime gets the remaining duration of the currently playing track
+func (c *Client) GetCurrentTrackRemainingTime(ctx context.Context) (time.Duration, error) {
+	if c.client == nil {
+		return 0, fmt.Errorf("spotify client not initialized")
+	}
+
+	state, err := c.client.PlayerState(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get player state: %w", err)
+	}
+
+	if state == nil || state.Item == nil || !state.Playing {
+		return 0, nil // No track playing or paused
+	}
+
+	// Calculate remaining time in current track
+	remainingMs := state.Item.Duration - state.Progress
+	if remainingMs < 0 {
+		remainingMs = 0 // Prevent negative duration
+	}
+
+	remaining := time.Duration(remainingMs) * time.Millisecond
+
+	c.logger.Debug("Current track remaining time",
+		zap.Duration("remaining", remaining),
+		zap.Int("progressMs", state.Progress),
+		zap.Int("durationMs", state.Item.Duration))
+
+	return remaining, nil
 }

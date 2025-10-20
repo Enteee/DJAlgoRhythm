@@ -136,10 +136,13 @@ type SpotifyClient interface {
 	RebuildQueueWithPriority(ctx context.Context, priorityTrackID string) error
 	ExtractTrackID(url string) (string, error)
 	SetTargetPlaylist(playlistID string)
-	// Auto-play prevention
-	IsNearPlaylistEnd(ctx context.Context) (bool, error)
-	GetAutoPlayPreventionTrack(ctx context.Context) (string, error)
-	AddAutoPlayPreventionTrack(ctx context.Context) (string, error)
+	// Queue management and duration calculation
+	GetQueueRemainingDuration(ctx context.Context) (time.Duration, error)
+	GetNextPlaylistTracks(ctx context.Context, count int) ([]string, error)
+	GetTracksDuration(ctx context.Context, trackIDs []string) (time.Duration, error)
+	// Queue management
+	GetQueueManagementTrack(ctx context.Context) (string, error)
+	AddQueueManagementTrack(ctx context.Context) (string, error)
 	// Playlist monitoring
 	IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error)
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
@@ -148,6 +151,8 @@ type SpotifyClient interface {
 	SetVolume(ctx context.Context, volume int) error
 	PlayTrack(ctx context.Context, trackID string) error
 	SetPlaylistContext(ctx context.Context, playlistID, trackID string) error
+	// Current track information
+	GetCurrentTrackRemainingTime(ctx context.Context) (time.Duration, error)
 }
 
 type LLMProvider interface {
