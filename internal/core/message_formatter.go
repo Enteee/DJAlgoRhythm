@@ -163,7 +163,7 @@ func (d *Dispatcher) formatCommunityApprovalMessage(track *Track) string {
 	}
 
 	return d.localizer.T("admin.approval_required_community",
-		track.Artist, track.Title, albumInfo, yearInfo, urlPart)
+		track.Artist, track.Title, albumInfo, yearInfo, urlPart, d.config.Telegram.CommunityApproval)
 }
 
 // sendStartupMessage sends a startup notification to the group
