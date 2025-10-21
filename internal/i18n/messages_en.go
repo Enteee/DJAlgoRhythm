@@ -98,6 +98,5 @@ var englishMessages = map[string]string{
 
 	// Device notifications
 	"admin.no_active_device": "🔇 No active Spotify device found!\n\n" +
-		"Please start playing music on any Spotify device (phone, computer, speaker, etc.)\n\n" +
 		"💡 Open Spotify and start playing from any playlist to activate a device.",
 }
