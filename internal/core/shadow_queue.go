@@ -225,30 +225,52 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
 
 	// Check if current track is a priority track using the registry
 	d.priorityTracksMutex.RLock()
-	isPriorityTrack := d.priorityTracks[currentTrackID]
+	priorityInfo, isPriorityTrack := d.priorityTracks[currentTrackID]
 	d.priorityTracksMutex.RUnlock()
 
-	// Get all playlist tracks to find current position
+	// Get all playlist tracks to find positions
 	playlistTrackIDs, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
 	if err != nil {
 		d.logger.Warn("Failed to get playlist tracks for position tracking", zap.Error(err))
 		return 0
 	}
 
-	// Find current track position in playlist
+	if isPriorityTrack {
+		// Priority track is playing, find the resume song position
+		resumeSongID := priorityInfo.ResumeSongID
+		if resumeSongID == "" {
+			// No resume song recorded, default to position after current priority track
+			for i, trackID := range playlistTrackIDs {
+				if trackID == currentTrackID {
+					resumePosition := i + 1
+					d.logger.Debug("Priority track playing, no resume song, using next position",
+						zap.String("currentTrackID", currentTrackID),
+						zap.Int("currentPosition", i),
+						zap.Int("resumePosition", resumePosition))
+					return resumePosition
+				}
+			}
+		} else {
+			// Find where the resume song currently is in the playlist
+			for i, trackID := range playlistTrackIDs {
+				if trackID == resumeSongID {
+					d.logger.Debug("Priority track playing, found resume song position",
+						zap.String("currentTrackID", currentTrackID),
+						zap.String("resumeSongID", resumeSongID),
+						zap.Int("resumePosition", i))
+					return i
+				}
+			}
+			// Resume song not found in playlist, fall back to normal logic
+			d.logger.Debug("Priority track playing, resume song not found in playlist",
+				zap.String("currentTrackID", currentTrackID),
+				zap.String("resumeSongID", resumeSongID))
+		}
+	}
+
+	// Normal track or fallback case - find current track position
 	for i, trackID := range playlistTrackIDs {
 		if trackID == currentTrackID {
-			if isPriorityTrack {
-				// Priority track at position 0, return position 1 to continue normal progression
-				// This skips the track that was "interrupted" by the priority track
-				adjustedPosition := i + 1
-				d.logger.Debug("Priority track playing, using adjusted logical position",
-					zap.String("currentTrackID", currentTrackID),
-					zap.Int("currentPosition", i),
-					zap.Int("adjustedPosition", adjustedPosition))
-				return adjustedPosition
-			}
-			// Normal track, return current position
 			d.logger.Debug("Normal track playing, using current position",
 				zap.String("currentTrackID", currentTrackID),
 				zap.Int("position", i))

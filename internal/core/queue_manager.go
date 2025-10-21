@@ -83,13 +83,22 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	d.logger.Info("Priority track added to queue",
 		zap.String("trackID", trackID))
 
-	// Register priority track in the registry for position tracking
+	// Get current track to determine resume position
+	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
+	if err != nil {
+		currentTrackID = "" // If no current track, use empty string
+	}
+
+	// Register priority track in the registry with resume song ID
 	d.priorityTracksMutex.Lock()
-	d.priorityTracks[trackID] = true
+	d.priorityTracks[trackID] = PriorityTrackInfo{
+		ResumeSongID: currentTrackID,
+	}
 	d.priorityTracksMutex.Unlock()
 
 	d.logger.Debug("Registered priority track in registry",
-		zap.String("trackID", trackID))
+		zap.String("trackID", trackID),
+		zap.String("resumeSongID", currentTrackID))
 
 	// Add to playlist at position 0 (top) for history/deduplication to avoid replaying later
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {

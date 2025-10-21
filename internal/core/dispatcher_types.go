@@ -37,6 +37,11 @@ type ShadowQueueItem struct {
 	AddedAt  time.Time     // When we added this item
 }
 
+// PriorityTrackInfo stores information about a priority track for resume logic
+type PriorityTrackInfo struct {
+	ResumeSongID string // ID of song that was playing before priority interruption
+}
+
 // queueApprovalContext tracks pending queue track approval messages with timeout information
 type queueApprovalContext struct {
 	trackID    string

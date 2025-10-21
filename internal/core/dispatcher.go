@@ -41,9 +41,9 @@ type Dispatcher struct {
 	shadowQueueMutex   sync.RWMutex
 	lastCurrentTrackID string // track when current song changes for progression tracking
 
-	// Priority track registry for simplified detection
-	priorityTracks      map[string]bool // track IDs of priority tracks currently active
-	priorityTracksMutex sync.RWMutex    // protects priority tracks map
+	// Priority track registry for resume logic
+	priorityTracks      map[string]PriorityTrackInfo // track IDs of priority tracks with resume info
+	priorityTracksMutex sync.RWMutex                 // protects priority tracks map
 }
 
 // NewDispatcher creates a new dispatcher with the provided chat frontend
@@ -67,7 +67,7 @@ func NewDispatcher(
 		pendingQueueTracks:      make(map[string]string),
 		pendingApprovalMessages: make(map[string]*queueApprovalContext),
 		shadowQueue:             make([]ShadowQueueItem, 0),
-		priorityTracks:          make(map[string]bool),
+		priorityTracks:          make(map[string]PriorityTrackInfo),
 	}
 
 	return d
