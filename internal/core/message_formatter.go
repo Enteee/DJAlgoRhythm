@@ -145,8 +145,8 @@ func (d *Dispatcher) formatMessageWithMention(msg *chat.Message, messageText str
 	return fmt.Sprintf("%s %s", mention, messageText)
 }
 
-// formatAdminApprovalMessage formats the admin approval message with track details
-func (d *Dispatcher) formatAdminApprovalMessage(originalMsg *chat.Message, track *Track) string {
+// formatCommunityApprovalMessage formats the community approval message with track details (for channel)
+func (d *Dispatcher) formatCommunityApprovalMessage(track *Track) string {
 	// Format album and year information
 	var albumInfo, yearInfo string
 	if track.Album != "" {
@@ -156,10 +156,14 @@ func (d *Dispatcher) formatAdminApprovalMessage(originalMsg *chat.Message, track
 		yearInfo = d.localizer.T("format.year", track.Year)
 	}
 
-	senderMention := d.formatUserMention(originalMsg)
-	songInfo := fmt.Sprintf("%s - %s%s%s", track.Artist, track.Title, albumInfo, yearInfo)
+	// Format URL part for community message
+	urlPart := ""
+	if track.URL != "" {
+		urlPart = d.localizer.T("format.url", track.URL)
+	}
 
-	return d.localizer.T("admin.approval_prompt", senderMention, songInfo, track.URL)
+	return d.localizer.T("admin.approval_required_community",
+		track.Artist, track.Title, albumInfo, yearInfo, urlPart)
 }
 
 // sendStartupMessage sends a startup notification to the group
@@ -228,20 +232,10 @@ func (d *Dispatcher) convertToInputMessage(msg *chat.Message) InputMessage {
 	}
 }
 
-// addApprovalReactions adds thumbs up/down reactions for community approval
+// addApprovalReactions adds thumbs up reaction for admin approval community notification
 func (d *Dispatcher) addApprovalReactions(ctx context.Context, chatID, msgID string) {
-	// Check if community approval is enabled
-	if d.config.Telegram.CommunityApproval <= 0 {
-		return
-	}
-
-	// Add thumbs up reaction
+	// Add thumbs up reaction from bot as required for admin approval flow
 	if err := d.frontend.React(ctx, chatID, msgID, thumbsUpReaction); err != nil {
 		d.logger.Debug("Failed to add thumbs up reaction", zap.Error(err))
-	}
-
-	// Add thumbs down reaction
-	if err := d.frontend.React(ctx, chatID, msgID, thumbsDownReaction); err != nil {
-		d.logger.Debug("Failed to add thumbs down reaction", zap.Error(err))
 	}
 }

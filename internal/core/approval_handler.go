@@ -204,8 +204,8 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	songInfo := fmt.Sprintf("%s - %s", track.Artist, track.Title)
 	songURL := track.URL
 
-	// Send notification to user that admin approval is required with song details
-	approvalMessage := d.formatAdminApprovalMessage(originalMsg, track)
+	// Send notification to channel that admin approval is required with song details
+	approvalMessage := d.formatCommunityApprovalMessage(track)
 	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, approvalMessage)
 	if err != nil {
 		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
