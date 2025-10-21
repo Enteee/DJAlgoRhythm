@@ -99,7 +99,6 @@ var berneseGermanMessages = map[string]string{
 
 	// Device notifications
 	"admin.no_active_device": "🔇 Kei aktivi Spotify-Gerät gfunde!\n\n" +
-		"Bitte fang a Musig z spile uf irgendemene Spotify-Gerät " +
-		"(Handy, Computer, Lautsprecher, etc.) für automatischi Queue-Verwaltig.\n\n" +
+		"Bitte fang a Musig z spile uf irgendemene Spotify-Gerät\n\n" +
 		"💡 Mach Spotify uf und fang a spile vo irgendere Playlist zum es Gerät z'aktiviere.",
 }
