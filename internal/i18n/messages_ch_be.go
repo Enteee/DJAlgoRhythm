@@ -93,4 +93,10 @@ var berneseGermanMessages = map[string]string{
 	"callback.playlist_switched":      "🔄 Zrügg zur Playlist gwächslet und spielt jetzt: %s - %s",
 	"callback.playlist_stay":          "❌ Bliibe bi dr aktuälle Playliste",
 	"bot.queue_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
+
+	// Device notifications
+	"admin.no_active_device": "🔇 Kei aktivi Spotify-Gerät gfunde!\n\n" +
+		"Bitte fang a Musig z spile uf irgendemene Spotify-Gerät " +
+		"(Handy, Computer, Lautsprecher, etc.) für automatischi Queue-Verwaltig.\n\n" +
+		"💡 Mach Spotify uf und fang a spile vo irgendere Playlist zum es Gerät z'aktiviere.",
 }

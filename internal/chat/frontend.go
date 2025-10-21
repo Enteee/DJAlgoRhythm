@@ -57,8 +57,8 @@ type Frontend interface {
 	// GetAdminUserIDs returns a list of admin user IDs as strings for the group
 	GetAdminUserIDs(ctx context.Context, chatID string) ([]string, error)
 
-	// SendDirectMessage sends a direct message to a user by their user ID
-	SendDirectMessage(ctx context.Context, userID, text string) error
+	// SendDirectMessage sends a direct message to a user and returns the message ID
+	SendDirectMessage(ctx context.Context, userID, text string) (string, error)
 
 	// SendQueueTrackApproval sends a queue track approval message with approve/deny buttons
 	// Returns the message ID for tracking responses

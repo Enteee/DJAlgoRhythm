@@ -123,6 +123,11 @@ func TestI18nMessageValues(t *testing.T) {
 		"format.url":                        1, // url
 	}
 
+	// Test specific keys that should have no placeholders
+	testsWithoutPlaceholders := []string{
+		"admin.no_active_device", // device notification message
+	}
+
 	for key, expectedPlaceholders := range testsWithPlaceholders {
 		if message, exists := referenceMessages[key]; exists {
 			placeholderCount := 0
@@ -136,6 +141,26 @@ func TestI18nMessageValues(t *testing.T) {
 			if placeholderCount != expectedPlaceholders {
 				t.Errorf("Message key '%s' should have %d placeholders but has %d: %s",
 					key, expectedPlaceholders, placeholderCount, message)
+			}
+		} else {
+			t.Errorf("Expected message key '%s' not found", key)
+		}
+	}
+
+	// Test messages that should not have placeholders
+	for _, key := range testsWithoutPlaceholders {
+		if message, exists := referenceMessages[key]; exists {
+			placeholderCount := 0
+			// Count %s and %d placeholders
+			for i := 0; i < len(message)-1; i++ {
+				if message[i] == '%' && (message[i+1] == 's' || message[i+1] == 'd') {
+					placeholderCount++
+				}
+			}
+
+			if placeholderCount > 0 {
+				t.Errorf("Message key '%s' should have no placeholders but has %d: %s",
+					key, placeholderCount, message)
 			}
 		} else {
 			t.Errorf("Expected message key '%s' not found", key)

@@ -93,4 +93,10 @@ var englishMessages = map[string]string{
 	"callback.playlist_switched":      "🔄 Switched back to playlist and now playing: %s - %s",
 	"callback.playlist_stay":          "❌ Staying on current playlist",
 	"bot.queue_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
+
+	// Device notifications
+	"admin.no_active_device": "🔇 No active Spotify device found!\n\n" +
+		"Please start playing music on any Spotify device (phone, computer, speaker, etc.) " +
+		"to enable automatic queue management.\n\n" +
+		"💡 Open Spotify and start playing from any playlist to activate a device.",
 }

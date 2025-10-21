@@ -438,13 +438,13 @@ func (f *Frontend) GetAdminUserIDs(_ context.Context, chatID string) ([]string, 
 
 // SendDirectMessage implements the chat.Frontend interface to send direct messages
 // For WhatsApp, this sends a message to the user's phone number as JID
-func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) error {
+func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) (string, error) {
 	if !f.config.Enabled {
-		return fmt.Errorf("whatsapp frontend is disabled")
+		return "", fmt.Errorf("whatsapp frontend is disabled")
 	}
 
 	if f.client == nil {
-		return fmt.Errorf("whatsapp client not initialized")
+		return "", fmt.Errorf("whatsapp client not initialized")
 	}
 
 	// Convert userID to WhatsApp JID format (phone number)
@@ -453,7 +453,7 @@ func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) e
 		// Try adding @s.whatsapp.net if not already formatted
 		userJID, err = types.ParseJID(userID + "@s.whatsapp.net")
 		if err != nil {
-			return fmt.Errorf("invalid user ID format: %w", err)
+			return "", fmt.Errorf("invalid user ID format: %w", err)
 		}
 	}
 
@@ -461,17 +461,20 @@ func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) e
 		Conversation: &text,
 	}
 
-	_, err = f.client.SendMessage(ctx, userJID, message)
+	result, err := f.client.SendMessage(ctx, userJID, message)
 	if err != nil {
-		return fmt.Errorf("failed to send direct message to user %s: %w", userID, err)
+		return "", fmt.Errorf("failed to send direct message to user %s: %w", userID, err)
 	}
+
+	msgID := result.ID
 
 	f.logger.Debug("Sent direct message to user",
 		zap.String("userID", userID),
 		zap.String("userJID", userJID.String()),
+		zap.String("messageID", msgID),
 		zap.String("text", text))
 
-	return nil
+	return msgID, nil
 }
 
 // SendQueueTrackApproval sends a queue track approval message with approve/deny buttons

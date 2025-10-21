@@ -181,6 +181,33 @@ func (d *Dispatcher) runQueueAndPlaylistManagement(ctx context.Context) {
 func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 	d.logger.Debug("checkAndManageQueue called")
 
+	// Check if there's an active Spotify device before proceeding
+	hasActiveDevice, err := d.spotify.HasActiveDevice(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to check for active Spotify device, skipping queue management", zap.Error(err))
+		return
+	} else if !hasActiveDevice {
+		d.logger.Debug("No active Spotify device found, skipping queue management")
+
+		// Send warning to admins if enough time has passed since last warning
+		if d.shouldSendDeviceWarning() {
+			groupID := d.getGroupID()
+			if groupID != "" {
+				adminUserIDs, adminErr := d.frontend.GetAdminUserIDs(ctx, groupID)
+				if adminErr != nil {
+					d.logger.Warn("Failed to get admin user IDs for device warning", zap.Error(adminErr))
+				} else if len(adminUserIDs) > 0 {
+					d.sendDeviceWarningToAdmins(ctx, adminUserIDs)
+					d.markDeviceWarningSent()
+				}
+			}
+		}
+		return
+	}
+
+	// Device is active - clear any existing device warning
+	d.clearDeviceWarning(ctx)
+
 	// Check if queue management is already active
 	d.queueManagementMutex.Lock()
 	if d.queueManagementActive {

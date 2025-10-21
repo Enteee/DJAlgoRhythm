@@ -29,6 +29,11 @@ type Dispatcher struct {
 	hasUnconfirmedSettingsWarning bool
 	settingsWarningMutex          sync.RWMutex
 
+	// Device monitoring
+	deviceWarningActive   bool              // tracks if device warning has been sent to admins
+	deviceWarningMessages map[string]string // userID -> messageID for device warning messages
+	deviceWarningMutex    sync.RWMutex
+
 	// Queue management approval tracking
 	pendingQueueTracks      map[string]string                // trackID -> track name for pending approvals
 	pendingApprovalMessages map[string]*queueApprovalContext // messageID -> approval context for timeout tracking
@@ -66,6 +71,7 @@ func NewDispatcher(
 		messageContexts:         make(map[string]*MessageContext),
 		pendingQueueTracks:      make(map[string]string),
 		pendingApprovalMessages: make(map[string]*queueApprovalContext),
+		deviceWarningMessages:   make(map[string]string),
 		shadowQueue:             make([]ShadowQueueItem, 0),
 		priorityTracks:          make(map[string]PriorityTrackInfo),
 	}

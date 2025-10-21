@@ -170,7 +170,7 @@ func (d *Dispatcher) sendPlaybackSettingsWarningToAdmins(ctx context.Context, ad
 	successCount := 0
 	var errors []string
 	for _, adminUserID := range adminUserIDs {
-		if err := d.frontend.SendDirectMessage(ctx, adminUserID, message); err != nil {
+		if _, err := d.frontend.SendDirectMessage(ctx, adminUserID, message); err != nil {
 			d.logger.Warn("Failed to send playback settings warning to admin",
 				zap.String("adminUserID", adminUserID),
 				zap.Error(err))

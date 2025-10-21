@@ -989,15 +989,15 @@ func (f *Frontend) GetAdminUserIDs(ctx context.Context, chatID string) ([]string
 }
 
 // SendDirectMessage implements the chat.Frontend interface to send direct messages to users
-func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) error {
+func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) (string, error) {
 	if !f.config.Enabled {
-		return fmt.Errorf("telegram frontend is disabled")
+		return "", fmt.Errorf("telegram frontend is disabled")
 	}
 
 	// Parse user ID
 	userIDInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {
-		return fmt.Errorf("invalid user ID: %w", err)
+		return "", fmt.Errorf("invalid user ID: %w", err)
 	}
 
 	params := &bot.SendMessageParams{
@@ -1011,16 +1011,19 @@ func (f *Frontend) SendDirectMessage(ctx context.Context, userID, text string) e
 		IsDisabled: &disabled,
 	}
 
-	_, err = f.bot.SendMessage(ctx, params)
+	result, err := f.bot.SendMessage(ctx, params)
 	if err != nil {
-		return fmt.Errorf("failed to send direct message to user %s: %w", userID, err)
+		return "", fmt.Errorf("failed to send direct message to user %s: %w", userID, err)
 	}
+
+	msgID := strconv.Itoa(result.ID)
 
 	f.logger.Debug("Sent direct message to user",
 		zap.String("userID", userID),
+		zap.String("messageID", msgID),
 		zap.String("text", text))
 
-	return nil
+	return msgID, nil
 }
 
 func (f *Frontend) answerExpiredCallback(ctx context.Context, b *bot.Bot, callbackQueryID string) {

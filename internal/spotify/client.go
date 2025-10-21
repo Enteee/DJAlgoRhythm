@@ -1189,3 +1189,30 @@ func (c *Client) GetCurrentTrackRemainingTime(ctx context.Context) (time.Duratio
 
 	return remaining, nil
 }
+
+// HasActiveDevice checks if there are any active Spotify devices available for playback
+func (c *Client) HasActiveDevice(ctx context.Context) (bool, error) {
+	if c.client == nil {
+		return false, fmt.Errorf("spotify client not initialized")
+	}
+
+	devices, err := c.client.PlayerDevices(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get player devices: %w", err)
+	}
+
+	// Check if any device is active
+	for _, device := range devices {
+		if device.Active {
+			c.logger.Debug("Found active device",
+				zap.String("deviceName", device.Name),
+				zap.String("deviceType", device.Type),
+				zap.String("deviceID", device.ID.String()))
+			return true, nil
+		}
+	}
+
+	c.logger.Debug("No active devices found",
+		zap.Int("totalDevices", len(devices)))
+	return false, nil
+}

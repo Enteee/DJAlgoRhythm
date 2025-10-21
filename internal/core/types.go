@@ -137,6 +137,7 @@ type SpotifyClient interface {
 	SetShuffle(ctx context.Context, shuffle bool) error
 	SetRepeat(ctx context.Context, state string) error
 	GetCurrentTrackRemainingTime(ctx context.Context) (time.Duration, error)
+	HasActiveDevice(ctx context.Context) (bool, error)
 }
 
 type LLMProvider interface {
