@@ -212,6 +212,11 @@ func configureApp(cfg *core.Config) {
 		cfg.App.ShadowQueueMaintenanceIntervalSecs = core.DefaultShadowQueueMaintenanceIntervalSecs
 	}
 	cfg.App.ShadowQueueMaxAgeHours = viper.GetInt("shadow-queue-max-age-hours")
+	if cfg.App.ShadowQueueMaxAgeHours <= 0 {
+		fmt.Printf("Warning: Invalid shadow queue max age (%d), using default (%d)\n",
+			cfg.App.ShadowQueueMaxAgeHours, core.DefaultShadowQueueMaxAgeHours)
+		cfg.App.ShadowQueueMaxAgeHours = core.DefaultShadowQueueMaxAgeHours
+	}
 	cfg.App.ShadowQueuePreferenceEnabled = viper.GetBool("shadow-queue-preference-enabled")
 
 	// Language configuration with validation

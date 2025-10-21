@@ -227,7 +227,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 
 	if !supportsAdminApproval {
 		d.logger.Error("Frontend doesn't support admin approval, proceeding without")
-		d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
 		return
 	}
 

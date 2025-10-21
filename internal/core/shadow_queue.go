@@ -195,14 +195,7 @@ func (d *Dispatcher) GetShadowQueuePosition(trackID string) int {
 
 // runShadowQueueMaintenance performs periodic maintenance on the shadow queue
 func (d *Dispatcher) runShadowQueueMaintenance(ctx context.Context) {
-	// Use configuration for maintenance interval with safety check
 	maintenanceInterval := time.Duration(d.config.App.ShadowQueueMaintenanceIntervalSecs) * time.Second
-	if maintenanceInterval <= 0 {
-		d.logger.Error("Invalid shadow queue maintenance interval, using default",
-			zap.Int("configValue", d.config.App.ShadowQueueMaintenanceIntervalSecs),
-			zap.Int("defaultValue", DefaultShadowQueueMaintenanceIntervalSecs))
-		maintenanceInterval = time.Duration(DefaultShadowQueueMaintenanceIntervalSecs) * time.Second
-	}
 
 	d.logger.Info("Starting shadow queue maintenance routine",
 		zap.Int("intervalSecs", d.config.App.ShadowQueueMaintenanceIntervalSecs),

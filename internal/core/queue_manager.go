@@ -52,7 +52,7 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 		return
 	}
 
-	d.executePlaylistAdd(ctx, msgCtx, originalMsg, trackID)
+	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
 }
 
 // executePriorityQueue adds priority track to queue and playlist
@@ -106,12 +106,7 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	}
 }
 
-// executePlaylistAdd performs the actual playlist addition
-func (d *Dispatcher) executePlaylistAdd(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
-	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
-}
-
-// executePlaylistAddWithReaction performs the actual playlist addition
+// executePlaylistAddWithReaction performs the actual playlist addition with appropriate reaction based on approval status
 func (d *Dispatcher) executePlaylistAddWithReaction(
 	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string, wasAdminApproved bool) {
 	msgCtx.State = StateAddToPlaylist
