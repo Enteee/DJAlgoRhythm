@@ -159,19 +159,6 @@ Respond with valid JSON only.`, text)
 	return candidates, nil
 }
 
-func (o *OllamaClient) ExtractSongInfo(ctx context.Context, text string) (*core.Track, error) {
-	candidates, err := o.RankCandidates(ctx, text)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no song information extracted")
-	}
-
-	return &candidates[0].Track, nil
-}
-
 func (o *OllamaClient) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	return IsChatterMessage(ctx, text, o.logger)
 }

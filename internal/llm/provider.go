@@ -19,7 +19,6 @@ type Provider struct {
 
 type Client interface {
 	RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error)
-	ExtractSongInfo(ctx context.Context, text string) (*core.Track, error)
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
 	GenerateSearchQuery(ctx context.Context, seedTracks []core.Track) (string, error)
@@ -70,10 +69,6 @@ func (p *Provider) RankCandidates(ctx context.Context, text string) ([]core.LLMC
 	return candidates, nil
 }
 
-func (p *Provider) ExtractSongInfo(ctx context.Context, text string) (*core.Track, error) {
-	return p.client.ExtractSongInfo(ctx, text)
-}
-
 func (p *Provider) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	return p.client.IsNotMusicRequest(ctx, text)
 }
@@ -89,10 +84,6 @@ func (p *Provider) GenerateSearchQuery(ctx context.Context, seedTracks []core.Tr
 type NoOpClient struct{}
 
 func (n *NoOpClient) RankCandidates(_ context.Context, _ string) ([]core.LLMCandidate, error) {
-	return nil, fmt.Errorf("LLM provider not configured")
-}
-
-func (n *NoOpClient) ExtractSongInfo(_ context.Context, _ string) (*core.Track, error) {
 	return nil, fmt.Errorf("LLM provider not configured")
 }
 

@@ -31,19 +31,11 @@ type OpenAIResponse struct {
 	} `json:"candidates"`
 }
 
-type SongExtractResponse struct {
-	Found  bool   `json:"found"`
-	Title  string `json:"title,omitempty"`
-	Artist string `json:"artist,omitempty"`
-	Album  string `json:"album,omitempty"`
-	Year   int    `json:"year,omitempty"`
-	Reason string `json:"reason,omitempty"`
-}
-
 const (
 	defaultTemperature    = 0.1
 	maxTokensRanking      = 1000
-	maxTokensExtraction   = 500
+	maxTokensChatter      = 200
+	maxTokensPriority     = 200
 	maxTokensSearchQuery  = 50
 	maxSeedTracksInPrompt = 3
 	defaultModel          = "gpt-3.5-turbo"
@@ -142,65 +134,6 @@ func (o *OpenAIClient) RankCandidates(ctx context.Context, text string) ([]core.
 	return candidates, nil
 }
 
-func (o *OpenAIClient) ExtractSongInfo(ctx context.Context, text string) (*core.Track, error) {
-	if strings.TrimSpace(text) == "" {
-		return nil, fmt.Errorf("empty text provided")
-	}
-
-	prompt := o.buildExtractSongPrompt()
-
-	o.logger.Debug("Calling OpenAI for song extraction",
-		zap.String("text", text),
-		zap.String("model", o.config.Model))
-
-	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(prompt),
-			openai.UserMessage(text),
-		},
-		Model:       o.getModel(),
-		Temperature: openai.Float(defaultTemperature),
-		MaxTokens:   openai.Int(maxTokensExtraction),
-	})
-	if err != nil {
-		o.logger.Error("OpenAI API call failed", zap.Error(err))
-		return nil, fmt.Errorf("OpenAI API call failed: %w", err)
-	}
-
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response from OpenAI")
-	}
-
-	content := resp.Choices[0].Message.Content
-	o.logger.Debug("OpenAI response received", zap.String("content", content))
-
-	var response SongExtractResponse
-	if err := json.Unmarshal([]byte(content), &response); err != nil {
-		o.logger.Error("Failed to parse OpenAI response",
-			zap.Error(err),
-			zap.String("content", content))
-		return nil, fmt.Errorf("failed to parse OpenAI response: %w", err)
-	}
-
-	if !response.Found {
-		o.logger.Debug("No song found in text", zap.String("reason", response.Reason))
-		return nil, fmt.Errorf("no song information found: %s", response.Reason)
-	}
-
-	track := &core.Track{
-		Title:  response.Title,
-		Artist: response.Artist,
-		Album:  response.Album,
-		Year:   response.Year,
-	}
-
-	o.logger.Info("Song extracted successfully",
-		zap.String("title", track.Title),
-		zap.String("artist", track.Artist))
-
-	return track, nil
-}
-
 type ChatterDetectionResponse struct {
 	IsNotMusicRequest bool    `json:"is_not_music_request"`
 	Confidence        float64 `json:"confidence"`
@@ -226,7 +159,7 @@ func (o *OpenAIClient) IsNotMusicRequest(ctx context.Context, text string) (bool
 		},
 		Model:       o.getModel(),
 		Temperature: openai.Float(defaultTemperature),
-		MaxTokens:   openai.Int(maxTokensExtraction),
+		MaxTokens:   openai.Int(maxTokensChatter),
 	})
 	if err != nil {
 		o.logger.Error("OpenAI API call failed", zap.Error(err))
@@ -281,7 +214,7 @@ func (o *OpenAIClient) IsPriorityRequest(ctx context.Context, text string) (bool
 		},
 		Model:       o.getModel(),
 		Temperature: openai.Float(defaultTemperature),
-		MaxTokens:   openai.Int(maxTokensExtraction),
+		MaxTokens:   openai.Int(maxTokensPriority),
 	})
 	if err != nil {
 		o.logger.Error("OpenAI API call failed", zap.Error(err))
@@ -407,39 +340,6 @@ Examples of good confidence scoring:
 - 0.7-0.9: Title + artist with minor variations
 - 0.5-0.7: Partial matches or common song references
 - <0.5: Unclear or very uncertain matches`
-}
-
-func (o *OpenAIClient) buildExtractSongPrompt() string {
-	return `You are a music expert helping to extract song information from user messages.
-
-Your task is to determine if the user's message contains information about a specific song, and if so, extract the song details.
-
-Respond with a JSON object in this exact format:
-{
-  "found": true/false,
-  "title": "Song Title",
-  "artist": "Artist Name",
-  "album": "Album Name (optional)",
-  "year": 2023,
-  "reason": "Explanation of why song was/wasn't found"
-}
-
-Rules:
-1. Set "found" to true only if you can identify a specific song
-2. If found=false, include a brief reason in the "reason" field
-3. Be conservative - only extract when you're confident about the song
-4. Handle common music references, lyrics, and descriptions
-5. If multiple songs are mentioned, extract the most prominent one
-
-Examples of when to set found=true:
-- "Play Bohemian Rhapsody by Queen"
-- "I love that song 'Imagine' by John Lennon"
-- "Put on some Beatles - Yesterday"
-
-Examples of when to set found=false:
-- "Play some music"
-- "I like rock music"
-- "What's that song that goes 'na na na'?" (too vague)`
 }
 
 func (o *OpenAIClient) buildChatterDetectionPrompt() string {

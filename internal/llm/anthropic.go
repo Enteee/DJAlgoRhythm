@@ -44,19 +44,6 @@ func (a *AnthropicClient) RankCandidates(_ context.Context, _ string) ([]core.LL
 	return nil, fmt.Errorf("anthropic integration not yet implemented")
 }
 
-func (a *AnthropicClient) ExtractSongInfo(ctx context.Context, text string) (*core.Track, error) {
-	candidates, err := a.RankCandidates(ctx, text)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no song information extracted")
-	}
-
-	return &candidates[0].Track, nil
-}
-
 func (a *AnthropicClient) IsNotMusicRequest(ctx context.Context, text string) (bool, error) {
 	return IsChatterMessage(ctx, text, a.logger)
 }
