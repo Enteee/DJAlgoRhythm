@@ -10,6 +10,12 @@ import (
 	"whatdj/internal/chat"
 )
 
+const (
+	// Auto-approval timing constants
+	autoApprovalReactionDelay = 100 * time.Millisecond
+	autoApprovalProcessDelay  = 500 * time.Millisecond
+)
+
 // Approval Management
 // This module handles all forms of approval workflows including user confirmation,
 // admin approval, community approval, and queue track approval
@@ -373,13 +379,26 @@ func (d *Dispatcher) executePlaylistAddAfterApproval(
 }
 
 // sendQueueTrackApprovalMessage sends an queue approval message with fallback to regular text
-func (d *Dispatcher) sendQueueTrackApprovalMessage(ctx context.Context, trackID string, track *Track, messageKey, logContext string) {
+func (d *Dispatcher) sendQueueTrackApprovalMessage(
+	ctx context.Context, trackID string, track *Track, messageKey, logContext string, autoApprove bool,
+) {
 	groupID := d.getGroupID()
 	if groupID == "" {
 		return
 	}
 
-	message := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+	// Choose message based on auto-approval status
+	actualMessageKey := messageKey
+	if autoApprove {
+		// Use auto-approval variant of the message
+		if messageKey == "bot.queue_management" {
+			actualMessageKey = "bot.queue_management_auto"
+		} else if messageKey == "bot.queue_replacement" {
+			actualMessageKey = "bot.queue_replacement_auto"
+		}
+	}
+
+	message := d.localizer.T(actualMessageKey, track.Artist, track.Title, track.URL)
 
 	if messageID, err := d.frontend.SendQueueTrackApproval(ctx, groupID, trackID, message); err != nil {
 		d.logger.Warn("Failed to send "+logContext+" message", zap.Error(err))
@@ -387,15 +406,40 @@ func (d *Dispatcher) sendQueueTrackApprovalMessage(ctx context.Context, trackID 
 		if _, fallbackErr := d.frontend.SendText(ctx, groupID, "", message); fallbackErr != nil {
 			d.logger.Warn("Failed to send fallback "+logContext+" message", zap.Error(fallbackErr))
 		}
+		// Auto-approve even if message sending failed
+		if autoApprove {
+			go func() {
+				time.Sleep(autoApprovalReactionDelay)
+				d.handleQueueTrackDecision(trackID, true)
+			}()
+		}
 	} else {
-		// Start timeout tracking for this approval message
-		d.startQueueTrackApprovalTimeout(ctx, messageID, trackID, groupID)
+		if autoApprove {
+			// Add thumbs up reaction and auto-approve
+			if reactErr := d.frontend.React(ctx, groupID, messageID, "👍"); reactErr != nil {
+				d.logger.Debug("Failed to add thumbs up reaction for auto-approval", zap.Error(reactErr))
+			}
+			// Auto-approve after brief delay for visual effect
+			go func() {
+				time.Sleep(autoApprovalProcessDelay) // Longer delay so users can see the reaction
+				d.handleQueueTrackDecision(trackID, true)
+			}()
+		} else {
+			// Start timeout tracking for this approval message
+			d.startQueueTrackApprovalTimeout(ctx, messageID, trackID, groupID)
+		}
 
-		d.logger.Info("Sent "+logContext+" message with approval buttons",
+		logLevel := "normal"
+		if autoApprove {
+			logLevel = "auto-approved"
+		}
+
+		d.logger.Info("Sent "+logContext+" message with approval buttons ("+logLevel+")",
 			zap.String("trackID", trackID),
 			zap.String("messageID", messageID),
 			zap.String("artist", track.Artist),
-			zap.String("title", track.Title))
+			zap.String("title", track.Title),
+			zap.Bool("autoApprove", autoApprove))
 	}
 }
 

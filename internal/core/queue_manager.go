@@ -359,55 +359,14 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 	d.logger.Info("Need to add tracks to fill queue duration",
 		zap.Duration("neededDuration", neededDuration))
 
-	// Check if we've exceeded the rejection limit and should auto-add without approval
+	// Check if we've exceeded the rejection limit for auto-approval
 	d.queueManagementMutex.RLock()
 	rejectionCount := d.queueRejectionCount
 	d.queueManagementMutex.RUnlock()
 
-	if rejectionCount >= d.config.App.MaxQueueTrackReplacements {
-		d.logger.Info("Rejection limit exceeded, auto-adding track without approval",
-			zap.Int("rejectionCount", rejectionCount),
-			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
+	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
 
-		// Get a track and add it directly
-		trackID, err := d.spotify.GetQueueManagementTrack(ctx)
-		if err != nil {
-			d.logger.Warn("Failed to get queue-filling track for auto-add", zap.Error(err))
-			return
-		}
-
-		// Get track info for logging
-		track, trackErr := d.spotify.GetTrack(ctx, trackID)
-		if trackErr != nil {
-			d.logger.Warn("Could not get track info for auto-add track", zap.Error(trackErr))
-			track = &Track{Title: unknownTrack, Artist: unknownArtist, URL: ""}
-		}
-
-		// Add track directly without approval
-		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourceQueueFill); queueErr != nil {
-			d.logger.Warn("Failed to auto-add queue track", zap.Error(queueErr))
-			return
-		}
-
-		if playlistErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); playlistErr != nil {
-			d.logger.Warn("Failed to add auto-added track to playlist", zap.Error(playlistErr))
-		}
-
-		// Add to dedup store
-		d.dedup.Add(trackID)
-
-		// Reset rejection counter after successful auto-add
-		d.queueManagementMutex.Lock()
-		d.queueRejectionCount = 0
-		d.queueManagementMutex.Unlock()
-
-		d.logger.Info("Auto-added track after rejection limit exceeded",
-			zap.String("trackID", trackID),
-			zap.String("trackName", fmt.Sprintf("%s - %s", track.Artist, track.Title)))
-		return
-	}
-
-	// Normal approval workflow - request one track for approval at a time
+	// Always use the unified approval workflow
 	trackID, err := d.spotify.GetQueueManagementTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get queue-filling track", zap.Error(err))
@@ -421,20 +380,28 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 		track = &Track{Title: unknownTrack, Artist: unknownArtist, URL: ""}
 	}
 
-	// Track this queue-filling track for approval (DO NOT add to queue/playlist yet)
+	// Track this queue-filling track for approval (DO NOT add to queue/playlist yet in auto-approve case)
 	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
 	d.queueManagementMutex.Lock()
 	d.pendingQueueTracks[trackID] = trackName
 	d.queueManagementMutex.Unlock()
 
-	// Send approval message to group (track will be added only after approval)
-	d.sendQueueTrackApprovalMessage(ctx, trackID, track, "bot.queue_management", "queue management track")
+	// Send approval message to group (will auto-approve if rejection limit exceeded)
+	d.sendQueueTrackApprovalMessage(ctx, trackID, track, "bot.queue_management", "queue management track", autoApprove)
 
-	d.logger.Info("Requesting approval for queue-filling track",
-		zap.String("trackID", trackID),
-		zap.String("trackName", trackName),
-		zap.Int("currentRejections", rejectionCount),
-		zap.Duration("stillNeeded", targetDuration-currentDuration))
+	if autoApprove {
+		d.logger.Info("Auto-approving queue-filling track after rejection limit",
+			zap.String("trackID", trackID),
+			zap.String("trackName", trackName),
+			zap.Int("rejectionCount", rejectionCount),
+			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
+	} else {
+		d.logger.Info("Requesting approval for queue-filling track",
+			zap.String("trackID", trackID),
+			zap.String("trackName", trackName),
+			zap.Int("currentRejections", rejectionCount),
+			zap.Duration("stillNeeded", targetDuration-currentDuration))
+	}
 }
 
 // addApprovedQueueTrack adds an approved queue track to both queue and playlist
@@ -554,7 +521,14 @@ func (d *Dispatcher) resetQueueManagementFlag() {
 func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 	d.logger.Debug("Finding replacement track for queue")
 
-	// Get a replacement track directly from Spotify's queue management
+	// Check if we've exceeded the rejection limit for auto-approval
+	d.queueManagementMutex.RLock()
+	rejectionCount := d.queueRejectionCount
+	d.queueManagementMutex.RUnlock()
+
+	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
+
+	// Always use the unified approval workflow
 	newTrackID, err := d.spotify.GetQueueManagementTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get replacement queue track", zap.Error(err))
@@ -562,7 +536,7 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 		return
 	}
 
-	// Get track info for the replacement message (before adding anything)
+	// Get track info for the replacement message
 	track, err := d.spotify.GetTrack(ctx, newTrackID)
 	if err != nil {
 		d.logger.Warn("Could not get track info for replacement queue track", zap.Error(err))
@@ -575,11 +549,19 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 	d.pendingQueueTracks[newTrackID] = trackName
 	d.queueManagementMutex.Unlock()
 
-	// Send message to chat about the replacement track with approval buttons
-	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, "bot.queue_replacement", "replacement queue track")
+	// Send message to chat about the replacement track (will auto-approve if rejection limit exceeded)
+	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, "bot.queue_replacement", "replacement queue track", autoApprove)
 
-	d.logger.Info("Requesting approval for replacement track",
-		zap.String("trackID", newTrackID),
-		zap.String("artist", track.Artist),
-		zap.String("title", track.Title))
+	if autoApprove {
+		d.logger.Info("Auto-approving replacement track after rejection limit",
+			zap.String("trackID", newTrackID),
+			zap.String("trackName", trackName),
+			zap.Int("rejectionCount", rejectionCount),
+			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
+	} else {
+		d.logger.Info("Requesting approval for replacement track",
+			zap.String("trackID", newTrackID),
+			zap.String("trackName", trackName),
+			zap.Int("currentRejections", rejectionCount))
+	}
 }

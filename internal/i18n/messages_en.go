@@ -64,7 +64,9 @@ var englishMessages = map[string]string{
 
 	// Queue management messages
 	"bot.queue_management":         "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
+	"bot.queue_management_auto":    "🤖 Playlist is running low! Auto-adding: %s - %s\n%s\n\n✅ Added automatically after multiple rejections.",
 	"bot.queue_replacement":        "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Do you approve this replacement?",
+	"bot.queue_replacement_auto":   "🔄 Auto-adding replacement: %s - %s\n%s\n\n✅ Added automatically after multiple rejections.",
 	"bot.queue_replacement_failed": "❌ Failed to find a replacement queue track. Please add more songs manually!",
 
 	// Playlist monitoring messages
