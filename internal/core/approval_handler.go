@@ -448,11 +448,20 @@ func (d *Dispatcher) handleQueueTrackApprovalTimeout(ctx context.Context, messag
 			zap.String("trackID", trackID),
 			zap.String("messageID", messageID))
 
-		// Auto-accept the track by removing buttons and keeping the track in playlist
-		d.removeQueueTrackApprovalButtons(context.Background(), chatID, messageID)
+		// Clean up pending queue tracks (similar to handleQueueTrackDecision)
+		d.queueManagementMutex.Lock()
+		delete(d.pendingQueueTracks, trackID)
+		d.queueManagementMutex.Unlock()
 
-		// Reset queue flag to allow new workflows
-		d.resetQueueManagementFlag()
+		// Actually add the track to queue and playlist (this was missing!)
+		if err := d.addApprovedQueueTrack(context.Background(), trackID); err != nil {
+			d.logger.Error("Failed to add auto-accepted queue track",
+				zap.String("trackID", trackID),
+				zap.Error(err))
+		}
+
+		// Remove approval buttons to show auto-acceptance
+		d.removeQueueTrackApprovalButtons(context.Background(), chatID, messageID)
 	}
 }
 

@@ -419,6 +419,46 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 		zap.Duration("stillNeeded", targetDuration-currentDuration))
 }
 
+// addApprovedQueueTrack adds an approved queue track to both queue and playlist
+func (d *Dispatcher) addApprovedQueueTrack(ctx context.Context, trackID string) error {
+	// Get track details before adding to queue
+	track, err := d.spotify.GetTrack(ctx, trackID)
+	if err != nil {
+		d.logger.Error("Failed to get track details for approved queue track",
+			zap.String("trackID", trackID),
+			zap.Error(err))
+		return err
+	}
+
+	// Add the approved track to queue and playlist
+	if queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourceQueueFill); queueErr != nil {
+		d.logger.Warn("Failed to add approved queue track to queue",
+			zap.String("trackID", trackID),
+			zap.Error(queueErr))
+	}
+
+	if playlistErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); playlistErr != nil {
+		d.logger.Warn("Failed to add approved queue track to playlist",
+			zap.String("trackID", trackID),
+			zap.Error(playlistErr))
+	}
+
+	// Add to dedup store
+	d.dedup.Add(trackID)
+
+	// Reset rejection counter on approval
+	d.queueManagementMutex.Lock()
+	d.queueRejectionCount = 0
+	d.queueManagementMutex.Unlock()
+
+	// Queue workflow is complete, reset the flag
+	d.resetQueueManagementFlag()
+
+	d.logger.Info("Queue track approved and added successfully",
+		zap.String("trackID", trackID))
+	return nil
+}
+
 // handleQueueTrackDecision handles admin decisions on queue track suggestions
 func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 	ctx := context.Background()
@@ -457,44 +497,12 @@ func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 			zap.String("trackID", trackID),
 			zap.String("trackName", trackName))
 
-		// Get track details before adding to queue
-		track, err := d.spotify.GetTrack(ctx, trackID)
-		if err != nil {
-			d.logger.Error("Failed to get track details for approved queue track",
+		// Add the approved track using shared logic
+		if err := d.addApprovedQueueTrack(ctx, trackID); err != nil {
+			d.logger.Error("Failed to add manually approved queue track",
 				zap.String("trackID", trackID),
 				zap.Error(err))
-			return
 		}
-
-		// Now actually add the approved track to queue and playlist
-		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourceQueueFill); queueErr != nil {
-			d.logger.Warn("Failed to add approved queue track to queue",
-				zap.String("trackID", trackID),
-				zap.Error(queueErr))
-		} else {
-			d.logger.Info("Added approved track to queue", zap.String("trackID", trackID))
-		}
-
-		if playlistErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); playlistErr != nil {
-			d.logger.Warn("Failed to add approved queue track to playlist",
-				zap.String("trackID", trackID),
-				zap.Error(playlistErr))
-		} else {
-			d.logger.Info("Added approved track to playlist", zap.String("trackID", trackID))
-		}
-
-		// Add to dedup store
-		d.dedup.Add(trackID)
-
-		// Reset rejection counter on approval
-		d.queueManagementMutex.Lock()
-		d.queueRejectionCount = 0
-		d.queueManagementMutex.Unlock()
-
-		// Queue workflow is complete, reset the flag
-		d.resetQueueManagementFlag()
-
-		d.logger.Info("Track approved and added, rejection counter reset")
 	} else {
 		d.logger.Info("Queue track denied, will not be added",
 			zap.String("trackID", trackID),
