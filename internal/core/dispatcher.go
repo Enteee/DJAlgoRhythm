@@ -25,21 +25,16 @@ type Dispatcher struct {
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
 
-	// Playlist monitoring
-	hasUnconfirmedWarning   bool
-	playlistWarningMessages map[string]string // messageID -> adminUserID for deletion
-	playlistWarningMutex    sync.RWMutex
+	// Settings monitoring
+	hasUnconfirmedSettingsWarning bool
+	settingsWarningMutex          sync.RWMutex
 
 	// Queue management approval tracking
 	pendingQueueTracks      map[string]string                // trackID -> track name for pending approvals
 	pendingApprovalMessages map[string]*queueApprovalContext // messageID -> approval context for timeout tracking
+	queueRejectionCount     int                              // Count of consecutive rejections for queue-fill tracks
 	queueManagementMutex    sync.RWMutex
 	queueManagementActive   bool // tracks if queue management is currently running
-
-	// Priority track tracking for queue position calculation
-	priorityTracks     map[string]bool // trackID -> true for tracks that were priority queued
-	lastRegularTrackID string          // last non-priority track that was playing (for queue position calculation)
-	queuePositionMutex sync.RWMutex
 
 	// Shadow queue tracking for reliable queue management
 	shadowQueue        []ShadowQueueItem // tracks we've actually queued to Spotify
@@ -67,8 +62,6 @@ func NewDispatcher(
 		messageContexts:         make(map[string]*MessageContext),
 		pendingQueueTracks:      make(map[string]string),
 		pendingApprovalMessages: make(map[string]*queueApprovalContext),
-		priorityTracks:          make(map[string]bool),
-		playlistWarningMessages: make(map[string]string),
 		shadowQueue:             make([]ShadowQueueItem, 0),
 	}
 
@@ -97,27 +90,17 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 	// Set up queue decision handler
 	d.frontend.SetQueueTrackDecisionHandler(d.handleQueueTrackDecision)
 
-	// Set up playlist switch decision handler
-	d.frontend.SetPlaylistSwitchDecisionHandler(d.handlePlaylistSwitchDecision)
-
 	// Send startup message to the group
 	d.sendStartupMessage(ctx)
 
 	// Start queue and playlist management
 	go d.runQueueAndPlaylistManagement(ctx)
 
-	// Start playlist monitoring
-	go d.runPlaylistMonitoring(ctx)
+	// Start playback settings monitoring
+	go d.runPlaybackSettingsMonitoring(ctx)
 
 	// Start shadow queue maintenance
 	go d.runShadowQueueMaintenance(ctx)
-
-	// Initialize lastRegularTrackID with currently playing track if available
-	go func() {
-		initCtx, initCancel := context.WithTimeout(context.Background(), initializationTimeoutSecs*time.Second)
-		defer initCancel()
-		d.updateLastRegularTrack(initCtx)
-	}()
 
 	// Begin listening for messages
 	return d.frontend.Listen(ctx, d.handleMessage)
@@ -243,6 +226,6 @@ func (d *Dispatcher) isNotMusicRequest(ctx context.Context, text string) bool {
 }
 
 const (
-	playlistCheckInterval    = 30 * time.Second // Check playlist every 30 seconds
-	maxPlaylistTracksToQueue = 10               // Maximum playlist tracks to queue at once
+	playbackSettingsCheckInterval = 30 * time.Second // Check playback settings every 30 seconds
+	maxPlaylistTracksToQueue      = 10               // Maximum playlist tracks to queue at once
 )

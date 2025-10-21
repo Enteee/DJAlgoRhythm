@@ -59,8 +59,18 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.State = StateAddToPlaylist
 
+	// Get track details before adding to queue
+	track, err := d.spotify.GetTrack(ctx, trackID)
+	if err != nil {
+		d.logger.Error("Failed to get track details for priority queue",
+			zap.String("trackID", trackID),
+			zap.Error(err))
+		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+		return
+	}
+
 	// Add priority track to queue (will play next)
-	queueErr := d.AddToQueueWithShadowTracking(ctx, trackID, "priority")
+	queueErr := d.AddToQueueWithShadowTracking(ctx, track, "priority")
 	if queueErr != nil {
 		d.logger.Warn("Failed to add priority track to queue, proceeding with playlist only",
 			zap.String("trackID", trackID),
@@ -72,11 +82,6 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 
 	d.logger.Info("Priority track added to queue",
 		zap.String("trackID", trackID))
-
-	// Track this as a priority track for queue position calculation
-	d.queuePositionMutex.Lock()
-	d.priorityTracks[trackID] = true
-	d.queuePositionMutex.Unlock()
 
 	// Add to playlist at position 0 (top) for history/deduplication to avoid replaying later
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
@@ -224,9 +229,8 @@ func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 func (d *Dispatcher) calculateTargetQueueDuration() time.Duration {
 	baseDuration := time.Duration(d.config.App.QueueAheadDurationSecs) * time.Second
 
-	// Approval overhead: max_replacements * approval_timeout
-	approvalOverhead := time.Duration(d.config.App.MaxQueueTrackReplacements) *
-		time.Duration(d.config.App.QueueTrackApprovalTimeoutSecs) * time.Second
+	// Approval overhead: single approval timeout (we only need buffer for one approval at a time)
+	approvalOverhead := time.Duration(d.config.App.QueueTrackApprovalTimeoutSecs) * time.Second
 
 	targetDuration := baseDuration + approvalOverhead
 
@@ -244,78 +248,75 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 		zap.Duration("targetDuration", targetDuration),
 		zap.Duration("currentDuration", currentDuration))
 
-	// Get current track ID
-	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
-	if err != nil {
-		d.logger.Debug("No current track playing, cannot fill queue from playlist", zap.Error(err))
-		return
-	}
-
-	// Get playlist tracks
-	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
-	if err != nil {
-		d.logger.Warn("Failed to get playlist tracks for queue filling", zap.Error(err))
-		return
-	}
-
-	// Find current track position
-	currentPosition := -1
-	for i, trackID := range playlistTracks {
-		if trackID == currentTrackID {
-			currentPosition = i
-			break
-		}
-	}
-
-	if currentPosition == -1 {
-		d.logger.Debug("Current track not found in playlist, cannot fill queue from playlist",
-			zap.String("currentTrackID", currentTrackID))
-		return
-	}
-
-	// Get tracks that should come after current track
-	nextTracks := playlistTracks[currentPosition+1:]
-	if len(nextTracks) == 0 {
-		d.logger.Debug("No more tracks after current track in playlist")
-		return
-	}
-
-	// Calculate how many tracks we need to add
+	// Calculate how much duration we need to add
 	neededDuration := targetDuration - currentDuration
-	estimatedTrackDuration := time.Duration(estimatedTrackDurationMins) * time.Minute
-	tracksNeeded := int(neededDuration/estimatedTrackDuration) + 1 // Add 1 for safety
-
-	if tracksNeeded <= 0 {
+	if neededDuration <= 0 {
 		d.logger.Debug("No additional tracks needed based on duration calculation")
 		return
 	}
 
-	// Limit to available tracks
-	if tracksNeeded > len(nextTracks) {
-		tracksNeeded = len(nextTracks)
+	// Get ALL available next tracks from playlist (up to reasonable limit)
+	nextTracks, err := d.spotify.GetNextPlaylistTracks(ctx, maxTracksToFetch)
+	if err != nil {
+		d.logger.Warn("Failed to get next playlist tracks, falling back to queue-fill", zap.Error(err))
+		d.fillQueueToTargetDuration(ctx, targetDuration, currentDuration)
+		return
 	}
 
-	// Add tracks to queue
-	tracksToAdd := nextTracks[:tracksNeeded]
-	if len(tracksToAdd) > 0 {
-		d.logger.Info("Adding playlist tracks to queue",
-			zap.Int("tracksToAdd", len(tracksToAdd)),
-			zap.Duration("neededDuration", neededDuration))
+	if len(nextTracks) == 0 {
+		d.logger.Debug("No more tracks available after current track in playlist, falling back to queue-fill")
+		d.fillQueueToTargetDuration(ctx, targetDuration, currentDuration)
+		return
+	}
 
-		err := d.AddMultipleToQueueWithShadowTracking(ctx, tracksToAdd, "playlist")
-		if err != nil {
-			d.logger.Warn("Failed to add some tracks to queue from playlist", zap.Error(err))
-		} else {
-			d.logger.Info("Successfully added playlist tracks to queue",
-				zap.Int("tracksAdded", len(tracksToAdd)))
+	// Add tracks one by one until we reach target duration
+	var addedDuration time.Duration
+	successCount := 0
+
+	d.logger.Info("Adding playlist tracks to queue until target duration reached",
+		zap.Duration("neededDuration", neededDuration),
+		zap.Int("availableTracks", len(nextTracks)))
+
+	for _, track := range nextTracks {
+		if currentDuration+addedDuration >= targetDuration {
+			d.logger.Debug("Target duration reached, stopping playlist track addition")
+			break
 		}
+
+		if err := d.AddToQueueWithShadowTracking(ctx, &track, "playlist"); err != nil {
+			d.logger.Warn("Failed to add track to queue",
+				zap.String("trackID", track.ID), zap.Error(err))
+			continue
+		}
+
+		addedDuration += track.Duration
+		successCount++
+		d.logger.Debug("Added playlist track to queue",
+			zap.String("trackID", track.ID),
+			zap.Duration("trackDuration", track.Duration),
+			zap.Duration("totalAddedDuration", addedDuration))
+	}
+
+	if successCount > 0 {
+		d.logger.Info("Successfully added playlist tracks to queue",
+			zap.Int("tracksAdded", successCount),
+			zap.Duration("addedDuration", addedDuration))
+	}
+
+	// If we ran out of playlist tracks but still need more duration, call fillQueueToTargetDuration
+	finalDuration := currentDuration + addedDuration
+	if finalDuration < targetDuration {
+		d.logger.Debug("Playlist tracks exhausted but still need more duration, falling back to queue-fill",
+			zap.Duration("currentDuration", finalDuration),
+			zap.Duration("targetDuration", targetDuration))
+		d.fillQueueToTargetDuration(ctx, targetDuration, finalDuration)
 	}
 }
 
 // fillQueueToTargetDuration adds tracks to reach the target queue duration if insufficient
 func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDuration, currentDuration time.Duration) {
 	if currentDuration >= targetDuration {
-		d.logger.Debug("Queue duration sufficient after playlist filling")
+		d.logger.Debug("Queue duration sufficient")
 		return
 	}
 
@@ -325,42 +326,85 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 		zap.Duration("currentDuration", currentDuration),
 		zap.Duration("targetDuration", targetDuration))
 
-	// Calculate how many tracks we might need
-	estimatedTrackDuration := time.Duration(estimatedTrackDurationMins) * time.Minute
-	maxTracksNeeded := int(neededDuration/estimatedTrackDuration) + 1
-
-	// Limit to configuration maximum
-	if maxTracksNeeded > d.config.App.MaxQueueTrackReplacements {
-		maxTracksNeeded = d.config.App.MaxQueueTrackReplacements
-	}
-
 	d.logger.Info("Need to add tracks to fill queue duration",
-		zap.Duration("neededDuration", neededDuration),
-		zap.Int("maxTracksNeeded", maxTracksNeeded))
+		zap.Duration("neededDuration", neededDuration))
 
-	// Add queue-filling tracks directly (simplified approach)
-	for i := 0; i < maxTracksNeeded; i++ {
-		// Get a queue-filling track
+	// Check if we've exceeded the rejection limit and should auto-add without approval
+	d.queueManagementMutex.RLock()
+	rejectionCount := d.queueRejectionCount
+	d.queueManagementMutex.RUnlock()
+
+	if rejectionCount >= d.config.App.MaxQueueTrackReplacements {
+		d.logger.Info("Rejection limit exceeded, auto-adding track without approval",
+			zap.Int("rejectionCount", rejectionCount),
+			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
+
+		// Get a track and add it directly
 		trackID, err := d.spotify.GetQueueManagementTrack(ctx)
 		if err != nil {
-			d.logger.Warn("Failed to get queue-filling track", zap.Error(err))
-			continue
+			d.logger.Warn("Failed to get queue-filling track for auto-add", zap.Error(err))
+			return
 		}
 
-		// Add to queue immediately
-		if queueErr := d.AddToQueueWithShadowTracking(ctx, trackID, "queue-fill"); queueErr != nil {
-			d.logger.Warn("Failed to add queue-filling track to queue", zap.Error(queueErr))
-			continue
+		// Get track info for logging
+		track, trackErr := d.spotify.GetTrack(ctx, trackID)
+		if trackErr != nil {
+			d.logger.Warn("Could not get track info for auto-add track", zap.Error(trackErr))
+			track = &Track{Title: unknownTrack, Artist: unknownArtist, URL: ""}
 		}
-		d.logger.Info("Added queue-filling track to queue",
-			zap.String("trackID", trackID))
 
-		// Add to dedup store and playlist
+		// Add track directly without approval
+		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, "queue-fill"); queueErr != nil {
+			d.logger.Warn("Failed to auto-add queue track", zap.Error(queueErr))
+			return
+		}
+
+		if playlistErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); playlistErr != nil {
+			d.logger.Warn("Failed to add auto-added track to playlist", zap.Error(playlistErr))
+		}
+
+		// Add to dedup store
 		d.dedup.Add(trackID)
-		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
-			d.logger.Warn("Failed to add queue-filling track to playlist", zap.Error(err))
-		}
+
+		// Reset rejection counter after successful auto-add
+		d.queueManagementMutex.Lock()
+		d.queueRejectionCount = 0
+		d.queueManagementMutex.Unlock()
+
+		d.logger.Info("Auto-added track after rejection limit exceeded",
+			zap.String("trackID", trackID),
+			zap.String("trackName", fmt.Sprintf("%s - %s", track.Artist, track.Title)))
+		return
 	}
+
+	// Normal approval workflow - request one track for approval at a time
+	trackID, err := d.spotify.GetQueueManagementTrack(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to get queue-filling track", zap.Error(err))
+		return
+	}
+
+	// Get track info for the approval message
+	track, trackErr := d.spotify.GetTrack(ctx, trackID)
+	if trackErr != nil {
+		d.logger.Warn("Could not get track info for queue-filling track approval", zap.Error(trackErr))
+		track = &Track{Title: unknownTrack, Artist: unknownArtist, URL: ""}
+	}
+
+	// Track this queue-filling track for approval (DO NOT add to queue/playlist yet)
+	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+	d.queueManagementMutex.Lock()
+	d.pendingQueueTracks[trackID] = trackName
+	d.queueManagementMutex.Unlock()
+
+	// Send approval message to group (track will be added only after approval)
+	d.sendQueueTrackApprovalMessage(ctx, trackID, track, "bot.queue_management", "queue management track")
+
+	d.logger.Info("Requesting approval for queue-filling track",
+		zap.String("trackID", trackID),
+		zap.String("trackName", trackName),
+		zap.Int("currentRejections", rejectionCount),
+		zap.Duration("stillNeeded", targetDuration-currentDuration))
 }
 
 // handleQueueTrackDecision handles admin decisions on queue track suggestions
@@ -397,35 +441,74 @@ func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 	}
 
 	if approved {
-		d.logger.Info("Queue track approved",
-			zap.String("trackID", trackID),
-			zap.String("trackName", trackName))
-		// Queue workflow is complete, reset the flag
-		d.resetQueueManagementFlag()
-	} else {
-		d.logger.Info("Queue track denied, removing from playlist",
+		d.logger.Info("Queue track approved, adding to queue and playlist",
 			zap.String("trackID", trackID),
 			zap.String("trackName", trackName))
 
-		// Remove the denied track from the playlist
-		if err := d.spotify.RemoveFromPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
-			d.logger.Warn("Failed to remove denied queue track from playlist",
+		// Get track details before adding to queue
+		track, err := d.spotify.GetTrack(ctx, trackID)
+		if err != nil {
+			d.logger.Error("Failed to get track details for approved queue track",
 				zap.String("trackID", trackID),
 				zap.Error(err))
-		} else {
-			// Remove from dedup store so it can be added again if requested
-			d.dedup.Remove(trackID)
+			return
 		}
 
+		// Now actually add the approved track to queue and playlist
+		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, "queue-fill"); queueErr != nil {
+			d.logger.Warn("Failed to add approved queue track to queue",
+				zap.String("trackID", trackID),
+				zap.Error(queueErr))
+		} else {
+			d.logger.Info("Added approved track to queue", zap.String("trackID", trackID))
+		}
+
+		if playlistErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); playlistErr != nil {
+			d.logger.Warn("Failed to add approved queue track to playlist",
+				zap.String("trackID", trackID),
+				zap.Error(playlistErr))
+		} else {
+			d.logger.Info("Added approved track to playlist", zap.String("trackID", trackID))
+		}
+
+		// Add to dedup store
+		d.dedup.Add(trackID)
+
+		// Reset rejection counter on approval
+		d.queueManagementMutex.Lock()
+		d.queueRejectionCount = 0
+		d.queueManagementMutex.Unlock()
+
+		// Queue workflow is complete, reset the flag
+		d.resetQueueManagementFlag()
+
+		d.logger.Info("Track approved and added, rejection counter reset")
+	} else {
+		d.logger.Info("Queue track denied, will not be added",
+			zap.String("trackID", trackID),
+			zap.String("trackName", trackName))
+
+		// Increment rejection counter
+		d.queueManagementMutex.Lock()
+		d.queueRejectionCount++
+		currentCount := d.queueRejectionCount
+		d.queueManagementMutex.Unlock()
+
+		d.logger.Info("Track rejected, incremented rejection counter",
+			zap.Int("rejectionCount", currentCount),
+			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
+
+		// Track was never added to anything, so nothing to remove
 		// Try to get a new queue-filling track to replace the denied one
 		go d.findAndSuggestReplacementTrack(ctx)
 	}
 }
 
-// resetQueueManagementFlag resets the queue management active flag
+// resetQueueManagementFlag resets the queue management active flag and rejection counter
 func (d *Dispatcher) resetQueueManagementFlag() {
 	d.queueManagementMutex.Lock()
 	d.queueManagementActive = false
+	d.queueRejectionCount = 0 // Reset rejection counter when queue management cycle completes
 	d.queueManagementMutex.Unlock()
 }
 
@@ -441,24 +524,14 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 		return
 	}
 
-	// Add the replacement track to the playlist
-	if addErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, newTrackID); addErr != nil {
-		d.logger.Warn("Failed to add replacement queue track", zap.Error(addErr))
-		d.resetQueueManagementFlag()
-		return
-	}
-
-	// Add to dedup store
-	d.dedup.Add(newTrackID)
-
-	// Get track info for the replacement message
+	// Get track info for the replacement message (before adding anything)
 	track, err := d.spotify.GetTrack(ctx, newTrackID)
 	if err != nil {
 		d.logger.Warn("Could not get track info for replacement queue track", zap.Error(err))
-		track = &Track{Title: unknownTrack, Artist: unknownArtist}
+		track = &Track{Title: unknownTrack, Artist: unknownArtist, URL: ""}
 	}
 
-	// Track this replacement for approval
+	// Track this replacement for approval (DO NOT add to playlist yet)
 	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
 	d.queueManagementMutex.Lock()
 	d.pendingQueueTracks[newTrackID] = trackName
@@ -467,7 +540,7 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 	// Send message to chat about the replacement track with approval buttons
 	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, "bot.queue_replacement", "replacement queue track")
 
-	d.logger.Info("Added replacement track for approval",
+	d.logger.Info("Requesting approval for replacement track",
 		zap.String("trackID", newTrackID),
 		zap.String("artist", track.Artist),
 		zap.String("title", track.Title))

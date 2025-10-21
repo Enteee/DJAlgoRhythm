@@ -69,11 +69,4 @@ type Frontend interface {
 
 	// EditMessage edits an existing message by ID (returns error if not supported)
 	EditMessage(ctx context.Context, chatID, messageID, newText string) error
-
-	// SendPlaylistSwitchApproval sends a playlist switch warning with switch/stay buttons
-	// Returns the message ID for tracking responses
-	SendPlaylistSwitchApproval(ctx context.Context, chatID, message string) (string, error)
-
-	// SetPlaylistSwitchDecisionHandler sets the handler for playlist switch decisions
-	SetPlaylistSwitchDecisionHandler(handler func(approved bool))
 }

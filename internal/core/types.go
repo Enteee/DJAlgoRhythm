@@ -51,15 +51,14 @@ type LLMCandidate struct {
 }
 
 type PlaybackCompliance struct {
-	IsCorrectPlaylist bool
-	IsCorrectShuffle  bool
-	IsCorrectRepeat   bool
-	Issues            []string
+	IsCorrectShuffle bool
+	IsCorrectRepeat  bool
+	Issues           []string
 }
 
 // IsOptimalForAutoDJ returns true if all settings are optimal for auto-DJing
 func (pc PlaybackCompliance) IsOptimalForAutoDJ() bool {
-	return pc.IsCorrectPlaylist && pc.IsCorrectShuffle && pc.IsCorrectRepeat
+	return pc.IsCorrectShuffle && pc.IsCorrectRepeat
 }
 
 type MessageState int
@@ -138,19 +137,20 @@ type SpotifyClient interface {
 	SetTargetPlaylist(playlistID string)
 	// Queue management and duration calculation
 	GetQueueRemainingDuration(ctx context.Context) (time.Duration, error)
-	GetNextPlaylistTracks(ctx context.Context, count int) ([]string, error)
-	GetTracksDuration(ctx context.Context, trackIDs []string) (time.Duration, error)
+	GetNextPlaylistTracks(ctx context.Context, count int) ([]Track, error)
 	// Queue management
 	GetQueueManagementTrack(ctx context.Context) (string, error)
 	AddQueueManagementTrack(ctx context.Context) (string, error)
-	// Playlist monitoring
-	IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error)
+	// Playback settings monitoring
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
 	// Volume and playback control
 	GetCurrentVolume(ctx context.Context) (int, error)
 	SetVolume(ctx context.Context, volume int) error
 	PlayTrack(ctx context.Context, trackID string) error
 	SetPlaylistContext(ctx context.Context, playlistID, trackID string) error
+	// Playback settings control
+	SetShuffle(ctx context.Context, shuffle bool) error
+	SetRepeat(ctx context.Context, state string) error
 	// Current track information
 	GetCurrentTrackRemainingTime(ctx context.Context) (time.Duration, error)
 }

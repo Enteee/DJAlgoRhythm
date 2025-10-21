@@ -47,8 +47,8 @@ func (d *Dispatcher) reactAddedWithMessage(
 	}
 
 	// Check if we should include queue position in the message
-	lastRegularTrackID := d.getLastRegularTrackID()
-	playlistPosition, err := d.GetPlaylistPositionWithShadow(ctx, trackID, lastRegularTrackID)
+	// GetPlaylistPositionWithShadow will automatically use shadow queue to find reference track
+	playlistPosition, err := d.GetPlaylistPositionWithShadow(ctx, trackID, "")
 	if err == nil && playlistPosition >= 0 {
 		// Track found in playlist - use message with queue position
 		var queueMessageKey string

@@ -566,10 +566,6 @@ func (c *Client) CheckPlaybackCompliance(ctx context.Context) (*core.PlaybackCom
 		return nil, fmt.Errorf("client not authenticated")
 	}
 
-	if c.targetPlaylist == "" {
-		return nil, fmt.Errorf("no target playlist set")
-	}
-
 	// Get current playback state
 	state, err := c.client.PlayerState(ctx)
 	if err != nil {
@@ -577,55 +573,19 @@ func (c *Client) CheckPlaybackCompliance(ctx context.Context) (*core.PlaybackCom
 	}
 
 	compliance := &core.PlaybackCompliance{
-		IsCorrectPlaylist: true,
-		IsCorrectShuffle:  true,
-		IsCorrectRepeat:   true,
-		Issues:            []string{},
+		IsCorrectShuffle: true,
+		IsCorrectRepeat:  true,
+		Issues:           []string{},
 	}
 
 	if state == nil || state.Item == nil {
 		return compliance, nil // No playback active, consider this OK
 	}
 
-	// Check playlist compliance
-	playlistOK := c.checkPlaylistCompliance(ctx, state, compliance)
-
-	// Check settings compliance
+	// Check only settings compliance (shuffle/repeat)
 	c.checkSettingsCompliance(state, compliance)
 
-	// If playlist is wrong, don't bother checking track membership
-	if !playlistOK {
-		return compliance, nil
-	}
-
-	// Check if current track is actually in our playlist
-	c.checkTrackMembership(ctx, state, compliance)
-
 	return compliance, nil
-}
-
-// IsPlayingFromCorrectPlaylist checks if current playback is from the target playlist
-// Kept for backward compatibility
-func (c *Client) IsPlayingFromCorrectPlaylist(ctx context.Context) (bool, error) {
-	compliance, err := c.CheckPlaybackCompliance(ctx)
-	if err != nil {
-		return false, err
-	}
-	return compliance.IsCorrectPlaylist, nil
-}
-
-// checkPlaylistCompliance verifies the current playback context
-func (c *Client) checkPlaylistCompliance(_ context.Context, state *spotify.PlayerState, compliance *core.PlaybackCompliance) bool {
-	playlistURI := fmt.Sprintf("spotify:playlist:%s", c.targetPlaylist)
-	if state.PlaybackContext.URI != spotify.URI(playlistURI) {
-		compliance.IsCorrectPlaylist = false
-		compliance.Issues = append(compliance.Issues, "Not playing from target playlist")
-		c.logger.Debug("Not playing from target playlist",
-			zap.String("currentContext", string(state.PlaybackContext.URI)),
-			zap.String("targetPlaylist", playlistURI))
-		return false
-	}
-	return true
 }
 
 // checkSettingsCompliance verifies shuffle and repeat settings
@@ -637,35 +597,13 @@ func (c *Client) checkSettingsCompliance(state *spotify.PlayerState, compliance 
 		c.logger.Debug("Shuffle is enabled, which may interfere with auto-DJing")
 	}
 
-	// Check repeat setting (should be off or context, not track)
-	if state.RepeatState == RepeatStateTrack {
+	// Check repeat setting (should be off for auto-DJing)
+	if state.RepeatState != RepeatStateOff {
 		compliance.IsCorrectRepeat = false
-		compliance.Issues = append(compliance.Issues, "Repeat is set to track (should be off or context for auto-DJing)")
-		c.logger.Debug("Repeat is set to track, which will prevent auto-DJing")
+		compliance.Issues = append(compliance.Issues, "Repeat is not set to off (should be off for auto-DJing)")
+		c.logger.Debug("Repeat is not set to off, which may interfere with auto-DJing",
+			zap.String("currentRepeatState", state.RepeatState))
 	}
-}
-
-// checkTrackMembership verifies the current track is in the target playlist
-func (c *Client) checkTrackMembership(ctx context.Context, state *spotify.PlayerState, compliance *core.PlaybackCompliance) {
-	currentTrackID := string(state.Item.ID)
-	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
-	if err != nil {
-		c.logger.Warn("Failed to verify track is in playlist", zap.Error(err))
-		return // Assume OK if we can't verify
-	}
-
-	// Check if current track exists in playlist
-	for _, trackID := range playlistTracks {
-		if trackID == currentTrackID {
-			return // Found the track in playlist
-		}
-	}
-
-	compliance.IsCorrectPlaylist = false
-	compliance.Issues = append(compliance.Issues, "Current track not found in target playlist")
-	c.logger.Debug("Current track not found in target playlist",
-		zap.String("currentTrackID", currentTrackID),
-		zap.String("targetPlaylist", c.targetPlaylist))
 }
 
 // GetQueueManagementTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
@@ -1379,6 +1317,49 @@ func (c *Client) SetVolume(ctx context.Context, volume int) error {
 	return nil
 }
 
+// SetShuffle sets the shuffle state for the user's playback
+func (c *Client) SetShuffle(ctx context.Context, shuffle bool) error {
+	if c.client == nil {
+		return fmt.Errorf("spotify client not initialized")
+	}
+
+	err := c.client.Shuffle(ctx, shuffle)
+	if err != nil {
+		return fmt.Errorf("failed to set shuffle to %t: %w", shuffle, err)
+	}
+
+	c.logger.Debug("Set Spotify shuffle",
+		zap.Bool("shuffle", shuffle))
+
+	return nil
+}
+
+// SetRepeat sets the repeat state for the user's playback
+// state should be "track", "context", or "off"
+func (c *Client) SetRepeat(ctx context.Context, state string) error {
+	if c.client == nil {
+		return fmt.Errorf("spotify client not initialized")
+	}
+
+	// Validate repeat state
+	switch state {
+	case RepeatStateTrack, RepeatStateContext, RepeatStateOff:
+		// Valid states
+	default:
+		return fmt.Errorf("invalid repeat state: %s (must be 'track', 'context', or 'off')", state)
+	}
+
+	err := c.client.Repeat(ctx, state)
+	if err != nil {
+		return fmt.Errorf("failed to set repeat to %s: %w", state, err)
+	}
+
+	c.logger.Debug("Set Spotify repeat",
+		zap.String("state", state))
+
+	return nil
+}
+
 // PlayTrack starts playing a specific track
 func (c *Client) PlayTrack(ctx context.Context, trackID string) error {
 	if c.client == nil {
@@ -1481,7 +1462,7 @@ func (c *Client) GetQueueRemainingDuration(ctx context.Context) (time.Duration, 
 }
 
 // GetNextPlaylistTracks gets the next N tracks from the playlist after the current position
-func (c *Client) GetNextPlaylistTracks(ctx context.Context, count int) ([]string, error) {
+func (c *Client) GetNextPlaylistTracks(ctx context.Context, count int) ([]core.Track, error) {
 	if c.client == nil {
 		return nil, fmt.Errorf("client not authenticated")
 	}
@@ -1490,89 +1471,75 @@ func (c *Client) GetNextPlaylistTracks(ctx context.Context, count int) ([]string
 		return nil, fmt.Errorf("no target playlist set")
 	}
 
-	// Get current track ID
-	currentTrackID, err := c.GetCurrentTrackID(ctx)
-	if err != nil {
-		c.logger.Debug("No current track playing, starting from beginning of playlist")
-		// If no track is playing, start from beginning of playlist
-		playlistTracks, playlistErr := c.GetPlaylistTracks(ctx, c.targetPlaylist)
-		if playlistErr != nil {
-			return nil, fmt.Errorf("failed to get playlist tracks: %w", playlistErr)
-		}
-
-		// Return first N tracks
-		if count > len(playlistTracks) {
-			count = len(playlistTracks)
-		}
-		return playlistTracks[:count], nil
-	}
-
 	// Get all playlist tracks
-	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	playlistTrackIDs, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
-	// Find current track position
-	currentPos := -1
-	for i, trackID := range playlistTracks {
-		if trackID == currentTrackID {
-			currentPos = i
-			break
-		}
-	}
+	// Determine starting position based on current track
+	startPos := c.determineStartPosition(ctx, playlistTrackIDs)
 
-	if currentPos == -1 {
-		c.logger.Debug("Current track not found in playlist, starting from beginning")
-		// Current track not in playlist, start from beginning
-		if count > len(playlistTracks) {
-			count = len(playlistTracks)
-		}
-		return playlistTracks[:count], nil
-	}
+	// Get track IDs to fetch
+	trackIDsToFetch := c.selectTrackIDsFromPosition(playlistTrackIDs, startPos, count)
 
-	// Get next tracks after current position
-	nextStartPos := currentPos + 1
-	var nextTracks []string
-
-	// Collect tracks after current position
-	for i := nextStartPos; i < len(playlistTracks) && len(nextTracks) < count; i++ {
-		nextTracks = append(nextTracks, playlistTracks[i])
-	}
-
-	c.logger.Debug("Found next playlist tracks",
-		zap.String("currentTrackID", currentTrackID),
-		zap.Int("currentPos", currentPos),
-		zap.Int("playlistLength", len(playlistTracks)),
-		zap.Int("requestedCount", count),
-		zap.Int("foundCount", len(nextTracks)))
-
-	return nextTracks, nil
+	// Convert track IDs to Track objects
+	return c.convertTrackIDsToTracks(ctx, trackIDsToFetch)
 }
 
-// GetTracksDuration gets the total duration for a list of track IDs
-func (c *Client) GetTracksDuration(ctx context.Context, trackIDs []string) (time.Duration, error) {
-	if c.client == nil {
-		return 0, fmt.Errorf("client not authenticated")
+// determineStartPosition finds the position to start fetching tracks from
+func (c *Client) determineStartPosition(ctx context.Context, playlistTrackIDs []string) int {
+	currentTrackID, err := c.GetCurrentTrackID(ctx)
+	if err != nil {
+		c.logger.Debug("No current track playing, starting from beginning of playlist")
+		return 0
 	}
 
-	var totalDuration time.Duration
+	// Find current track position
+	for i, trackID := range playlistTrackIDs {
+		if trackID == currentTrackID {
+			return i + 1 // Start from next track
+		}
+	}
+
+	c.logger.Debug("Current track not found in playlist, starting from beginning")
+	return 0
+}
+
+// selectTrackIDsFromPosition selects track IDs starting from the given position
+func (c *Client) selectTrackIDsFromPosition(playlistTrackIDs []string, startPos, count int) []string {
+	if startPos >= len(playlistTrackIDs) {
+		return []string{}
+	}
+
+	endPos := startPos + count
+	if endPos > len(playlistTrackIDs) {
+		endPos = len(playlistTrackIDs)
+	}
+
+	return playlistTrackIDs[startPos:endPos]
+}
+
+// convertTrackIDsToTracks converts track IDs to Track objects
+func (c *Client) convertTrackIDsToTracks(ctx context.Context, trackIDs []string) ([]core.Track, error) {
+	var tracks []core.Track
+
 	for _, trackID := range trackIDs {
 		track, err := c.GetTrack(ctx, trackID)
 		if err != nil {
-			c.logger.Debug("Failed to get track duration",
+			c.logger.Warn("Failed to get track details",
 				zap.String("trackID", trackID),
 				zap.Error(err))
-			continue // Skip tracks we can't get duration for
+			continue
 		}
-		totalDuration += track.Duration
+		tracks = append(tracks, *track)
 	}
 
-	c.logger.Debug("Calculated total tracks duration",
-		zap.Int("trackCount", len(trackIDs)),
-		zap.Duration("totalDuration", totalDuration))
+	c.logger.Debug("Converted track IDs to Track objects",
+		zap.Int("requestedCount", len(trackIDs)),
+		zap.Int("convertedCount", len(tracks)))
 
-	return totalDuration, nil
+	return tracks, nil
 }
 
 // GetCurrentTrackRemainingTime gets the remaining duration of the currently playing track
