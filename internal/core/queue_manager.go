@@ -218,15 +218,8 @@ func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 		return
 	}
 
-	// Fill queue from existing playlist tracks first
-	d.fillQueueFromPlaylist(ctx, targetDuration, currentDuration)
-
-	// Check again after playlist filling
-	updatedDuration, err := d.GetQueueRemainingDurationWithShadow(ctx)
-	if err != nil {
-		d.logger.Warn("Failed to get updated queue duration", zap.Error(err))
-		updatedDuration = currentDuration // Use previous value as fallback
-	}
+	// Try to fill queue from existing playlist tracks first
+	updatedDuration := d.tryFillFromPlaylistTracks(ctx, targetDuration, currentDuration)
 
 	// Fill queue to target duration if still insufficient
 	if updatedDuration < targetDuration {
@@ -251,9 +244,10 @@ func (d *Dispatcher) calculateTargetQueueDuration() time.Duration {
 	return targetDuration
 }
 
-// fillQueueFromPlaylist attempts to fill the queue with tracks from the existing playlist
-func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, currentDuration time.Duration) {
-	d.logger.Debug("fillQueueFromPlaylist called",
+// tryFillFromPlaylistTracks attempts to fill the queue with tracks from the existing playlist
+// Returns the updated duration after adding playlist tracks (may still be < targetDuration)
+func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDuration, currentDuration time.Duration) time.Duration {
+	d.logger.Debug("tryFillFromPlaylistTracks called",
 		zap.Duration("targetDuration", targetDuration),
 		zap.Duration("currentDuration", currentDuration))
 
@@ -261,7 +255,7 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 	neededDuration := targetDuration - currentDuration
 	if neededDuration <= 0 {
 		d.logger.Debug("No additional tracks needed based on duration calculation")
-		return
+		return currentDuration
 	}
 
 	// Get logical playlist position to ensure correct progression after priority songs
@@ -270,15 +264,13 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 	// Get ALL available next tracks from playlist (up to reasonable limit) using logical position
 	nextTracks, err := d.spotify.GetNextPlaylistTracksFromPosition(ctx, logicalPosition, maxTracksToFetch)
 	if err != nil {
-		d.logger.Warn("Failed to get next playlist tracks, falling back to queue-fill", zap.Error(err))
-		d.fillQueueToTargetDuration(ctx, targetDuration, currentDuration)
-		return
+		d.logger.Warn("Failed to get next playlist tracks", zap.Error(err))
+		return currentDuration
 	}
 
 	if len(nextTracks) == 0 {
-		d.logger.Debug("No more tracks available after current track in playlist, falling back to queue-fill")
-		d.fillQueueToTargetDuration(ctx, targetDuration, currentDuration)
-		return
+		d.logger.Debug("No more tracks available after current track in playlist")
+		return currentDuration
 	}
 
 	// Add tracks one by one until we reach target duration
@@ -315,14 +307,13 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 			zap.Duration("addedDuration", addedDuration))
 	}
 
-	// If we ran out of playlist tracks but still need more duration, call fillQueueToTargetDuration
 	finalDuration := currentDuration + addedDuration
-	if finalDuration < targetDuration {
-		d.logger.Debug("Playlist tracks exhausted but still need more duration, falling back to queue-fill",
-			zap.Duration("currentDuration", finalDuration),
-			zap.Duration("targetDuration", targetDuration))
-		d.fillQueueToTargetDuration(ctx, targetDuration, finalDuration)
-	}
+	d.logger.Debug("Playlist track addition completed",
+		zap.Duration("finalDuration", finalDuration),
+		zap.Duration("targetDuration", targetDuration),
+		zap.Bool("stillNeedsMore", finalDuration < targetDuration))
+
+	return finalDuration
 }
 
 // fillQueueToTargetDuration adds tracks to reach the target queue duration if insufficient
