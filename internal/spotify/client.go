@@ -1072,6 +1072,38 @@ func (c *Client) GetNextPlaylistTracks(ctx context.Context, count int) ([]core.T
 	return c.convertTrackIDsToTracks(ctx, trackIDsToFetch)
 }
 
+// GetNextPlaylistTracksFromPosition gets the next N tracks starting from a specific position
+func (c *Client) GetNextPlaylistTracksFromPosition(ctx context.Context, startPosition, count int) ([]core.Track, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("client not authenticated")
+	}
+
+	if c.targetPlaylist == "" {
+		return nil, fmt.Errorf("no target playlist set")
+	}
+
+	// Get all playlist tracks
+	playlistTrackIDs, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	// Use provided start position + 1 for next tracks
+	startPos := startPosition + 1
+
+	c.logger.Debug("Getting playlist tracks from specific position",
+		zap.Int("requestedStartPosition", startPosition),
+		zap.Int("actualStartPosition", startPos),
+		zap.Int("count", count),
+		zap.Int("totalPlaylistTracks", len(playlistTrackIDs)))
+
+	// Get track IDs to fetch
+	trackIDsToFetch := c.selectTrackIDsFromPosition(playlistTrackIDs, startPos, count)
+
+	// Convert track IDs to Track objects
+	return c.convertTrackIDsToTracks(ctx, trackIDsToFetch)
+}
+
 // determineStartPosition finds the position to start fetching tracks from
 func (c *Client) determineStartPosition(ctx context.Context, playlistTrackIDs []string) int {
 	currentTrackID, err := c.GetCurrentTrackID(ctx)

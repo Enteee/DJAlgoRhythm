@@ -74,65 +74,86 @@ func (d *Dispatcher) checkCurrentTrackChanged(ctx context.Context) {
 	d.shadowQueueMutex.RUnlock()
 
 	if currentTrackID != lastTrackID {
-		d.logger.Debug("Current track changed, updating shadow queue progression",
-			zap.String("oldTrackID", lastTrackID),
-			zap.String("newTrackID", currentTrackID))
+		d.updateShadowQueueProgression(currentTrackID, lastTrackID)
+	}
+}
 
-		// Update the last known current track ID
-		d.shadowQueueMutex.Lock()
-		d.lastCurrentTrackID = currentTrackID
+// updateShadowQueueProgression handles the shadow queue updates when current track changes
+func (d *Dispatcher) updateShadowQueueProgression(currentTrackID, lastTrackID string) {
+	d.logger.Debug("Current track changed, updating shadow queue progression",
+		zap.String("oldTrackID", lastTrackID),
+		zap.String("newTrackID", currentTrackID))
 
-		// Smart track change detection: find where current track is in shadow queue
-		currentTrackPosition := -1
-		for i, item := range d.shadowQueue {
-			if item.TrackID == currentTrackID {
-				currentTrackPosition = i
-				break
-			}
+	// Update the last known current track ID
+	d.shadowQueueMutex.Lock()
+	d.lastCurrentTrackID = currentTrackID
+
+	// Smart track change detection: find where current track is in shadow queue
+	currentTrackPosition := -1
+	for i, item := range d.shadowQueue {
+		if item.TrackID == currentTrackID {
+			currentTrackPosition = i
+			break
 		}
+	}
 
-		if currentTrackPosition == -1 {
-			// Current track not in shadow queue - user manually played a non-queued track
-			// Keep shadow queue intact as queued tracks will resume playing after manual track
-			d.logger.Debug("Current track not in shadow queue, keeping shadow queue intact",
-				zap.String("currentTrackID", currentTrackID),
-				zap.Int("shadowQueueSize", len(d.shadowQueue)),
-				zap.String("reason", "manual track will finish and queued tracks will resume"))
-		} else if currentTrackPosition == 0 {
-			// Normal progression: current track was at position 0, remove it
-			d.logger.Debug("Normal track progression, removing completed track",
-				zap.String("completedTrackID", d.shadowQueue[0].TrackID),
-				zap.String("source", d.shadowQueue[0].Source))
+	if currentTrackPosition == -1 {
+		d.handleManualTrackPlay(currentTrackID)
+	} else if currentTrackPosition == 0 {
+		d.handleNormalTrackProgression()
+	} else {
+		d.handleManualTrackSkip(currentTrackID, currentTrackPosition)
+	}
 
-			d.shadowQueue = d.shadowQueue[1:]
-			for i := range d.shadowQueue {
-				d.shadowQueue[i].Position = i
-			}
-		} else {
-			// Manual skip: current track was at position N, remove all tracks before it
-			skippedTracks := d.shadowQueue[:currentTrackPosition]
-			d.logger.Debug("Manual track skip detected, removing skipped tracks",
-				zap.String("currentTrackID", currentTrackID),
-				zap.Int("currentTrackPosition", currentTrackPosition),
-				zap.Int("skippedTracksCount", len(skippedTracks)))
+	d.logger.Debug("Shadow queue updated after track change",
+		zap.Int("remainingItems", len(d.shadowQueue)))
+	d.shadowQueueMutex.Unlock()
+}
 
-			// Log the skipped tracks for debugging
-			for _, skipped := range skippedTracks {
-				d.logger.Debug("Removing skipped track from shadow queue",
-					zap.String("skippedTrackID", skipped.TrackID),
-					zap.String("source", skipped.Source))
-			}
+// handleManualTrackPlay handles when user manually plays a non-queued track
+func (d *Dispatcher) handleManualTrackPlay(currentTrackID string) {
+	// Current track not in shadow queue - user manually played a non-queued track
+	// Keep shadow queue intact as queued tracks will resume playing after manual track
+	d.logger.Debug("Current track not in shadow queue, keeping shadow queue intact",
+		zap.String("currentTrackID", currentTrackID),
+		zap.Int("shadowQueueSize", len(d.shadowQueue)),
+		zap.String("reason", "manual track will finish and queued tracks will resume"))
+}
 
-			// Remove all tracks up to and including current position
-			d.shadowQueue = d.shadowQueue[currentTrackPosition+1:]
-			for i := range d.shadowQueue {
-				d.shadowQueue[i].Position = i
-			}
-		}
+// handleNormalTrackProgression handles normal track progression (track was at position 0)
+func (d *Dispatcher) handleNormalTrackProgression() {
+	// Normal progression: current track was at position 0, remove it
+	completedTrack := d.shadowQueue[0]
+	d.logger.Debug("Normal track progression, removing completed track",
+		zap.String("completedTrackID", completedTrack.TrackID),
+		zap.String("source", completedTrack.Source))
 
-		d.logger.Debug("Shadow queue updated after track change",
-			zap.Int("remainingItems", len(d.shadowQueue)))
-		d.shadowQueueMutex.Unlock()
+	d.shadowQueue = d.shadowQueue[1:]
+	for i := range d.shadowQueue {
+		d.shadowQueue[i].Position = i
+	}
+}
+
+// handleManualTrackSkip handles when user manually skips to a track at position N
+func (d *Dispatcher) handleManualTrackSkip(currentTrackID string, currentTrackPosition int) {
+	// Manual skip: current track was at position N, remove all tracks before it
+	skippedTracks := d.shadowQueue[:currentTrackPosition]
+	d.logger.Debug("Manual track skip detected, removing skipped tracks",
+		zap.String("currentTrackID", currentTrackID),
+		zap.Int("currentTrackPosition", currentTrackPosition),
+		zap.Int("skippedTracksCount", len(skippedTracks)))
+
+	// Log the skipped tracks for debugging
+	for _, skipped := range skippedTracks {
+		d.logger.Debug("Removing skipped track from shadow queue",
+			zap.String("skippedTrackID", skipped.TrackID),
+			zap.String("source", skipped.Source))
+	}
+
+	// Remove all tracks up to and including current position
+	d.shadowQueue = d.shadowQueue[currentTrackPosition+1:]
+	for i := range d.shadowQueue {
+		d.shadowQueue[i].Position = i
 	}
 }
 
@@ -193,6 +214,52 @@ func (d *Dispatcher) GetShadowQueuePosition(trackID string) int {
 	return -1 // Track not found in shadow queue
 }
 
+// getLogicalPlaylistPosition returns the logical playlist position to use for next track selection
+func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
+	// Get current track ID
+	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
+	if err != nil {
+		d.logger.Debug("No current track playing, using position 0")
+		return 0
+	}
+
+	// Check if current track is a priority track using the registry
+	d.priorityTracksMutex.RLock()
+	isPriorityTrack := d.priorityTracks[currentTrackID]
+	d.priorityTracksMutex.RUnlock()
+
+	// Get all playlist tracks to find current position
+	playlistTrackIDs, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	if err != nil {
+		d.logger.Warn("Failed to get playlist tracks for position tracking", zap.Error(err))
+		return 0
+	}
+
+	// Find current track position in playlist
+	for i, trackID := range playlistTrackIDs {
+		if trackID == currentTrackID {
+			if isPriorityTrack {
+				// Priority track at position 0, return position 1 to continue normal progression
+				// This skips the track that was "interrupted" by the priority track
+				adjustedPosition := i + 1
+				d.logger.Debug("Priority track playing, using adjusted logical position",
+					zap.String("currentTrackID", currentTrackID),
+					zap.Int("currentPosition", i),
+					zap.Int("adjustedPosition", adjustedPosition))
+				return adjustedPosition
+			}
+			// Normal track, return current position
+			d.logger.Debug("Normal track playing, using current position",
+				zap.String("currentTrackID", currentTrackID),
+				zap.Int("position", i))
+			return i
+		}
+	}
+
+	d.logger.Debug("Current track not found in playlist, using position 0")
+	return 0
+}
+
 // runShadowQueueMaintenance performs periodic maintenance on the shadow queue
 func (d *Dispatcher) runShadowQueueMaintenance(ctx context.Context) {
 	maintenanceInterval := time.Duration(d.config.App.ShadowQueueMaintenanceIntervalSecs) * time.Second
@@ -248,6 +315,50 @@ func (d *Dispatcher) removeOldShadowQueueItems() int {
 	return removedCount
 }
 
+// removeOldPriorityItems removes priority tracks that are no longer active from the registry
+// This function handles its own mutex locking
+func (d *Dispatcher) removeOldPriorityItems(ctx context.Context) int {
+	d.priorityTracksMutex.Lock()
+	defer d.priorityTracksMutex.Unlock()
+
+	// Get current track ID to avoid removing currently playing priority track
+	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
+	if err != nil {
+		currentTrackID = "" // If we can't get current track, proceed with cleanup
+	}
+
+	// Create map of shadow queue track IDs for efficient lookup
+	d.shadowQueueMutex.RLock()
+	shadowQueueTrackIDs := make(map[string]bool)
+	for _, item := range d.shadowQueue {
+		shadowQueueTrackIDs[item.TrackID] = true
+	}
+	d.shadowQueueMutex.RUnlock()
+
+	removedCount := 0
+	for trackID := range d.priorityTracks {
+		// Keep priority track if it's currently playing OR still in shadow queue
+		if trackID == currentTrackID || shadowQueueTrackIDs[trackID] {
+			continue
+		}
+
+		// Priority track is no longer active, remove it from registry
+		delete(d.priorityTracks, trackID)
+		removedCount++
+		d.logger.Debug("Removed inactive priority track from registry",
+			zap.String("trackID", trackID),
+			zap.String("reason", "no longer in shadow queue or currently playing"))
+	}
+
+	if removedCount > 0 {
+		d.logger.Debug("Priority track registry cleanup completed",
+			zap.Int("removedCount", removedCount),
+			zap.Int("remainingCount", len(d.priorityTracks)))
+	}
+
+	return removedCount
+}
+
 // performShadowQueueMaintenance performs cleanup and validation of the shadow queue
 func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
 	// Skip maintenance if dispatcher is shutting down
@@ -263,6 +374,9 @@ func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
 
 	// Remove old shadow queue items (tracks added long ago that should have played by now)
 	d.removeOldShadowQueueItems()
+
+	// Remove old priority items (priority tracks no longer active)
+	d.removeOldPriorityItems(ctx)
 }
 
 // synchronizeWithSpotifyQueue synchronizes the shadow queue with the actual Spotify queue state

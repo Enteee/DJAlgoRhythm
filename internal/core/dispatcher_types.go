@@ -19,6 +19,12 @@ const (
 	// Track fetching constants
 	maxTracksToFetch = 10 // Maximum tracks to fetch at once
 	trackBufferCount = 2  // Additional tracks to fetch as buffer
+
+	// Track source constants
+	sourcePlaylist  = "playlist"
+	sourcePriority  = "priority"
+	sourceQueueFill = "queue-fill"
+	sourceManual    = "manual"
 )
 
 // ShadowQueueItem represents a track in our shadow queue for reliable queue management
@@ -27,7 +33,7 @@ type ShadowQueueItem struct {
 	URI      string        // Full Spotify URI
 	Position int           // Position in logical queue (0 = next)
 	Duration time.Duration // Track duration
-	Source   string        // "playlist", "queue-fill", "priority", "manual"
+	Source   string        // sourcePlaylist, sourceQueueFill, sourcePriority, sourceManual
 	AddedAt  time.Time     // When we added this item
 }
 

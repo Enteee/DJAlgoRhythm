@@ -131,6 +131,7 @@ type SpotifyClient interface {
 	ExtractTrackID(url string) (string, error)
 	SetTargetPlaylist(playlistID string)
 	GetNextPlaylistTracks(ctx context.Context, count int) ([]Track, error)
+	GetNextPlaylistTracksFromPosition(ctx context.Context, startPosition, count int) ([]Track, error)
 	GetQueueManagementTrack(ctx context.Context) (string, error)
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
 	SetShuffle(ctx context.Context, shuffle bool) error

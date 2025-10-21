@@ -70,7 +70,7 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	}
 
 	// Add priority track to queue (will play next)
-	queueErr := d.AddToQueueWithShadowTracking(ctx, track, "priority")
+	queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourcePriority)
 	if queueErr != nil {
 		d.logger.Warn("Failed to add priority track to queue, proceeding with playlist only",
 			zap.String("trackID", trackID),
@@ -81,6 +81,14 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	}
 
 	d.logger.Info("Priority track added to queue",
+		zap.String("trackID", trackID))
+
+	// Register priority track in the registry for position tracking
+	d.priorityTracksMutex.Lock()
+	d.priorityTracks[trackID] = true
+	d.priorityTracksMutex.Unlock()
+
+	d.logger.Debug("Registered priority track in registry",
 		zap.String("trackID", trackID))
 
 	// Add to playlist at position 0 (top) for history/deduplication to avoid replaying later
@@ -247,8 +255,11 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 		return
 	}
 
-	// Get ALL available next tracks from playlist (up to reasonable limit)
-	nextTracks, err := d.spotify.GetNextPlaylistTracks(ctx, maxTracksToFetch)
+	// Get logical playlist position to ensure correct progression after priority songs
+	logicalPosition := d.getLogicalPlaylistPosition(ctx)
+
+	// Get ALL available next tracks from playlist (up to reasonable limit) using logical position
+	nextTracks, err := d.spotify.GetNextPlaylistTracksFromPosition(ctx, logicalPosition, maxTracksToFetch)
 	if err != nil {
 		d.logger.Warn("Failed to get next playlist tracks, falling back to queue-fill", zap.Error(err))
 		d.fillQueueToTargetDuration(ctx, targetDuration, currentDuration)
@@ -275,7 +286,7 @@ func (d *Dispatcher) fillQueueFromPlaylist(ctx context.Context, targetDuration, 
 			break
 		}
 
-		if err := d.AddToQueueWithShadowTracking(ctx, &track, "playlist"); err != nil {
+		if err := d.AddToQueueWithShadowTracking(ctx, &track, sourcePlaylist); err != nil {
 			d.logger.Warn("Failed to add track to queue",
 				zap.String("trackID", track.ID), zap.Error(err))
 			continue
@@ -346,7 +357,7 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 		}
 
 		// Add track directly without approval
-		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, "queue-fill"); queueErr != nil {
+		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourceQueueFill); queueErr != nil {
 			d.logger.Warn("Failed to auto-add queue track", zap.Error(queueErr))
 			return
 		}
@@ -447,7 +458,7 @@ func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 		}
 
 		// Now actually add the approved track to queue and playlist
-		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, "queue-fill"); queueErr != nil {
+		if queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourceQueueFill); queueErr != nil {
 			d.logger.Warn("Failed to add approved queue track to queue",
 				zap.String("trackID", trackID),
 				zap.Error(queueErr))
