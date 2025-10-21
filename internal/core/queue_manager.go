@@ -169,9 +169,6 @@ func (d *Dispatcher) runQueueAndPlaylistManagement(ctx context.Context) {
 func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 	d.logger.Debug("checkAndManageQueue called")
 
-	// Check if current track has changed and update shadow queue if needed
-	d.checkCurrentTrackChanged(ctx)
-
 	// Check if queue management is already active
 	d.queueManagementMutex.Lock()
 	if d.queueManagementActive {

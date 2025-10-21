@@ -29,6 +29,13 @@ func (d *Dispatcher) GetShadowQueueDuration() time.Duration {
 	return d.getShadowQueueDurationUnsafe()
 }
 
+// GetShadowQueueSize returns the number of tracks in the shadow queue (thread-safe)
+func (d *Dispatcher) GetShadowQueueSize() int {
+	d.shadowQueueMutex.RLock()
+	defer d.shadowQueueMutex.RUnlock()
+	return len(d.shadowQueue)
+}
+
 // addToShadowQueue adds a track to the shadow queue with the specified source
 func (d *Dispatcher) addToShadowQueue(trackID, source string, duration time.Duration) {
 	d.shadowQueueMutex.Lock()
@@ -186,96 +193,21 @@ func (d *Dispatcher) GetShadowQueuePosition(trackID string) int {
 	return -1 // Track not found in shadow queue
 }
 
-// GetPlaylistPositionWithShadow calculates track position using shadow queue first, then playlist fallback
-// This is a shadow queue-aware replacement for spotify.GetPlaylistPositionRelativeTo
-func (d *Dispatcher) GetPlaylistPositionWithShadow(ctx context.Context, trackID, referenceTrackID string) (int, error) {
-	// First, try to find position in shadow queue
-	shadowPosition := d.GetShadowQueuePosition(trackID)
-	if shadowPosition >= 0 {
-		d.logger.Debug("Found track position in shadow queue",
-			zap.String("trackID", trackID),
-			zap.String("referenceTrackID", referenceTrackID),
-			zap.Int("shadowPosition", shadowPosition))
-		return shadowPosition, nil
-	}
-
-	d.logger.Debug("Track not found in shadow queue, falling back to playlist-based calculation",
-		zap.String("trackID", trackID),
-		zap.String("referenceTrackID", referenceTrackID))
-
-	// If no reference track is provided, use shadow queue to find last playlist track
-	if referenceTrackID == "" {
-		// Use shadow queue to find last playlist track as reference
-		referenceTrackID = d.getLastPlaylistTrackFromShadow(ctx)
-		if referenceTrackID == "" {
-			// No playlist track found - cannot determine position reliably
-			d.logger.Debug("No playlist track found in shadow queue, cannot determine position",
-				zap.String("trackID", trackID))
-
-			return -1, fmt.Errorf("cannot determine track position without playlist reference track")
-		}
-		d.logger.Debug("Using last playlist track from shadow queue as reference",
-			zap.String("referenceTrackID", referenceTrackID))
-	}
-
-	return d.calculatePlaylistPositionFromShadow(ctx, trackID, referenceTrackID)
-}
-
-// calculatePlaylistPositionFromShadow calculates position based on playlist tracks and current state
-// This provides a fallback when the track is not in the shadow queue
-func (d *Dispatcher) calculatePlaylistPositionFromShadow(ctx context.Context, trackID, referenceTrackID string) (int, error) {
-	// Get playlist tracks
-	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
-	if err != nil {
-		return -1, fmt.Errorf("failed to get playlist tracks: %w", err)
-	}
-
-	// Find both tracks in playlist
-	trackPosition := -1
-	referencePosition := -1
-
-	for i, pTrackID := range playlistTracks {
-		if pTrackID == trackID {
-			trackPosition = i
-		}
-		if pTrackID == referenceTrackID {
-			referencePosition = i
-		}
-	}
-
-	if trackPosition == -1 {
-		return -1, fmt.Errorf("track %s not found in playlist", trackID)
-	}
-
-	if referenceTrackID == "" || referencePosition == -1 {
-		// If no valid reference track, return absolute position in playlist
-		return trackPosition, nil
-	}
-
-	// Calculate relative position
-	relativePosition := trackPosition - referencePosition - 1
-
-	if relativePosition < 0 {
-		// Track is before reference track in playlist
-		return -1, fmt.Errorf("track %s appears before reference track %s in playlist", trackID, referenceTrackID)
-	}
-
-	d.logger.Debug("Calculated playlist position from shadow queue context",
-		zap.String("trackID", trackID),
-		zap.String("referenceTrackID", referenceTrackID),
-		zap.Int("trackPosition", trackPosition),
-		zap.Int("referencePosition", referencePosition),
-		zap.Int("relativePosition", relativePosition))
-
-	return relativePosition, nil
-}
-
 // runShadowQueueMaintenance performs periodic maintenance on the shadow queue
 func (d *Dispatcher) runShadowQueueMaintenance(ctx context.Context) {
-	d.logger.Info("Starting shadow queue maintenance routine")
+	// Use configuration for maintenance interval with safety check
+	maintenanceInterval := time.Duration(d.config.App.ShadowQueueMaintenanceIntervalSecs) * time.Second
+	if maintenanceInterval <= 0 {
+		d.logger.Error("Invalid shadow queue maintenance interval, using default",
+			zap.Int("configValue", d.config.App.ShadowQueueMaintenanceIntervalSecs),
+			zap.Int("defaultValue", DefaultShadowQueueMaintenanceIntervalSecs))
+		maintenanceInterval = time.Duration(DefaultShadowQueueMaintenanceIntervalSecs) * time.Second
+	}
 
-	// Use configuration for maintenance interval
-	maintenanceInterval := time.Duration(d.config.App.ShadowQueueMaintenanceIntervalMins) * time.Minute
+	d.logger.Info("Starting shadow queue maintenance routine",
+		zap.Int("intervalSecs", d.config.App.ShadowQueueMaintenanceIntervalSecs),
+		zap.Duration("interval", maintenanceInterval))
+
 	ticker := time.NewTicker(maintenanceInterval)
 	defer ticker.Stop()
 
@@ -290,25 +222,16 @@ func (d *Dispatcher) runShadowQueueMaintenance(ctx context.Context) {
 	}
 }
 
-// performShadowQueueMaintenance performs cleanup and validation of the shadow queue
-func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
-	d.logger.Debug("Performing shadow queue maintenance")
-
-	// Skip maintenance if dispatcher is shutting down
-	if ctx.Err() != nil {
-		return
-	}
-
+// removeOldShadowQueueItems removes shadow queue items that exceed the maximum age
+// This function handles its own mutex locking
+func (d *Dispatcher) removeOldShadowQueueItems() int {
 	d.shadowQueueMutex.Lock()
 	defer d.shadowQueueMutex.Unlock()
-
-	beforeCount := len(d.shadowQueue)
-
-	// Remove old shadow queue items (tracks added long ago that should have played by now)
 	maxAge := time.Duration(d.config.App.ShadowQueueMaxAgeHours) * time.Hour
 	now := time.Now()
 	cleanedQueue := make([]ShadowQueueItem, 0, len(d.shadowQueue))
 
+	removedCount := 0
 	for _, item := range d.shadowQueue {
 		age := now.Sub(item.AddedAt)
 		if age > maxAge {
@@ -317,6 +240,7 @@ func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
 				zap.String("source", item.Source),
 				zap.Duration("age", age),
 				zap.Duration("maxAge", maxAge))
+			removedCount++
 			continue
 		}
 		cleanedQueue = append(cleanedQueue, item)
@@ -328,62 +252,79 @@ func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
 	}
 
 	d.shadowQueue = cleanedQueue
-	afterCount := len(d.shadowQueue)
-
-	if beforeCount != afterCount {
-		d.logger.Debug("Shadow queue maintenance completed",
-			zap.Int("removedItems", beforeCount-afterCount),
-			zap.Int("remainingItems", afterCount))
-	}
+	return removedCount
 }
 
-// getLastPlaylistTrackFromShadow finds the last track with source "playlist" from shadow queue or current track
-// This replaces the need for lastRegularTrackID by using shadow queue data
-func (d *Dispatcher) getLastPlaylistTrackFromShadow(ctx context.Context) string {
-	d.shadowQueueMutex.RLock()
-	defer d.shadowQueueMutex.RUnlock()
-
-	// First check if current track is from playlist
-	currentTrackID := d.lastCurrentTrackID
-	if currentTrackID != "" {
-		// Check if current track is from playlist source (not priority/queue-fill)
-		// We need to verify this by checking if it's in the playlist
-		if d.isTrackFromPlaylistSource(ctx, currentTrackID) {
-			return currentTrackID
-		}
+// performShadowQueueMaintenance performs cleanup and validation of the shadow queue
+func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
+	// Skip maintenance if dispatcher is shutting down
+	if ctx.Err() != nil {
+		return
 	}
 
-	// Look backwards through shadow queue for last playlist track
-	for i := len(d.shadowQueue) - 1; i >= 0; i-- {
-		item := d.shadowQueue[i]
-		if item.Source == "playlist" {
-			d.logger.Debug("Found last playlist track in shadow queue",
+	// Check if current track has changed and update shadow queue progression
+	d.checkCurrentTrackChanged(ctx)
+
+	// Synchronize shadow queue with actual Spotify queue state
+	d.synchronizeWithSpotifyQueue(ctx)
+
+	// Remove old shadow queue items (tracks added long ago that should have played by now)
+	d.removeOldShadowQueueItems()
+}
+
+// synchronizeWithSpotifyQueue synchronizes the shadow queue with the actual Spotify queue state
+// This removes tracks from shadow queue that are no longer in the Spotify queue
+func (d *Dispatcher) synchronizeWithSpotifyQueue(ctx context.Context) {
+	d.logger.Debug("Synchronizing shadow queue with Spotify queue state")
+
+	// Get actual Spotify queue state
+	queueTrackIDs, err := d.spotify.GetQueueTrackIDs(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to get Spotify queue for synchronization, skipping queue sync",
+			zap.Error(err))
+		return
+	}
+
+	// Convert track IDs to map for efficient lookup
+	spotifyTrackIDs := make(map[string]bool)
+	for _, trackID := range queueTrackIDs {
+		spotifyTrackIDs[trackID] = true
+	}
+
+	d.logger.Debug("Retrieved Spotify queue state for synchronization",
+		zap.Int("spotifyQueueItems", len(queueTrackIDs)),
+		zap.Int("validTrackIDs", len(spotifyTrackIDs)))
+
+	d.shadowQueueMutex.Lock()
+	defer d.shadowQueueMutex.Unlock()
+
+	// Filter shadow queue to only include tracks that exist in Spotify queue
+	beforeSyncCount := len(d.shadowQueue)
+	syncedQueue := make([]ShadowQueueItem, 0, len(d.shadowQueue))
+
+	for _, item := range d.shadowQueue {
+		if spotifyTrackIDs[item.TrackID] {
+			syncedQueue = append(syncedQueue, item)
+		} else {
+			d.logger.Debug("Removing shadow queue item not found in Spotify queue",
 				zap.String("trackID", item.TrackID),
 				zap.String("source", item.Source),
-				zap.Int("position", item.Position))
-			return item.TrackID
+				zap.Int("originalPosition", item.Position))
 		}
 	}
 
-	d.logger.Debug("No playlist track found in shadow queue or current track")
-	return ""
-}
-
-// isTrackFromPlaylistSource checks if a track comes from playlist (not priority queued)
-func (d *Dispatcher) isTrackFromPlaylistSource(ctx context.Context, trackID string) bool {
-	// Get playlist tracks to verify this track is actually from playlist
-	playlistTracks, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
-	if err != nil {
-		d.logger.Debug("Failed to get playlist tracks for source verification", zap.Error(err))
-		return false
+	// Update positions for remaining items
+	for i := range syncedQueue {
+		syncedQueue[i].Position = i
 	}
 
-	// Check if track exists in playlist
-	for _, pTrackID := range playlistTracks {
-		if pTrackID == trackID {
-			return true
-		}
-	}
+	d.shadowQueue = syncedQueue
+	afterSyncCount := len(d.shadowQueue)
 
-	return false
+	if beforeSyncCount != afterSyncCount {
+		d.logger.Debug("Shadow queue synchronized with Spotify queue",
+			zap.Int("removedItems", beforeSyncCount-afterSyncCount),
+			zap.Int("remainingItems", afterSyncCount),
+			zap.Int("spotifyQueueItems", len(spotifyTrackIDs)))
+	}
 }

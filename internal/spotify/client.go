@@ -400,6 +400,28 @@ func (c *Client) GetQueuePosition(ctx context.Context, trackID string) (int, err
 	return -1, nil
 }
 
+// GetQueueTrackIDs returns all track IDs currently in the Spotify queue
+func (c *Client) GetQueueTrackIDs(ctx context.Context) ([]string, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("client not authenticated")
+	}
+
+	queue, err := c.client.GetQueue(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user queue: %w", err)
+	}
+
+	// Extract track IDs from queue
+	trackIDs := make([]string, 0, len(queue.Items))
+	for i := range queue.Items {
+		if queue.Items[i].ID != "" {
+			trackIDs = append(trackIDs, string(queue.Items[i].ID))
+		}
+	}
+
+	return trackIDs, nil
+}
+
 // GetPlaylistPosition calculates the position of a track relative to the currently playing track in the playlist
 // This is more reliable than GetQueuePosition for newly added tracks since playlist updates are immediate
 func (c *Client) GetPlaylistPosition(ctx context.Context, trackID string) (int, error) {

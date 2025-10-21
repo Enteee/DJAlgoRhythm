@@ -205,7 +205,12 @@ func configureApp(cfg *core.Config) {
 	cfg.App.QueueCheckIntervalSecs = viper.GetInt("queue-check-interval-secs")
 
 	// Shadow queue configuration
-	cfg.App.ShadowQueueMaintenanceIntervalMins = viper.GetInt("shadow-queue-maintenance-interval-mins")
+	cfg.App.ShadowQueueMaintenanceIntervalSecs = viper.GetInt("shadow-queue-maintenance-interval-secs")
+	if cfg.App.ShadowQueueMaintenanceIntervalSecs <= 0 {
+		fmt.Printf("Warning: Invalid shadow queue maintenance interval (%d), using default (%d)\n",
+			cfg.App.ShadowQueueMaintenanceIntervalSecs, core.DefaultShadowQueueMaintenanceIntervalSecs)
+		cfg.App.ShadowQueueMaintenanceIntervalSecs = core.DefaultShadowQueueMaintenanceIntervalSecs
+	}
 	cfg.App.ShadowQueueMaxAgeHours = viper.GetInt("shadow-queue-max-age-hours")
 	cfg.App.ShadowQueuePreferenceEnabled = viper.GetBool("shadow-queue-preference-enabled")
 

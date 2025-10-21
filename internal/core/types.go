@@ -128,6 +128,7 @@ type SpotifyClient interface {
 	AddToQueue(ctx context.Context, trackID string) error
 	GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error)
 	GetQueuePosition(ctx context.Context, trackID string) (int, error)
+	GetQueueTrackIDs(ctx context.Context) ([]string, error)
 	GetPlaylistPosition(ctx context.Context, trackID string) (int, error)
 	GetPlaylistPositionRelativeTo(ctx context.Context, trackID, referenceTrackID string) (int, error)
 	GetCurrentTrackID(ctx context.Context) (string, error)

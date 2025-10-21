@@ -47,9 +47,9 @@ func (d *Dispatcher) reactAddedWithMessage(
 	}
 
 	// Check if we should include queue position in the message
-	// GetPlaylistPositionWithShadow will automatically use shadow queue to find reference track
-	playlistPosition, err := d.GetPlaylistPositionWithShadow(ctx, trackID, "")
-	if err == nil && playlistPosition >= 0 {
+	// Use shadow queue to get the track position directly (much simpler!)
+	queuePosition := d.GetShadowQueuePosition(trackID)
+	if queuePosition >= 0 {
 		// Track found in playlist - use message with queue position
 		var queueMessageKey string
 		switch messageKey {
@@ -65,7 +65,7 @@ func (d *Dispatcher) reactAddedWithMessage(
 		if queueMessageKey != messageKey {
 			// Use queue position message with 1-based indexing for user display
 			successMessage := d.formatMessageWithMention(originalMsg,
-				d.localizer.T(queueMessageKey, track.Artist, track.Title, track.URL, playlistPosition+1))
+				d.localizer.T(queueMessageKey, track.Artist, track.Title, track.URL, queuePosition+1))
 			if _, sendErr := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, successMessage); sendErr != nil {
 				d.logger.Error("Failed to send success message with queue position", zap.Error(sendErr))
 			}

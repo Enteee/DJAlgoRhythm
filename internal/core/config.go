@@ -21,7 +21,7 @@ const (
 	DefaultRetryDelaySecs                     = 5
 	DefaultQueueAheadDurationSecs             = 90
 	DefaultQueueCheckIntervalSecs             = 45
-	DefaultShadowQueueMaintenanceIntervalMins = 5
+	DefaultShadowQueueMaintenanceIntervalSecs = 30
 	DefaultShadowQueueMaxAgeHours             = 2
 	DefaultShadowQueuePreferenceEnabled       = true
 )
@@ -92,7 +92,7 @@ type AppConfig struct {
 	Language                           string // Bot language for user-facing messages
 	QueueAheadDurationSecs             int    // Target queue duration in seconds
 	QueueCheckIntervalSecs             int    // Queue check interval in seconds
-	ShadowQueueMaintenanceIntervalMins int    // Shadow queue maintenance interval in minutes
+	ShadowQueueMaintenanceIntervalSecs int    // Shadow queue maintenance interval in seconds
 	ShadowQueueMaxAgeHours             int    // Maximum age of shadow queue items in hours
 	ShadowQueuePreferenceEnabled       bool   // Prefer shadow queue over Spotify API for position/duration
 }
@@ -138,7 +138,7 @@ func DefaultConfig() *Config {
 			Language:                           i18n.DefaultLanguage, // Default to English
 			QueueAheadDurationSecs:             DefaultQueueAheadDurationSecs,
 			QueueCheckIntervalSecs:             DefaultQueueCheckIntervalSecs,
-			ShadowQueueMaintenanceIntervalMins: DefaultShadowQueueMaintenanceIntervalMins,
+			ShadowQueueMaintenanceIntervalSecs: DefaultShadowQueueMaintenanceIntervalSecs,
 			ShadowQueueMaxAgeHours:             DefaultShadowQueueMaxAgeHours,
 			ShadowQueuePreferenceEnabled:       DefaultShadowQueuePreferenceEnabled,
 		},
