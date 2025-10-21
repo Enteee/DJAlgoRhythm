@@ -338,27 +338,6 @@ func (c *Client) AddToPlaylistAtPosition(ctx context.Context, playlistID, trackI
 	return nil
 }
 
-func (c *Client) RemoveFromPlaylist(ctx context.Context, playlistID, trackID string) error {
-	if c.client == nil {
-		return fmt.Errorf("client not authenticated")
-	}
-
-	spotifyTrackID := spotify.ID(trackID)
-	spotifyPlaylistID := spotify.ID(playlistID)
-
-	// Remove all instances of the track from the playlist
-	_, err := c.client.RemoveTracksFromPlaylist(ctx, spotifyPlaylistID, spotifyTrackID)
-	if err != nil {
-		return fmt.Errorf("failed to remove track from playlist: %w", err)
-	}
-
-	c.logger.Info("Track removed from playlist",
-		zap.String("trackID", trackID),
-		zap.String("playlistID", playlistID))
-
-	return nil
-}
-
 func (c *Client) AddToQueue(ctx context.Context, trackID string) error {
 	if c.client == nil {
 		return fmt.Errorf("client not authenticated")
@@ -375,29 +354,6 @@ func (c *Client) AddToQueue(ctx context.Context, trackID string) error {
 		zap.String("trackID", trackID))
 
 	return nil
-}
-
-// GetQueuePosition finds the position of a track in the user's queue
-// Returns the position (0-based) or -1 if not found
-func (c *Client) GetQueuePosition(ctx context.Context, trackID string) (int, error) {
-	if c.client == nil {
-		return -1, fmt.Errorf("client not authenticated")
-	}
-
-	queue, err := c.client.GetQueue(ctx)
-	if err != nil {
-		return -1, fmt.Errorf("failed to get user queue: %w", err)
-	}
-
-	// Search through the queue for our track
-	for i := range queue.Items {
-		if queue.Items[i].ID == spotify.ID(trackID) {
-			return i, nil
-		}
-	}
-
-	// Track not found in queue
-	return -1, nil
 }
 
 // GetQueueTrackIDs returns all track IDs currently in the Spotify queue
@@ -422,44 +378,6 @@ func (c *Client) GetQueueTrackIDs(ctx context.Context) ([]string, error) {
 	return trackIDs, nil
 }
 
-// GetPlaylistPosition calculates the position of a track relative to the currently playing track in the playlist
-// This is more reliable than GetQueuePosition for newly added tracks since playlist updates are immediate
-func (c *Client) GetPlaylistPosition(ctx context.Context, trackID string) (int, error) {
-	if c.client == nil {
-		return -1, fmt.Errorf("client not authenticated")
-	}
-
-	if c.targetPlaylist == "" {
-		return -1, fmt.Errorf("no target playlist set")
-	}
-
-	currentTrackID, err := c.GetCurrentTrackID(ctx)
-	if err != nil {
-		// No track playing, fallback to queue-based position
-		return c.GetQueuePosition(ctx, trackID)
-	}
-
-	return c.calculatePlaylistPosition(ctx, currentTrackID, trackID)
-}
-
-// GetPlaylistPositionRelativeTo calculates the position of a track relative to a specific reference track in the playlist
-func (c *Client) GetPlaylistPositionRelativeTo(ctx context.Context, trackID, referenceTrackID string) (int, error) {
-	if c.client == nil {
-		return -1, fmt.Errorf("client not authenticated")
-	}
-
-	if c.targetPlaylist == "" {
-		return -1, fmt.Errorf("no target playlist set")
-	}
-
-	if referenceTrackID == "" {
-		// No reference track, fallback to queue-based position
-		return c.GetQueuePosition(ctx, trackID)
-	}
-
-	return c.calculatePlaylistPosition(ctx, referenceTrackID, trackID)
-}
-
 // GetCurrentTrackID gets the currently playing track ID, returns error if no track is playing
 func (c *Client) GetCurrentTrackID(ctx context.Context) (string, error) {
 	currently, err := c.client.PlayerCurrentlyPlaying(ctx)
@@ -474,112 +392,10 @@ func (c *Client) GetCurrentTrackID(ctx context.Context) (string, error) {
 	return string(currently.Item.ID), nil
 }
 
-// calculatePlaylistPosition calculates the relative position between two tracks in the playlist
-func (c *Client) calculatePlaylistPosition(ctx context.Context, currentTrackID, newTrackID string) (int, error) {
-	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
-	if err != nil {
-		return -1, fmt.Errorf("failed to get playlist tracks: %w", err)
-	}
-
-	currentTrackPos, newTrackPos := c.findTrackPositions(playlistTracks, currentTrackID, newTrackID)
-
-	if currentTrackPos == -1 {
-		c.logger.Debug("Current track not found in playlist, falling back to queue position")
-		return c.GetQueuePosition(ctx, newTrackID)
-	}
-
-	if newTrackPos == -1 {
-		return -1, fmt.Errorf("track %s not found in playlist", newTrackID)
-	}
-
-	return c.computeRelativePosition(currentTrackPos, newTrackPos, newTrackID)
-}
-
-// findTrackPositions finds the positions of two tracks in the playlist
-func (c *Client) findTrackPositions(playlistTracks []string, currentTrackID, newTrackID string) (currentPos, newPos int) {
-	currentPos = -1
-	newPos = -1
-
-	for i, id := range playlistTracks {
-		if id == currentTrackID {
-			currentPos = i
-		}
-		if id == newTrackID {
-			newPos = i
-		}
-		// Stop early if we found both tracks
-		if currentPos >= 0 && newPos >= 0 {
-			break
-		}
-	}
-
-	return
-}
-
-// computeRelativePosition calculates the relative position between current and new track
-func (c *Client) computeRelativePosition(currentTrackPos, newTrackPos int, newTrackID string) (int, error) {
-	// If the new track is after the current track, subtract current position
-	if newTrackPos > currentTrackPos {
-		position := newTrackPos - currentTrackPos - 1 // -1 because current track is playing
-		c.logger.Debug("Calculated playlist position",
-			zap.String("trackID", newTrackID),
-			zap.Int("currentTrackPos", currentTrackPos),
-			zap.Int("newTrackPos", newTrackPos),
-			zap.Int("calculatedPosition", position))
-		return position, nil
-	}
-
-	// If the new track is before the current track, it will play after the playlist loops
-	// This is more complex to calculate accurately, so fall back to queue position
-	c.logger.Debug("New track is before current track in playlist, falling back to queue position")
-	return c.GetQueuePosition(context.Background(), newTrackID)
-}
-
 // SetTargetPlaylist sets the playlist ID that we're managing
 func (c *Client) SetTargetPlaylist(playlistID string) {
 	c.targetPlaylist = playlistID
 	c.logger.Info("Target playlist set", zap.String("playlistID", playlistID))
-}
-
-// EnsureTrackInQueue checks if a track is in the queue and adds it if not
-// This should be called after adding tracks to playlist to ensure proper queueing
-func (c *Client) EnsureTrackInQueue(ctx context.Context, trackID string) error {
-	c.logger.Info("Checking if track is in queue", zap.String("trackID", trackID))
-
-	queuePosition, err := c.GetQueuePosition(ctx, trackID)
-	if err != nil {
-		c.logger.Warn("Could not check queue position", zap.Error(err))
-		return err
-	}
-
-	if queuePosition == -1 {
-		c.logger.Info("Track not found in queue, adding manually", zap.String("trackID", trackID))
-
-		// Add track to queue manually
-		if queueErr := c.AddToQueue(ctx, trackID); queueErr != nil {
-			c.logger.Warn("Failed to add track to queue manually", zap.Error(queueErr))
-			return queueErr
-		}
-
-		c.logger.Info("Successfully added track to queue manually")
-
-		// Check queue position again after manual addition
-		time.Sleep(1 * time.Second) // Give API time to update
-		newQueuePosition, checkErr := c.GetQueuePosition(ctx, trackID)
-		if checkErr != nil {
-			c.logger.Warn("Could not verify queue position after manual addition", zap.Error(checkErr))
-		} else {
-			c.logger.Info("Track queue status after manual addition",
-				zap.String("trackID", trackID),
-				zap.Int("queuePosition", newQueuePosition))
-		}
-	} else {
-		c.logger.Info("Track found in queue",
-			zap.String("trackID", trackID),
-			zap.Int("queuePosition", queuePosition))
-	}
-
-	return nil
 }
 
 // CheckPlaybackCompliance checks if current playback settings are optimal for auto-DJing
@@ -874,100 +690,6 @@ func (c *Client) getSeedTracksAsObjects(ctx context.Context, trackIDs []string) 
 	}
 	return tracks
 }
-
-// RebuildQueueWithPriority clears the current queue and rebuilds it with the priority track first
-// This is needed because Spotify API doesn't support queue reordering
-func (c *Client) RebuildQueueWithPriority(ctx context.Context, priorityTrackID string) error {
-	if c.client == nil {
-		return fmt.Errorf("client not authenticated")
-	}
-
-	c.logger.Info("Rebuilding queue with priority track", zap.String("priorityTrackID", priorityTrackID))
-
-	// Step 1: Get current queue to preserve other tracks
-	currentQueue, err := c.client.GetQueue(ctx)
-	if err != nil {
-		c.logger.Warn("Could not get current queue for rebuilding", zap.Error(err))
-		// Continue anyway - just add priority track to current queue
-		return c.AddToQueue(ctx, priorityTrackID)
-	}
-
-	// Extract track IDs from current queue (excluding currently playing track)
-	var queuedTrackIDs []string
-	for i := range currentQueue.Items {
-		if currentQueue.Items[i].ID != "" {
-			queuedTrackIDs = append(queuedTrackIDs, string(currentQueue.Items[i].ID))
-		}
-	}
-
-	c.logger.Info("Current queue state before rebuild",
-		zap.Int("queueLength", len(queuedTrackIDs)),
-		zap.String("currentlyPlaying", func() string {
-			if currentQueue.CurrentlyPlaying.ID != "" {
-				return string(currentQueue.CurrentlyPlaying.ID)
-			}
-			return DefaultStatusNone
-		}()))
-
-	// Step 2: Start playing current track again to clear the queue
-	// This is a workaround since there's no direct "clear queue" API
-	if currentQueue.CurrentlyPlaying.ID != "" {
-		currentTrackURI := spotify.URI(fmt.Sprintf("spotify:track:%s", currentQueue.CurrentlyPlaying.ID))
-		playOpts := &spotify.PlayOptions{
-			URIs: []spotify.URI{currentTrackURI},
-		}
-
-		if err := c.client.PlayOpt(ctx, playOpts); err != nil {
-			c.logger.Warn("Failed to restart current track for queue clearing", zap.Error(err))
-			// Fallback to just adding priority track to existing queue
-			return c.AddToQueue(ctx, priorityTrackID)
-		}
-
-		c.logger.Info("Restarted current track to clear queue")
-		time.Sleep(QueueClearDelay) // Give API time to clear queue
-	}
-
-	// Step 3: Add priority track first
-	if err := c.AddToQueue(ctx, priorityTrackID); err != nil {
-		return fmt.Errorf("failed to add priority track to cleared queue: %w", err)
-	}
-
-	c.logger.Info("Added priority track to queue", zap.String("trackID", priorityTrackID))
-
-	// Step 4: Re-add other tracks that were in the original queue
-	for i, trackID := range queuedTrackIDs {
-		// Skip the priority track if it was already in the queue
-		if trackID == priorityTrackID {
-			c.logger.Debug("Skipping priority track (already added)", zap.String("trackID", trackID))
-			continue
-		}
-
-		if err := c.AddToQueue(ctx, trackID); err != nil {
-			c.logger.Warn("Failed to re-add track to rebuilt queue",
-				zap.String("trackID", trackID),
-				zap.Int("position", i),
-				zap.Error(err))
-			// Continue with other tracks
-		} else {
-			c.logger.Debug("Re-added track to queue",
-				zap.String("trackID", trackID),
-				zap.Int("originalPosition", i))
-		}
-
-		// Small delay to avoid API rate limits
-		if i < len(queuedTrackIDs)-1 {
-			time.Sleep(TrackAddDelay)
-		}
-	}
-
-	c.logger.Info("Queue rebuild completed",
-		zap.String("priorityTrackID", priorityTrackID),
-		zap.Int("readdedTracks", len(queuedTrackIDs)))
-
-	return nil
-}
-
-// Note: Immediate playbook methods removed in favor of simpler queue-based priority approach
 
 func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
 	if c.client == nil {
@@ -1322,57 +1044,6 @@ func (c *Client) SetRepeat(ctx context.Context, state string) error {
 		zap.String("state", state))
 
 	return nil
-}
-
-// GetQueueRemainingDuration calculates the remaining duration in the current queue
-// including the remaining time of the currently playing track
-func (c *Client) GetQueueRemainingDuration(ctx context.Context) (time.Duration, error) {
-	if c.client == nil {
-		return 0, fmt.Errorf("client not authenticated")
-	}
-
-	// Get current playback state
-	state, err := c.client.PlayerState(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get player state: %w", err)
-	}
-
-	var currentRemaining time.Duration
-	if state != nil && state.Item != nil && state.Playing {
-		// Calculate remaining time in current track
-		currentRemaining = time.Duration(state.Item.Duration-state.Progress) * time.Millisecond
-	}
-
-	// Get queue
-	queue, err := c.client.GetQueue(ctx)
-	if err != nil {
-		c.logger.Warn("Failed to get queue for duration calculation", zap.Error(err))
-		return currentRemaining, nil // Return current track remaining as fallback
-	}
-
-	// Sum up durations of all tracks in queue
-	var queueDuration time.Duration
-	for i := range queue.Items {
-		if queue.Items[i].ID != "" {
-			track, err := c.GetTrack(ctx, string(queue.Items[i].ID))
-			if err != nil {
-				c.logger.Debug("Failed to get track duration in queue",
-					zap.String("trackID", string(queue.Items[i].ID)),
-					zap.Error(err))
-				continue // Skip this track if we can't get its duration
-			}
-			queueDuration += track.Duration
-		}
-	}
-
-	totalRemaining := currentRemaining + queueDuration
-	c.logger.Debug("Calculated queue remaining duration",
-		zap.Duration("currentRemaining", currentRemaining),
-		zap.Duration("queueDuration", queueDuration),
-		zap.Duration("totalRemaining", totalRemaining),
-		zap.Int("queueItems", len(queue.Items)))
-
-	return totalRemaining, nil
 }
 
 // GetNextPlaylistTracks gets the next N tracks from the playlist after the current position

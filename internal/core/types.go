@@ -123,31 +123,18 @@ type SpotifyClient interface {
 	SearchTrack(ctx context.Context, query string) ([]Track, error)
 	GetTrack(ctx context.Context, trackID string) (*Track, error)
 	AddToPlaylist(ctx context.Context, playlistID, trackID string) error
-	RemoveFromPlaylist(ctx context.Context, playlistID, trackID string) error
 	AddToPlaylistAtPosition(ctx context.Context, playlistID, trackID string, position int) error
 	AddToQueue(ctx context.Context, trackID string) error
 	GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error)
-	GetQueuePosition(ctx context.Context, trackID string) (int, error)
 	GetQueueTrackIDs(ctx context.Context) ([]string, error)
-	GetPlaylistPosition(ctx context.Context, trackID string) (int, error)
-	GetPlaylistPositionRelativeTo(ctx context.Context, trackID, referenceTrackID string) (int, error)
 	GetCurrentTrackID(ctx context.Context) (string, error)
-	EnsureTrackInQueue(ctx context.Context, trackID string) error
-	RebuildQueueWithPriority(ctx context.Context, priorityTrackID string) error
 	ExtractTrackID(url string) (string, error)
 	SetTargetPlaylist(playlistID string)
-	// Queue management and duration calculation
-	GetQueueRemainingDuration(ctx context.Context) (time.Duration, error)
 	GetNextPlaylistTracks(ctx context.Context, count int) ([]Track, error)
-	// Queue management
 	GetQueueManagementTrack(ctx context.Context) (string, error)
-	// Playback settings monitoring
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
-	// Volume and playback control
-	// Playback settings control
 	SetShuffle(ctx context.Context, shuffle bool) error
 	SetRepeat(ctx context.Context, state string) error
-	// Current track information
 	GetCurrentTrackRemainingTime(ctx context.Context) (time.Duration, error)
 }
 
