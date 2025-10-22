@@ -26,7 +26,6 @@ var berneseGermanMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required_enhanced": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\nWart uf Admin-Freigab...",
 	"admin.approval_required_community": "⏳ Admin-Freigab nötig\n\n🎵 %s - %s%s%s%s\n\n" +
 		"Wart uf Admin-Freigab oder reagier mit 👍 we das o guet fingsch (%d+ Reaktione für Community-Freigab nötig).",
 	"admin.denied": "❌ Admin het z'Lied abglehnt.",
@@ -54,10 +53,8 @@ var berneseGermanMessages = map[string]string{
 	"callback.prompt_expired": "Die Afrag isch abgloffe.",
 
 	// Button texts
-	"button.confirm":         "👍 Ja, das isch's",
-	"button.not_this":        "👎 Nö, nid das",
-	"button.switch_playlist": "🔄 Zur Playlist wächsle",
-	"button.stay_current":    "❌ Bliibe wo mer si",
+	"button.confirm":  "👍 Ja, das isch's",
+	"button.not_this": "👎 Nö, nid das",
 
 	// Bot status messages
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit för öii Musigwünsch!\n\n📀 Playlist: %s",
@@ -68,35 +65,22 @@ var berneseGermanMessages = map[string]string{
 		"💭 Bitte füegt meh Lieder hinzu dass d Musig witer geit!",
 	"bot.queue_management_auto": "🤖 D Playlist wird chlii läär! Automatisch hinzuegfüegt: %s - %s\n%s\n\n" +
 		"✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
-	"bot.queue_replacement":        "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
-	"bot.queue_replacement_auto":   "🔄 Automatisch Ersatz hinzuegfüegt: %s - %s\n%s\n\n✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
-	"bot.queue_replacement_failed": "❌ Ha kei Ersatz-Queue-Track gfunde. Bitte füeg selber meh Lieder hinzu!",
+	"bot.queue_replacement":      "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
+	"bot.queue_replacement_auto": "🔄 Automatisch Ersatz hinzuegfüegt: %s - %s\n%s\n\n✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
 
 	// Playlist monitoring messages
-	"bot.playlist_warning": "⚠️ Warnig: Mir spile nid vo dr richtige Playliste!\n\n" +
-		"🔄 Bitte wächsle zrügg zu dr richtige Playliste: %s\n\n" +
-		"🎵 Nöchschte Song zum abspile: %s - %s\n\n",
 	"bot.shuffle_warning": "⚠️ Warnig: Shuffle isch igschalte!\n\n" +
 		"🔀 Bitte schalt Shuffle us für optimals Auto-DJing. " +
 		"Shuffle stört d Track-Reihefolg und s Queueing.",
 	"bot.repeat_warning": "⚠️ Warnig: Repeat isch uf Track gstellt!\n\n" +
 		"🔁 Bitte ändere d Repeat-Modus uf 'us' oder 'Playlist' fürs Auto-DJing. " +
 		"Track-Repeat verhinderet Playlist-Fortschritt.",
-	"bot.playback_compliance_warning": "⚠️ Warnig: Playback-Iistellige müesse agpasst werde!\n\n" +
-		"🎵 Ziel-Playlist: %s\n\n" +
-		"Bitte prüef dini Spotify-Iistellige:\n" +
-		"• Wächsle zu dr richtige Playliste\n" +
-		"• Schalt Shuffle us (🔀)\n" +
-		"• Stell Repeat uf us oder Playliste (🔁)\n\n" +
-		"💡 Die Iistellige sorged für optimals Auto-DJing.",
 
 	// Queue track approval messages
 	"button.queue_approve":            "✅ Isch ok",
 	"button.queue_deny":               "❌ Ou nei",
 	"callback.queue_approved":         "✅ Queue-Track isch guetgeheisse worde",
 	"callback.queue_denied":           "❌ Queue-Track isch abglehnt worde",
-	"callback.playlist_switched":      "🔄 Zrügg zur Playlist gwächslet und spielt jetzt: %s - %s",
-	"callback.playlist_stay":          "❌ Bliibe bi dr aktuälle Playliste",
 	"bot.queue_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
 
 	// Device notifications

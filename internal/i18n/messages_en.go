@@ -26,7 +26,6 @@ var englishMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required_enhanced": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\nWaiting for admin approval...",
 	"admin.approval_required_community": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\n" +
 		"Waiting for admin approval or react with 👍 below if you like this as well (%d+ reactions needed for community approval).",
 	"admin.denied": "❌ Admin denied the song request.",
@@ -55,47 +54,32 @@ var englishMessages = map[string]string{
 	"callback.prompt_expired": "This prompt has expired.",
 
 	// Button texts
-	"button.confirm":         "👍 Confirm",
-	"button.not_this":        "👎 Not this",
-	"button.switch_playlist": "🔄 Switch to Playlist",
-	"button.stay_current":    "❌ Stay Current",
+	"button.confirm":  "👍 Confirm",
+	"button.not_this": "👎 Not this",
 
 	// Bot status messages
 	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 I am going offline. See you later!\n\n📀 All songs from this session: %s",
 
 	// Queue management messages
-	"bot.queue_management":         "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
-	"bot.queue_management_auto":    "🤖 Playlist is running low! Auto-adding: %s - %s\n%s\n\n✅ Added automatically after multiple rejections.",
-	"bot.queue_replacement":        "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Do you approve this replacement?",
-	"bot.queue_replacement_auto":   "🔄 Auto-adding replacement: %s - %s\n%s\n\n✅ Added automatically after multiple rejections.",
-	"bot.queue_replacement_failed": "❌ Failed to find a replacement queue track. Please add more songs manually!",
+	"bot.queue_management":       "🤖 Playlist is running low! Added: %s - %s\n%s\n\n💭 Please add more songs to keep the music going!",
+	"bot.queue_management_auto":  "🤖 Playlist is running low! Auto-adding: %s - %s\n%s\n\n✅ Added automatically after multiple rejections.",
+	"bot.queue_replacement":      "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Do you approve this replacement?",
+	"bot.queue_replacement_auto": "🔄 Auto-adding replacement: %s - %s\n%s\n\n✅ Added automatically after multiple rejections.",
 
 	// Playlist monitoring messages
-	"bot.playlist_warning": "⚠️ Warning: Not playing from the target playlist!\n\n" +
-		"🔄 Please switch back to the correct playlist: %s\n\n" +
-		"🎵 Next song to play: %s - %s\n\n",
 	"bot.shuffle_warning": "⚠️ Warning: Shuffle is enabled!\n\n" +
 		"🔀 Please turn off shuffle for optimal auto-DJing. " +
 		"Shuffle interferes with track order and queueing.",
 	"bot.repeat_warning": "⚠️ Warning: Repeat is set to track!\n\n" +
 		"🔁 Please change repeat mode to 'off' or 'playlist' for auto-DJing. " +
 		"Track repeat prevents playlist progression.",
-	"bot.playback_compliance_warning": "⚠️ Warning: Playback settings need adjustment!\n\n" +
-		"🎵 Target playlist: %s\n\n" +
-		"Please check your Spotify settings:\n" +
-		"• Switch to the correct playlist\n" +
-		"• Turn off shuffle (🔀)\n" +
-		"• Set repeat to off or playlist (🔁)\n\n" +
-		"💡 These settings ensure optimal auto-DJing experience.",
 
 	// Queue track approval messages
 	"button.queue_approve":            "✅ Approve",
 	"button.queue_deny":               "❌ Deny",
 	"callback.queue_approved":         "✅ Queue track approved",
 	"callback.queue_denied":           "❌ Queue track denied",
-	"callback.playlist_switched":      "🔄 Switched back to playlist and now playing: %s - %s",
-	"callback.playlist_stay":          "❌ Staying on current playlist",
 	"bot.queue_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
 
 	// Device notifications
