@@ -87,7 +87,7 @@ type adminApprovalContext struct {
 	approved       chan bool
 	cancelCtx      context.Context
 	cancelFunc     context.CancelFunc
-	sentToAdmins   []int64
+	sentMessages   map[int64]int // admin ID -> message ID mapping for cleanup
 }
 
 // communityApprovalContext tracks pending community approvals via reactions
@@ -96,6 +96,7 @@ type communityApprovalContext struct {
 	requiredReactions int
 	currentReactions  int
 	reactedUsers      map[int64]bool // track users who reacted to prevent double counting
+	requesterUserID   int64          // original song requester user ID (to prevent self-approval)
 	approved          chan bool
 	cancelCtx         context.Context
 	cancelFunc        context.CancelFunc
@@ -581,6 +582,15 @@ func (f *Frontend) processIndividualReactionForCommunityApproval(
 		}
 	}
 
+	// Prevent self-approval: ignore reactions from the original song requester
+	if userID == approval.requesterUserID {
+		f.logger.Debug("Ignoring reaction from original song requester (self-approval prevention)",
+			zap.Int("message_id", approval.messageID),
+			zap.Int64("requester_user_id", approval.requesterUserID),
+			zap.Int64("actor_user_id", userID))
+		return
+	}
+
 	// Update user tracking
 	previouslyReacted := approval.reactedUsers[userID]
 	if hasThumbsUp && !previouslyReacted {
@@ -821,7 +831,7 @@ func (f *Frontend) AwaitAdminApproval(ctx context.Context, origin *chat.Message,
 		approved:       make(chan bool, 1),
 		cancelCtx:      approvalCtx,
 		cancelFunc:     cancel,
-		sentToAdmins:   adminIDs,
+		sentMessages:   make(map[int64]int),
 	}
 
 	// Generate unique key for this admin approval
@@ -834,6 +844,10 @@ func (f *Frontend) AwaitAdminApproval(ctx context.Context, origin *chat.Message,
 	// Cleanup function
 	defer func() {
 		cancel()
+
+		// Delete admin approval messages when context is canceled or approval completes
+		f.deleteAdminApprovalMessages(context.Background(), adminApproval)
+
 		f.adminApprovalMutex.Lock()
 		delete(f.pendingAdminApprovals, approvalKey)
 		f.adminApprovalMutex.Unlock()
@@ -892,17 +906,20 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 			IsDisabled: &disabled,
 		}
 
-		_, err := f.bot.SendMessage(ctx, params)
+		msg, err := f.bot.SendMessage(ctx, params)
 		if err != nil {
 			f.logger.Warn("Failed to send admin approval request",
 				zap.Int64("admin_id", adminID),
 				zap.Error(err))
 			errors = append(errors, err)
 		} else {
+			// Store the message ID for later cleanup
+			approval.sentMessages[adminID] = msg.ID
 			successCount++
 			f.logger.Debug("Sent admin approval request",
 				zap.Int64("admin_id", adminID),
-				zap.String("approval_key", approvalKey))
+				zap.String("approval_key", approvalKey),
+				zap.Int("message_id", msg.ID))
 		}
 	}
 
@@ -935,7 +952,9 @@ func (f *Frontend) handleAdminApprovalCallback(ctx context.Context, b *bot.Bot, 
 		return
 	}
 
-	if !f.isUserAdmin(update.CallbackQuery.From.ID, approval.sentToAdmins) {
+	// Check if user is in the list of admins who received approval messages
+	_, isValidAdmin := approval.sentMessages[update.CallbackQuery.From.ID]
+	if !isValidAdmin {
 		f.answerUnauthorizedCallback(ctx, b, update.CallbackQuery.ID)
 		return
 	}
@@ -1036,6 +1055,59 @@ func (f *Frontend) getAdminApproval(approvalKey string) *adminApprovalContext {
 		return nil
 	}
 	return approval
+}
+
+// deleteAdminApprovalMessages deletes all admin approval messages that were sent
+func (f *Frontend) deleteAdminApprovalMessages(ctx context.Context, approval *adminApprovalContext) {
+	if approval == nil || len(approval.sentMessages) == 0 {
+		return
+	}
+
+	f.logger.Debug("Cleaning up admin approval messages",
+		zap.Int("message_count", len(approval.sentMessages)))
+
+	for adminID, messageID := range approval.sentMessages {
+		_, err := f.bot.DeleteMessage(ctx, &bot.DeleteMessageParams{
+			ChatID:    adminID,
+			MessageID: messageID,
+		})
+		if err != nil {
+			f.logger.Debug("Failed to delete admin approval message",
+				zap.Int64("admin_id", adminID),
+				zap.Int("message_id", messageID),
+				zap.Error(err))
+		} else {
+			f.logger.Debug("Deleted admin approval message",
+				zap.Int64("admin_id", adminID),
+				zap.Int("message_id", messageID))
+		}
+	}
+}
+
+// CancelAdminApproval cancels an ongoing admin approval process and cleans up messages
+func (f *Frontend) CancelAdminApproval(ctx context.Context, origin *chat.Message) {
+	// Due to timing, we can't predict the exact timestamp, so we need to search for the approval
+	// by checking recent approvals. For now, let's cancel all active admin approvals for this message.
+	f.adminApprovalMutex.Lock()
+	defer f.adminApprovalMutex.Unlock()
+
+	// Look for admin approvals from this message (approximate match)
+	baseKey := fmt.Sprintf("admin_%s_%s_", origin.ChatID, origin.ID)
+	for key, approval := range f.pendingAdminApprovals {
+		if strings.HasPrefix(key, baseKey) {
+			f.logger.Debug("Canceling admin approval due to community approval success",
+				zap.String("approval_key", key))
+
+			// Delete the admin approval messages
+			f.deleteAdminApprovalMessages(ctx, approval)
+
+			// Cancel the approval context
+			approval.cancelFunc()
+
+			// Remove from pending approvals
+			delete(f.pendingAdminApprovals, key)
+		}
+	}
 }
 
 func (f *Frontend) isUserAdmin(userID int64, adminList []int64) bool {
@@ -1347,7 +1419,8 @@ func (f *Frontend) ListAvailableGroups(ctx context.Context) ([]GroupInfo, error)
 }
 
 // AwaitCommunityApproval waits for enough community 👍 reactions to bypass admin approval
-func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions, timeoutSec int) (bool, error) {
+func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions, timeoutSec int,
+	requesterUserID int64) (bool, error) {
 	if !f.config.Enabled {
 		return false, fmt.Errorf("telegram frontend is disabled")
 	}
@@ -1369,6 +1442,7 @@ func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, req
 		requiredReactions: requiredReactions,
 		currentReactions:  0,
 		reactedUsers:      make(map[int64]bool),
+		requesterUserID:   requesterUserID,
 		approved:          make(chan bool, 1),
 		cancelCtx:         approvalCtx,
 		cancelFunc:        cancel,

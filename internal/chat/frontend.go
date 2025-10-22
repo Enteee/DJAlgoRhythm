@@ -82,7 +82,8 @@ type Frontend interface {
 
 	// AwaitCommunityApproval waits for enough community 👍 reactions to bypass admin approval
 	// Returns true if enough reactions received within timeout, false otherwise
-	AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (approved bool, err error)
+	AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int,
+		requesterUserID int64) (approved bool, err error)
 
 	// GetAdminUserIDs returns a list of admin user IDs as strings for the group
 	GetAdminUserIDs(ctx context.Context, chatID string) ([]string, error)

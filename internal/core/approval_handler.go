@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -228,7 +229,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	})
 
 	communityApprovalFrontend, supportsCommunityApproval := d.frontend.(interface {
-		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (bool, error)
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int, requesterUserID int64) (bool, error)
 	})
 
 	if !supportsAdminApproval {
@@ -256,7 +257,7 @@ func (d *Dispatcher) awaitConcurrentApproval(
 		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
 	},
 	communityFrontend interface {
-		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int) (bool, error)
+		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int, requesterUserID int64) (bool, error)
 	},
 	communityThreshold int,
 ) {
@@ -278,7 +279,16 @@ func (d *Dispatcher) awaitConcurrentApproval(
 
 	// Start community approval in goroutine
 	go func() {
-		approved, err := communityFrontend.AwaitCommunityApproval(ctx, approvalMsgID, communityThreshold, d.config.App.ConfirmAdminTimeoutSecs)
+		// Convert string user ID to int64 for Telegram format
+		requesterUserID, err := strconv.ParseInt(originalMsg.SenderID, 10, 64)
+		if err != nil {
+			d.logger.Warn("Failed to parse requester user ID, defaulting to 0",
+				zap.String("senderID", originalMsg.SenderID), zap.Error(err))
+			requesterUserID = 0 // Fallback to 0 if parsing fails
+		}
+
+		approved, err := communityFrontend.AwaitCommunityApproval(ctx, approvalMsgID, communityThreshold,
+			d.config.App.ConfirmAdminTimeoutSecs, requesterUserID)
 		if err != nil {
 			errorResult <- err
 			return
@@ -292,6 +302,12 @@ func (d *Dispatcher) awaitConcurrentApproval(
 		d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, approved, "admin")
 	case approved := <-communityResult:
 		if approved {
+			// Community approval succeeded - cancel admin approval and clean up admin messages
+			if adminCanceller, ok := adminFrontend.(interface {
+				CancelAdminApproval(ctx context.Context, origin *chat.Message)
+			}); ok {
+				adminCanceller.CancelAdminApproval(ctx, originalMsg)
+			}
 			d.handleApprovalResult(ctx, msgCtx, originalMsg, trackID, songInfo, approvalMsgID, true, "community")
 		} else {
 			// Community approval failed, still wait for admin

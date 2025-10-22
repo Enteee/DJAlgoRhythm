@@ -252,7 +252,7 @@ func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prom
 
 // AwaitCommunityApproval waits for enough community 👍 reactions to bypass admin approval
 // WhatsApp doesn't support reactions like Telegram, so this always returns false
-func (f *Frontend) AwaitCommunityApproval(_ context.Context, _ string, _, _ int) (bool, error) {
+func (f *Frontend) AwaitCommunityApproval(_ context.Context, _ string, _, _ int, _ int64) (bool, error) {
 	if !f.config.Enabled {
 		return false, fmt.Errorf("whatsapp frontend is disabled")
 	}
