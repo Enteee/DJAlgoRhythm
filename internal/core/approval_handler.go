@@ -539,26 +539,34 @@ func (d *Dispatcher) handleQueueTrackApprovalTimeout(ctx context.Context, messag
 		approvalCtx, exists := d.pendingApprovalMessages[messageID]
 		if !exists {
 			d.queueManagementMutex.Unlock()
-			return // Already handled
+			return // Already handled by auto-approval or manual decision
 		}
 
 		trackID := approvalCtx.trackID
 		chatID := approvalCtx.chatID
 
-		// Clean up pending approval
+		// Double-check that the track is still pending (race condition protection)
+		_, trackStillPending := d.pendingQueueTracks[trackID]
+		if !trackStillPending {
+			// Track was already processed by auto-approval, clean up and exit
+			delete(d.pendingApprovalMessages, messageID)
+			d.queueManagementMutex.Unlock()
+			d.logger.Debug("Track already processed by auto-approval, skipping timeout handler",
+				zap.String("trackID", trackID),
+				zap.String("messageID", messageID))
+			return
+		}
+
+		// Clean up pending approval and queue tracks
 		delete(d.pendingApprovalMessages, messageID)
+		delete(d.pendingQueueTracks, trackID)
 		d.queueManagementMutex.Unlock()
 
 		d.logger.Info("Queue approval timed out, auto-accepting track",
 			zap.String("trackID", trackID),
 			zap.String("messageID", messageID))
 
-		// Clean up pending queue tracks (similar to handleQueueTrackDecision)
-		d.queueManagementMutex.Lock()
-		delete(d.pendingQueueTracks, trackID)
-		d.queueManagementMutex.Unlock()
-
-		// Actually add the track to queue and playlist (this was missing!)
+		// Actually add the track to queue and playlist
 		if err := d.addApprovedQueueTrack(context.Background(), trackID); err != nil {
 			d.logger.Error("Failed to add auto-accepted queue track",
 				zap.String("trackID", trackID),
