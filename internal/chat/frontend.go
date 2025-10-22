@@ -26,6 +26,36 @@ const (
 	ReactionThumbsDown Reaction = "👎"
 )
 
+// User represents a Telegram user
+type User struct {
+	ID        int64  `json:"id"`
+	IsBot     bool   `json:"is_bot"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name,omitempty"`
+	Username  string `json:"username,omitempty"`
+}
+
+// ChatMember represents a chat member with their status and permissions
+//
+//nolint:revive // ChatMember is intentionally named for clarity across packages
+type ChatMember struct {
+	Status                 string `json:"status"`
+	User                   *User  `json:"user"`
+	CanDeleteMessages      bool   `json:"can_delete_messages,omitempty"`
+	CanRestrictMembers     bool   `json:"can_restrict_members,omitempty"`
+	CanPromoteMembers      bool   `json:"can_promote_members,omitempty"`
+	CanChangeInfo          bool   `json:"can_change_info,omitempty"`
+	CanInviteUsers         bool   `json:"can_invite_users,omitempty"`
+	CanPinMessages         bool   `json:"can_pin_messages,omitempty"`
+	CanManageVideoChats    bool   `json:"can_manage_video_chats,omitempty"`
+	IsAnonymous            bool   `json:"is_anonymous,omitempty"`
+	CanManageChat          bool   `json:"can_manage_chat,omitempty"`
+	CanPostMessages        bool   `json:"can_post_messages,omitempty"`
+	CanEditMessages        bool   `json:"can_edit_messages,omitempty"`
+	CanDeleteVideoChats    bool   `json:"can_delete_video_chats,omitempty"`
+	CanManageVideoChatsOld bool   `json:"can_manage_voice_chats,omitempty"` // Legacy field
+}
+
 // Frontend defines the unified interface for all chat integrations
 type Frontend interface {
 	// Start initializes the chat frontend and begins listening for updates
@@ -69,4 +99,10 @@ type Frontend interface {
 
 	// EditMessage edits an existing message by ID (returns error if not supported)
 	EditMessage(ctx context.Context, chatID, messageID, newText string) error
+
+	// GetMe returns information about the bot user
+	GetMe(ctx context.Context) (*User, error)
+
+	// GetChatMember returns information about a chat member
+	GetChatMember(ctx context.Context, chatID, userID int64) (*ChatMember, error)
 }

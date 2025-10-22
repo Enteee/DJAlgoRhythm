@@ -129,7 +129,8 @@ func TestI18nMessageValues(t *testing.T) {
 
 	// Test specific keys that should have no placeholders
 	testsWithoutPlaceholders := []string{
-		"admin.no_active_device", // device notification message
+		"admin.no_active_device",         // device notification message
+		"admin.insufficient_permissions", // bot permissions notification message
 	}
 
 	for key, expectedPlaceholders := range testsWithPlaceholders {

@@ -25,14 +25,8 @@ type Dispatcher struct {
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
 
-	// Settings monitoring
-	hasUnconfirmedSettingsWarning bool
-	settingsWarningMutex          sync.RWMutex
-
-	// Device monitoring
-	deviceWarningActive   bool              // tracks if device warning has been sent to admins
-	deviceWarningMessages map[string]string // userID -> messageID for device warning messages
-	deviceWarningMutex    sync.RWMutex
+	// Unified admin warning management
+	warningManager *AdminWarningManager
 
 	// Queue management approval tracking
 	pendingQueueTracks      map[string]string                // trackID -> track name for pending approvals
@@ -68,10 +62,10 @@ func NewDispatcher(
 		dedup:                   dedup,
 		logger:                  logger,
 		localizer:               i18n.NewLocalizer(config.App.Language),
+		warningManager:          NewAdminWarningManager(frontend, logger),
 		messageContexts:         make(map[string]*MessageContext),
 		pendingQueueTracks:      make(map[string]string),
 		pendingApprovalMessages: make(map[string]*queueApprovalContext),
-		deviceWarningMessages:   make(map[string]string),
 		shadowQueue:             make([]ShadowQueueItem, 0),
 		priorityTracks:          make(map[string]PriorityTrackInfo),
 	}
@@ -109,6 +103,9 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 
 	// Start playback settings monitoring
 	go d.runPlaybackSettingsMonitoring(ctx)
+
+	// Start admin permissions monitoring
+	go d.runAdminPermissionsMonitoring(ctx)
 
 	// Start shadow queue maintenance
 	go d.runShadowQueueMaintenance(ctx)
@@ -238,5 +235,6 @@ func (d *Dispatcher) isNotMusicRequest(ctx context.Context, text string) bool {
 
 const (
 	playbackSettingsCheckInterval = 30 * time.Second // Check playback settings every 30 seconds
+	adminPermissionsCheckInterval = 60 * time.Second // Check admin permissions every 60 seconds
 	maxPlaylistTracksToQueue      = 10               // Maximum playlist tracks to queue at once
 )

@@ -99,4 +99,12 @@ var englishMessages = map[string]string{
 	// Device notifications
 	"admin.no_active_device": "🔇 No active Spotify device found!\n\n" +
 		"💡 Open Spotify and start playing from any playlist to activate a device.",
+
+	// Bot permissions notifications
+	"admin.insufficient_permissions": "🔐 Bot Admin Permissions Required!\n\n" +
+		"The bot needs administrator privileges in the group to function properly.\n\n" +
+		"Please:\n" +
+		"• Make the bot an administrator in the group\n" +
+		"• Some bot features require admin status to work correctly\n\n" +
+		"💡 Admin permissions enable the bot to receive events and manage group interactions.",
 }

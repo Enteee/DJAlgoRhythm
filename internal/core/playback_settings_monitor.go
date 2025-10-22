@@ -39,13 +39,8 @@ func (d *Dispatcher) checkPlaybackSettingsCompliance(ctx context.Context) {
 	}
 
 	if compliance.IsOptimalForAutoDJ() {
-		// Settings are optimal - clear any unconfirmed warning flag
-		d.settingsWarningMutex.Lock()
-		if d.hasUnconfirmedSettingsWarning {
-			d.hasUnconfirmedSettingsWarning = false
-			d.logger.Debug("Playback settings compliance issues resolved, cleared unconfirmed warning flag")
-		}
-		d.settingsWarningMutex.Unlock()
+		// Settings are optimal - clear any pending warnings
+		d.warningManager.ClearWarning(ctx, WarningTypeSettings)
 		return
 	}
 
@@ -61,14 +56,9 @@ func (d *Dispatcher) checkPlaybackSettingsCompliance(ctx context.Context) {
 	// Auto-correction failed, fall back to warning
 	d.logger.Warn("Auto-correction failed, falling back to admin warning")
 
-	// Check if there's already an unconfirmed warning to avoid spam
-	d.settingsWarningMutex.RLock()
-	hasUnconfirmed := d.hasUnconfirmedSettingsWarning
-	d.settingsWarningMutex.RUnlock()
-
-	if hasUnconfirmed {
-		// Already have an unconfirmed warning, don't send another
-		d.logger.Debug("Playback settings compliance issues detected but unconfirmed warning already exists",
+	// Check if warning should be sent (avoid spam)
+	if !d.warningManager.ShouldSendWarning(WarningTypeSettings) {
+		d.logger.Debug("Playback settings compliance issues detected but warning already active",
 			zap.Strings("issues", compliance.Issues))
 		return
 	}
@@ -98,13 +88,11 @@ func (d *Dispatcher) checkPlaybackSettingsCompliance(ctx context.Context) {
 	// Generate settings warning message for admins
 	detailedMessage := d.generatePlaybackSettingsWarningMessage(compliance)
 
-	// Send settings warning to admins
-	d.sendPlaybackSettingsWarningToAdmins(ctx, adminUserIDs, detailedMessage)
-
-	// Update warning state
-	d.settingsWarningMutex.Lock()
-	d.hasUnconfirmedSettingsWarning = true
-	d.settingsWarningMutex.Unlock()
+	// Send settings warning to admins using warning manager
+	if err := d.warningManager.SendWarningToAdmins(ctx, WarningTypeSettings, adminUserIDs, detailedMessage); err != nil {
+		d.logger.Warn("Failed to send playback settings warning", zap.Error(err))
+		return
+	}
 
 	d.logger.Info("Sent playback settings compliance warning message")
 }
@@ -163,27 +151,4 @@ func (d *Dispatcher) generatePlaybackSettingsWarningMessage(compliance *Playback
 
 	// Fallback (shouldn't happen as this function should only be called when there are issues)
 	return d.localizer.T("bot.playback_settings_warning")
-}
-
-// sendPlaybackSettingsWarningToAdmins sends settings warning messages to all admin users via DM
-func (d *Dispatcher) sendPlaybackSettingsWarningToAdmins(ctx context.Context, adminUserIDs []string, message string) {
-	successCount := 0
-	var errors []string
-	for _, adminUserID := range adminUserIDs {
-		if _, err := d.frontend.SendDirectMessage(ctx, adminUserID, message); err != nil {
-			d.logger.Warn("Failed to send playback settings warning to admin",
-				zap.String("adminUserID", adminUserID),
-				zap.Error(err))
-			errors = append(errors, err.Error())
-		} else {
-			successCount++
-			d.logger.Debug("Successfully sent playback settings warning to admin",
-				zap.String("adminUserID", adminUserID))
-		}
-	}
-
-	d.logger.Info("Sent playback settings warning to admins",
-		zap.Int("successCount", successCount),
-		zap.Int("totalAdmins", len(adminUserIDs)),
-		zap.Strings("errors", errors))
 }

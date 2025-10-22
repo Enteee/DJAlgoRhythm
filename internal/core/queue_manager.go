@@ -189,16 +189,18 @@ func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 	} else if !hasActiveDevice {
 		d.logger.Debug("No active Spotify device found, skipping queue management")
 
-		// Send warning to admins if enough time has passed since last warning
-		if d.shouldSendDeviceWarning() {
+		// Send warning to admins if no warning is already active
+		if d.warningManager.ShouldSendWarning(WarningTypeDevice) {
 			groupID := d.getGroupID()
 			if groupID != "" {
 				adminUserIDs, adminErr := d.frontend.GetAdminUserIDs(ctx, groupID)
 				if adminErr != nil {
 					d.logger.Warn("Failed to get admin user IDs for device warning", zap.Error(adminErr))
 				} else if len(adminUserIDs) > 0 {
-					d.sendDeviceWarningToAdmins(ctx, adminUserIDs)
-					d.markDeviceWarningSent()
+					deviceWarningMessage := d.localizer.T("admin.no_active_device")
+					if warningErr := d.warningManager.SendWarningToAdmins(ctx, WarningTypeDevice, adminUserIDs, deviceWarningMessage); warningErr != nil {
+						d.logger.Warn("Failed to send device warning", zap.Error(warningErr))
+					}
 				}
 			}
 		}
@@ -206,7 +208,7 @@ func (d *Dispatcher) checkAndManageQueue(ctx context.Context) {
 	}
 
 	// Device is active - clear any existing device warning
-	d.clearDeviceWarning(ctx)
+	d.warningManager.ClearWarning(ctx, WarningTypeDevice)
 
 	// Check if queue management is already active
 	d.queueManagementMutex.Lock()

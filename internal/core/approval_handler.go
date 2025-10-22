@@ -414,7 +414,7 @@ func (d *Dispatcher) sendQueueTrackApprovalMessage(
 		}
 
 		// Add thumbs up reaction for visual feedback
-		if reactErr := d.frontend.React(ctx, groupID, messageID, "👍"); reactErr != nil {
+		if reactErr := d.frontend.React(ctx, groupID, messageID, chat.ReactionThumbsUp); reactErr != nil {
 			d.logger.Debug("Failed to add thumbs up reaction for auto-approval", zap.Error(reactErr))
 		}
 

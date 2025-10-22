@@ -25,6 +25,7 @@ const (
 	chatTypeGroup         = "group"
 	chatTypeSuperGroup    = "supergroup"
 	groupDiscoveryTimeout = 15 // seconds for group discovery
+	thumbsUpEmoji         = "👍"
 	// Sleep durations for group discovery
 	botStopDelay       = 200 * time.Millisecond
 	discoveryFinalWait = 50 * time.Millisecond
@@ -144,6 +145,13 @@ func (f *Frontend) Start(ctx context.Context) error {
 		}),
 		bot.WithCallbackQueryDataHandler("queue_deny_", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
 			f.handleQueueTrackCallback(ctx, b, update, false)
+		}),
+		// Configure allowed updates to include reaction events for community approval
+		bot.WithAllowedUpdates([]string{
+			"message",
+			"callback_query",
+			"message_reaction",
+			"message_reaction_count",
 		}),
 	}
 
@@ -388,9 +396,23 @@ func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prom
 
 // handleUpdate processes incoming Telegram updates
 func (f *Frontend) handleUpdate(ctx context.Context, _ *bot.Bot, update *models.Update) {
+	// Debug logging to track all incoming update types
+	f.logger.Debug("Received Telegram update",
+		zap.Bool("has_message", update.Message != nil),
+		zap.Bool("has_callback_query", update.CallbackQuery != nil),
+		zap.Bool("has_message_reaction", update.MessageReaction != nil),
+		zap.Bool("has_message_reaction_count", update.MessageReactionCount != nil))
+
 	if update.Message != nil {
 		f.handleMessage(ctx, update.Message)
 	}
+
+	// Handle individual message reactions (for more granular tracking)
+	if update.MessageReaction != nil {
+		f.handleMessageReaction(ctx, update.MessageReaction)
+	}
+
+	// Handle message reaction count updates (aggregate counts)
 	if update.MessageReactionCount != nil {
 		f.handleMessageReactionCount(ctx, update.MessageReactionCount)
 	}
@@ -457,7 +479,7 @@ func (f *Frontend) processReactionCountForCommunityApproval(
 	for _, reaction := range reactionCount.Reactions {
 		if reaction.Type.Type == models.ReactionTypeTypeEmoji &&
 			reaction.Type.ReactionTypeEmoji != nil &&
-			reaction.Type.ReactionTypeEmoji.Emoji == "👍" {
+			reaction.Type.ReactionTypeEmoji.Emoji == thumbsUpEmoji {
 			thumbsUpCount = reaction.TotalCount
 			break
 		}
@@ -487,6 +509,107 @@ func (f *Frontend) processReactionCountForCommunityApproval(
 				zap.Int("message_id", approval.messageID),
 				zap.Int("user_reactions_received", userReactions),
 				zap.Int("total_reactions_received", thumbsUpCount),
+				zap.Int("reactions_required", approval.requiredReactions))
+		case <-approval.cancelCtx.Done():
+			// Context already canceled, do nothing
+		}
+	}
+}
+
+// handleMessageReaction processes individual message reaction updates for community approval
+func (f *Frontend) handleMessageReaction(_ context.Context, reaction *models.MessageReactionUpdated) {
+	// Only process reactions from the configured group
+	if reaction.Chat.ID != f.config.GroupID {
+		return
+	}
+
+	// Get the actor ID (user or chat)
+	var actorID int64
+	var actorType string
+	if reaction.User != nil {
+		actorID = reaction.User.ID
+		actorType = "user"
+	} else if reaction.ActorChat != nil {
+		actorID = reaction.ActorChat.ID
+		actorType = "chat"
+	} else {
+		f.logger.Warn("Received reaction with no actor information")
+		return
+	}
+
+	f.logger.Debug("Received individual message reaction",
+		zap.Int("message_id", reaction.MessageID),
+		zap.Int64("actor_id", actorID),
+		zap.String("actor_type", actorType),
+		zap.Int("reaction_count", len(reaction.NewReaction)))
+
+	// Check if there are any pending community approvals for this message
+	f.communityApprovalMutex.Lock()
+	defer f.communityApprovalMutex.Unlock()
+
+	for _, approval := range f.pendingCommunityApprovals {
+		if approval.messageID == reaction.MessageID {
+			f.processIndividualReactionForCommunityApproval(approval, reaction)
+			break
+		}
+	}
+}
+
+// processIndividualReactionForCommunityApproval processes an individual reaction for community approval
+func (f *Frontend) processIndividualReactionForCommunityApproval(
+	approval *communityApprovalContext, reaction *models.MessageReactionUpdated,
+) {
+	// Get the actor ID (user or chat)
+	var userID int64
+	if reaction.User != nil {
+		userID = reaction.User.ID
+	} else if reaction.ActorChat != nil {
+		userID = reaction.ActorChat.ID
+	} else {
+		f.logger.Warn("Cannot process reaction: no actor information available")
+		return
+	}
+
+	// Check if user added or removed a 👍 reaction
+	hasThumbsUp := false
+	for _, reactionType := range reaction.NewReaction {
+		if reactionType.Type == models.ReactionTypeTypeEmoji &&
+			reactionType.ReactionTypeEmoji != nil &&
+			reactionType.ReactionTypeEmoji.Emoji == thumbsUpEmoji {
+			hasThumbsUp = true
+			break
+		}
+	}
+
+	// Update user tracking
+	previouslyReacted := approval.reactedUsers[userID]
+	if hasThumbsUp && !previouslyReacted {
+		// User added thumbs up
+		approval.reactedUsers[userID] = true
+		approval.currentReactions++
+		f.logger.Debug("User added thumbs up reaction",
+			zap.Int("message_id", approval.messageID),
+			zap.Int64("user_id", userID),
+			zap.Int("current_reactions", approval.currentReactions),
+			zap.Int("required_reactions", approval.requiredReactions))
+	} else if !hasThumbsUp && previouslyReacted {
+		// User removed thumbs up
+		delete(approval.reactedUsers, userID)
+		approval.currentReactions--
+		f.logger.Debug("User removed thumbs up reaction",
+			zap.Int("message_id", approval.messageID),
+			zap.Int64("user_id", userID),
+			zap.Int("current_reactions", approval.currentReactions),
+			zap.Int("required_reactions", approval.requiredReactions))
+	}
+
+	// Check if we've reached the required number of reactions
+	if approval.currentReactions >= approval.requiredReactions {
+		select {
+		case approval.approved <- true:
+			f.logger.Info("Community approval achieved via individual reactions",
+				zap.Int("message_id", approval.messageID),
+				zap.Int("reactions_received", approval.currentReactions),
 				zap.Int("reactions_required", approval.requiredReactions))
 		case <-approval.cancelCtx.Done():
 			// Context already canceled, do nothing
@@ -1377,4 +1500,122 @@ func (f *Frontend) EditMessage(ctx context.Context, chatID, messageID, newText s
 		zap.Bool("onlyRemovedButtons", newText == ""))
 
 	return nil
+}
+
+// GetMe returns information about the bot user
+func (f *Frontend) GetMe(ctx context.Context) (*chat.User, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	me, err := f.bot.GetMe(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bot user info: %w", err)
+	}
+
+	return &chat.User{
+		ID:        me.ID,
+		IsBot:     me.IsBot,
+		FirstName: me.FirstName,
+		LastName:  me.LastName,
+		Username:  me.Username,
+	}, nil
+}
+
+// GetChatMember returns information about a chat member
+func (f *Frontend) GetChatMember(ctx context.Context, chatID, userID int64) (*chat.ChatMember, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("telegram frontend is disabled")
+	}
+
+	member, err := f.bot.GetChatMember(ctx, &bot.GetChatMemberParams{
+		ChatID: chatID,
+		UserID: userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat member: %w", err)
+	}
+
+	// Convert to our internal ChatMember structure
+	chatMember := &chat.ChatMember{
+		Status: string(member.Type),
+	}
+
+	// Handle different member types
+	switch member.Type {
+	case models.ChatMemberTypeOwner:
+		if member.Owner != nil {
+			chatMember.User = &chat.User{
+				ID:        member.Owner.User.ID,
+				IsBot:     member.Owner.User.IsBot,
+				FirstName: member.Owner.User.FirstName,
+				LastName:  member.Owner.User.LastName,
+				Username:  member.Owner.User.Username,
+			}
+			chatMember.IsAnonymous = member.Owner.IsAnonymous
+		}
+	case models.ChatMemberTypeAdministrator:
+		if member.Administrator != nil {
+			chatMember.User = &chat.User{
+				ID:        member.Administrator.User.ID,
+				IsBot:     member.Administrator.User.IsBot,
+				FirstName: member.Administrator.User.FirstName,
+				LastName:  member.Administrator.User.LastName,
+				Username:  member.Administrator.User.Username,
+			}
+			chatMember.CanDeleteMessages = member.Administrator.CanDeleteMessages
+			chatMember.CanRestrictMembers = member.Administrator.CanRestrictMembers
+			chatMember.CanPromoteMembers = member.Administrator.CanPromoteMembers
+			chatMember.CanChangeInfo = member.Administrator.CanChangeInfo
+			chatMember.CanInviteUsers = member.Administrator.CanInviteUsers
+			chatMember.CanPinMessages = member.Administrator.CanPinMessages
+			chatMember.CanManageVideoChats = member.Administrator.CanManageVideoChats
+			chatMember.IsAnonymous = member.Administrator.IsAnonymous
+			chatMember.CanManageChat = member.Administrator.CanManageChat
+			chatMember.CanPostMessages = member.Administrator.CanPostMessages
+			chatMember.CanEditMessages = member.Administrator.CanEditMessages
+		}
+	case models.ChatMemberTypeMember:
+		if member.Member != nil {
+			chatMember.User = &chat.User{
+				ID:        member.Member.User.ID,
+				IsBot:     member.Member.User.IsBot,
+				FirstName: member.Member.User.FirstName,
+				LastName:  member.Member.User.LastName,
+				Username:  member.Member.User.Username,
+			}
+		}
+	case models.ChatMemberTypeRestricted:
+		if member.Restricted != nil {
+			chatMember.User = &chat.User{
+				ID:        member.Restricted.User.ID,
+				IsBot:     member.Restricted.User.IsBot,
+				FirstName: member.Restricted.User.FirstName,
+				LastName:  member.Restricted.User.LastName,
+				Username:  member.Restricted.User.Username,
+			}
+		}
+	case models.ChatMemberTypeLeft:
+		if member.Left != nil {
+			chatMember.User = &chat.User{
+				ID:        member.Left.User.ID,
+				IsBot:     member.Left.User.IsBot,
+				FirstName: member.Left.User.FirstName,
+				LastName:  member.Left.User.LastName,
+				Username:  member.Left.User.Username,
+			}
+		}
+	case models.ChatMemberTypeBanned:
+		if member.Banned != nil {
+			chatMember.User = &chat.User{
+				ID:        member.Banned.User.ID,
+				IsBot:     member.Banned.User.IsBot,
+				FirstName: member.Banned.User.FirstName,
+				LastName:  member.Banned.User.LastName,
+				Username:  member.Banned.User.Username,
+			}
+		}
+	}
+
+	return chatMember, nil
 }

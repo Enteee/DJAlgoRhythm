@@ -98,6 +98,14 @@ var berneseGermanMessages = map[string]string{
 	"bot.queue_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
 
 	// Device notifications
-	"admin.no_active_device": "🔇 Kei aktivi Spotify-Gerät gfunde!\n\n" +
+	"admin.no_active_device": "🔇 Kei aktivi Spotify-Grät gfunde!\n\n" +
 		"💡 Mach Spotify uf und fang a spile vo irgendere Playlist zum es Gerät z'aktiviere.",
+
+	// Bot permissions notifications
+	"admin.insufficient_permissions": "🔐 Bot-Admin-Berechtigunge nötig!\n\n" +
+		"Dr Bot brucht Administrator-Berechtigunge i dr Gruppe zum richtig z'funktioniere.\n\n" +
+		"Bitte:\n" +
+		"• Mach dr Bot zum Administrator i dr Gruppe\n" +
+		"• Gwüssi Bot-Features funktioniered nur mit Admin-Status\n\n" +
+		"💡 Admin-Berechtigunge ermögliched em Bot Events z'empfange und Gruppe-Interaktione z'verwalte.",
 }

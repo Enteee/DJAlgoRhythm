@@ -512,3 +512,42 @@ func (f *Frontend) EditMessage(_ context.Context, _, _, _ string) error {
 	f.logger.Debug("EditMessage called on WhatsApp frontend (not supported, gracefully ignored)")
 	return nil
 }
+
+// GetMe returns information about the bot user
+func (f *Frontend) GetMe(_ context.Context) (*chat.User, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// WhatsApp doesn't have a traditional "bot" concept like Telegram
+	// Return a basic user representation using the connected device info
+	f.logger.Debug("GetMe called on WhatsApp frontend (limited support)")
+	return &chat.User{
+		ID:        0, // WhatsApp doesn't use numeric user IDs
+		IsBot:     false,
+		FirstName: "WhatsApp Bot",
+		LastName:  "",
+		Username:  "",
+	}, nil
+}
+
+// GetChatMember returns information about a chat member
+func (f *Frontend) GetChatMember(_ context.Context, _, _ int64) (*chat.ChatMember, error) {
+	if !f.config.Enabled {
+		return nil, fmt.Errorf("whatsapp frontend is disabled")
+	}
+
+	// WhatsApp doesn't have the same admin/member structure as Telegram
+	// Return a basic member representation
+	f.logger.Debug("GetChatMember called on WhatsApp frontend (limited support)")
+	return &chat.ChatMember{
+		Status: "member", // WhatsApp doesn't have the same status concepts
+		User: &chat.User{
+			ID:        0,
+			IsBot:     false,
+			FirstName: "WhatsApp User",
+			LastName:  "",
+			Username:  "",
+		},
+	}, nil
+}
