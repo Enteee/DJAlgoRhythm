@@ -53,14 +53,7 @@ type Server struct {
 }
 
 type Metrics struct {
-	MessagesTotal   *prometheus.CounterVec
-	AddsTotal       *prometheus.CounterVec
-	DuplicatesTotal prometheus.Counter
-	LLMCallsTotal   *prometheus.CounterVec
-	ErrorsTotal     *prometheus.CounterVec
-	ProcessingTime  *prometheus.HistogramVec
-	PlaylistSize    prometheus.Gauge
-	ActiveSessions  prometheus.Gauge
+	PlaylistSize prometheus.Gauge
 }
 
 func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
@@ -78,71 +71,16 @@ func NewServer(config *core.ServerConfig, logger *zap.Logger) *Server {
 
 func newMetrics() *Metrics {
 	metrics := &Metrics{
-		MessagesTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "whatdj_messages_total",
-				Help: "Total number of messages processed",
-			},
-			[]string{"type", "status"},
-		),
-		AddsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "whatdj_adds_total",
-				Help: "Total number of tracks added to playlist",
-			},
-			[]string{"source"},
-		),
-		DuplicatesTotal: prometheus.NewCounter(
-			prometheus.CounterOpts{
-				Name: "whatdj_duplicates_total",
-				Help: "Total number of duplicate tracks rejected",
-			},
-		),
-		LLMCallsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "whatdj_llm_calls_total",
-				Help: "Total number of LLM API calls",
-			},
-			[]string{"provider", "status"},
-		),
-		ErrorsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "whatdj_errors_total",
-				Help: "Total number of errors",
-			},
-			[]string{"component", "type"},
-		),
-		ProcessingTime: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "whatdj_processing_duration_seconds",
-				Help:    "Time spent processing messages",
-				Buckets: prometheus.DefBuckets,
-			},
-			[]string{"type"},
-		),
 		PlaylistSize: prometheus.NewGauge(
 			prometheus.GaugeOpts{
 				Name: "whatdj_playlist_size",
 				Help: "Current number of tracks in playlist",
 			},
 		),
-		ActiveSessions: prometheus.NewGauge(
-			prometheus.GaugeOpts{
-				Name: "whatdj_active_sessions",
-				Help: "Number of active message processing sessions",
-			},
-		),
 	}
 
 	prometheus.MustRegister(
-		metrics.MessagesTotal,
-		metrics.AddsTotal,
-		metrics.DuplicatesTotal,
-		metrics.LLMCallsTotal,
-		metrics.ErrorsTotal,
-		metrics.ProcessingTime,
 		metrics.PlaylistSize,
-		metrics.ActiveSessions,
 	)
 
 	return metrics
@@ -213,8 +151,4 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (s *Server) SetPlaylistSize(size int) {
-	s.metrics.PlaylistSize.Set(float64(size))
 }

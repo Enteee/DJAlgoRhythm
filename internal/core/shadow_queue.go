@@ -46,7 +46,6 @@ func (d *Dispatcher) addToShadowQueue(trackID, source string, duration time.Dura
 
 	item := ShadowQueueItem{
 		TrackID:  trackID,
-		URI:      fmt.Sprintf("spotify:track:%s", trackID),
 		Position: nextPosition,
 		Duration: duration,
 		Source:   source,

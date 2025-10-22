@@ -391,20 +391,6 @@ func runServices(ctx context.Context, svcs *services) error {
 		return svcs.dispatcher.Start(gCtx)
 	})
 
-	g.Go(func() error {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-gCtx.Done():
-				return nil
-			case <-ticker.C:
-				svcs.httpServer.SetPlaylistSize(svcs.dedup.Size())
-			}
-		}
-	})
-
 	logger.Info("WhatDj v2 started successfully",
 		zap.String("http_addr", fmt.Sprintf("%s:%d", config.Server.Host, config.Server.Port)))
 
