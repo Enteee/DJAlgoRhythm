@@ -18,6 +18,7 @@ const (
 	WarningTypeDevice      WarningType = "device"      // No active Spotify device found
 	WarningTypePermissions WarningType = "permissions" // Bot lacks admin permissions
 	WarningTypeSettings    WarningType = "settings"    // Playback settings not optimal
+	WarningTypeQueueSync   WarningType = "queue_sync"  // Shadow queue out of sync with Spotify queue
 )
 
 // AdminWarningManager manages admin warning messages with automatic cleanup

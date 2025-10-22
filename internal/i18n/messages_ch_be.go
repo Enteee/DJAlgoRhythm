@@ -94,4 +94,9 @@ var berneseGermanMessages = map[string]string{
 		"• Mach dr Bot zum Administrator i dr Gruppe\n" +
 		"• Gwüssi Bot-Features funktioniered nur mit Admin-Status\n\n" +
 		"💡 Admin-Berechtigunge ermögliched em Bot Events z'empfange und Gruppe-Interaktione z'verwalte.",
+
+	// Queue sync notifications
+	"admin.queue_sync_warning": "🚨 Queue-Sync Problem detected!\n\n" +
+		"D Queue isch villicht nid synchron. Tracks i dr Queue:\n%s\n" +
+		"💡 Zum fixe: Spiel eine vo dene Tracks i Spotify zum d Queue z'synchronisiere.",
 }

@@ -36,9 +36,12 @@ type Dispatcher struct {
 	queueManagementActive   bool // tracks if queue management is currently running
 
 	// Shadow queue tracking for reliable queue management
-	shadowQueue        []ShadowQueueItem // tracks we've actually queued to Spotify
-	shadowQueueMutex   sync.RWMutex
-	lastCurrentTrackID string // track when current song changes for progression tracking
+	shadowQueue             []ShadowQueueItem // tracks we've actually queued to Spotify
+	shadowQueueMutex        sync.RWMutex
+	lastCurrentTrackID      string    // track when current song changes for progression tracking
+	lastShadowQueueModified time.Time // when shadow queue was last modified (addition/removal)
+	lastSuccessfulSync      time.Time // when sync with Spotify queue last succeeded
+	consecutiveSyncRemovals int       // count of consecutive sync operations that removed items
 
 	// Priority track registry for resume logic
 	priorityTracks      map[string]PriorityTrackInfo // track IDs of priority tracks with resume info
@@ -67,6 +70,8 @@ func NewDispatcher(
 		pendingQueueTracks:      make(map[string]string),
 		pendingApprovalMessages: make(map[string]*queueApprovalContext),
 		shadowQueue:             make([]ShadowQueueItem, 0),
+		lastShadowQueueModified: time.Now(),
+		lastSuccessfulSync:      time.Now(),
 		priorityTracks:          make(map[string]PriorityTrackInfo),
 	}
 

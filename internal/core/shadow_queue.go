@@ -3,9 +3,16 @@ package core
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
+)
+
+// Queue sync detection constants
+const (
+	ConsecutiveRemovalThreshold = 3 // Threshold for consecutive removals to trigger sync warning
+	MaxTracksInWarningMessage   = 5 // Maximum tracks to show in warning message
 )
 
 // Shadow Queue Management
@@ -53,6 +60,9 @@ func (d *Dispatcher) addToShadowQueue(trackID, source string, duration time.Dura
 	}
 
 	d.shadowQueue = append(d.shadowQueue, item)
+
+	// Update modification timestamp
+	d.lastShadowQueueModified = time.Now()
 
 	d.logger.Debug("Added track to shadow queue",
 		zap.String("trackID", trackID),
@@ -131,6 +141,9 @@ func (d *Dispatcher) handleNormalTrackProgression() {
 	for i := range d.shadowQueue {
 		d.shadowQueue[i].Position = i
 	}
+
+	// Update modification timestamp
+	d.lastShadowQueueModified = time.Now()
 }
 
 // handleManualTrackSkip handles when user manually skips to a track at position N
@@ -154,6 +167,9 @@ func (d *Dispatcher) handleManualTrackSkip(currentTrackID string, currentTrackPo
 	for i := range d.shadowQueue {
 		d.shadowQueue[i].Position = i
 	}
+
+	// Update modification timestamp
+	d.lastShadowQueueModified = time.Now()
 }
 
 // AddToQueueWithShadowTracking is an enhanced wrapper around Spotify's AddToQueue that maintains shadow queue state
@@ -281,6 +297,124 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
 	return 0
 }
 
+// checkQueueSyncStatus detects potential queue sync issues and warns admins
+func (d *Dispatcher) checkQueueSyncStatus(ctx context.Context) {
+	d.shadowQueueMutex.RLock()
+	shadowQueueSize := len(d.shadowQueue)
+	lastModified := d.lastShadowQueueModified
+	lastSync := d.lastSuccessfulSync
+	consecutiveRemovals := d.consecutiveSyncRemovals
+	d.shadowQueueMutex.RUnlock()
+
+	// Skip if shadow queue is empty (no sync issue)
+	if shadowQueueSize == 0 {
+		d.warningManager.ClearWarning(ctx, WarningTypeQueueSync)
+		return
+	}
+
+	timeoutDuration := time.Duration(d.config.App.QueueSyncWarningTimeoutMinutes) * time.Minute
+	timeSinceLastModified := time.Since(lastModified)
+	timeSinceLastSync := time.Since(lastSync)
+
+	// Detect sync issues
+	shouldWarn := false
+	var reason string
+
+	// Case 1: No modifications for a long time but shadow queue has items
+	if timeSinceLastModified > timeoutDuration {
+		shouldWarn = true
+		reason = "no queue activity"
+	}
+
+	// Case 2: Consecutive sync operations removing items (persistent desync)
+	if consecutiveRemovals >= ConsecutiveRemovalThreshold {
+		shouldWarn = true
+		reason = "persistent desync detected"
+	}
+
+	// Case 3: Shadow queue has items but sync hasn't worked recently
+	if timeSinceLastSync > timeoutDuration && shadowQueueSize > 0 {
+		shouldWarn = true
+		reason = "sync failure"
+	}
+
+	if shouldWarn && d.warningManager.ShouldSendWarning(WarningTypeQueueSync) {
+		d.logger.Warn("Queue sync issue detected",
+			zap.String("reason", reason),
+			zap.Int("shadowQueueSize", shadowQueueSize),
+			zap.Duration("timeSinceLastModified", timeSinceLastModified),
+			zap.Duration("timeSinceLastSync", timeSinceLastSync),
+			zap.Int("consecutiveRemovals", consecutiveRemovals))
+
+		d.sendQueueSyncWarning(ctx)
+	} else if !shouldWarn {
+		// Clear warning if sync issue is resolved
+		d.warningManager.ClearWarning(ctx, WarningTypeQueueSync)
+	}
+}
+
+// sendQueueSyncWarning sends a warning to admins about queue sync issues
+func (d *Dispatcher) sendQueueSyncWarning(ctx context.Context) {
+	groupID := d.getGroupID()
+	if groupID == "" {
+		return
+	}
+
+	// Get admin user IDs
+	adminUserIDs, err := d.frontend.GetAdminUserIDs(ctx, groupID)
+	if err != nil {
+		d.logger.Warn("Failed to get admin user IDs for queue sync warning", zap.Error(err))
+		return
+	}
+
+	if len(adminUserIDs) == 0 {
+		d.logger.Debug("No admin users found for queue sync warning")
+		return
+	}
+
+	// Generate warning message with current queue tracks
+	warningMessage := d.generateQueueSyncWarningMessage()
+
+	// Send warning to admins
+	if err := d.warningManager.SendWarningToAdmins(ctx, WarningTypeQueueSync, adminUserIDs, warningMessage); err != nil {
+		d.logger.Warn("Failed to send queue sync warning", zap.Error(err))
+	}
+}
+
+// generateQueueSyncWarningMessage creates a warning message with current queue tracks
+func (d *Dispatcher) generateQueueSyncWarningMessage() string {
+	d.shadowQueueMutex.RLock()
+	shadowQueue := make([]ShadowQueueItem, len(d.shadowQueue))
+	copy(shadowQueue, d.shadowQueue)
+	d.shadowQueueMutex.RUnlock()
+
+	if len(shadowQueue) == 0 {
+		return d.localizer.T("admin.queue_sync_warning", "No tracks currently queued")
+	}
+
+	// Build track list with Spotify links
+	var trackList strings.Builder
+	for i, item := range shadowQueue {
+		if i >= MaxTracksInWarningMessage { // Limit to first 5 tracks to avoid very long messages
+			remaining := len(shadowQueue) - i
+			trackList.WriteString(fmt.Sprintf("... and %d more tracks", remaining))
+			break
+		}
+
+		// Get track details
+		track, err := d.spotify.GetTrack(context.Background(), item.TrackID)
+		if err != nil {
+			trackList.WriteString(fmt.Sprintf("• Unknown Track (ID: %s)\n", item.TrackID))
+			continue
+		}
+
+		// Format track with Spotify link
+		trackList.WriteString(fmt.Sprintf("• %s - %s 🔗 %s\n", track.Artist, track.Title, track.URL))
+	}
+
+	return d.localizer.T("admin.queue_sync_warning", trackList.String())
+}
+
 // runShadowQueueMaintenance performs periodic maintenance on the shadow queue
 func (d *Dispatcher) runShadowQueueMaintenance(ctx context.Context) {
 	maintenanceInterval := time.Duration(d.config.App.ShadowQueueMaintenanceIntervalSecs) * time.Second
@@ -333,6 +467,12 @@ func (d *Dispatcher) removeOldShadowQueueItems() int {
 	}
 
 	d.shadowQueue = cleanedQueue
+
+	// Update modification timestamp if items were removed
+	if removedCount > 0 {
+		d.lastShadowQueueModified = time.Now()
+	}
+
 	return removedCount
 }
 
@@ -398,6 +538,9 @@ func (d *Dispatcher) performShadowQueueMaintenance(ctx context.Context) {
 
 	// Remove old priority items (priority tracks no longer active)
 	d.removeOldPriorityItems(ctx)
+
+	// Check for queue sync issues and warn admins if needed
+	d.checkQueueSyncStatus(ctx)
 }
 
 // synchronizeWithSpotifyQueue synchronizes the shadow queue with the actual Spotify queue state
@@ -449,10 +592,20 @@ func (d *Dispatcher) synchronizeWithSpotifyQueue(ctx context.Context) {
 	d.shadowQueue = syncedQueue
 	afterSyncCount := len(d.shadowQueue)
 
-	if beforeSyncCount != afterSyncCount {
+	// Update sync tracking
+	removedItems := beforeSyncCount - afterSyncCount
+	d.lastSuccessfulSync = time.Now()
+
+	if removedItems > 0 {
+		d.consecutiveSyncRemovals++
+		d.lastShadowQueueModified = time.Now()
 		d.logger.Debug("Shadow queue synchronized with Spotify queue",
-			zap.Int("removedItems", beforeSyncCount-afterSyncCount),
+			zap.Int("removedItems", removedItems),
 			zap.Int("remainingItems", afterSyncCount),
-			zap.Int("spotifyQueueItems", len(spotifyTrackIDs)))
+			zap.Int("spotifyQueueItems", len(spotifyTrackIDs)),
+			zap.Int("consecutiveSyncRemovals", d.consecutiveSyncRemovals))
+	} else {
+		// Reset consecutive removals counter if no items were removed
+		d.consecutiveSyncRemovals = 0
 	}
 }

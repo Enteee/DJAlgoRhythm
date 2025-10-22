@@ -93,4 +93,9 @@ var englishMessages = map[string]string{
 		"• Make the bot an administrator in the group\n" +
 		"• Some bot features require admin status to work correctly\n\n" +
 		"💡 Admin permissions enable the bot to receive events and manage group interactions.",
+
+	// Queue sync notifications
+	"admin.queue_sync_warning": "🚨 Queue Sync Issue Detected!\n\n" +
+		"The queue may be out of sync. Queued tracks:\n%s\n" +
+		"💡 To fix: Play any of the above tracks in Spotify to resync the queue.",
 }

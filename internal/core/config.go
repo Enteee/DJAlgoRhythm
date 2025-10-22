@@ -24,6 +24,7 @@ const (
 	DefaultShadowQueueMaintenanceIntervalSecs = 30
 	DefaultShadowQueueMaxAgeHours             = 2
 	DefaultShadowQueuePreferenceEnabled       = true
+	DefaultQueueSyncWarningTimeoutMinutes     = 30
 )
 
 type Config struct {
@@ -95,6 +96,7 @@ type AppConfig struct {
 	ShadowQueueMaintenanceIntervalSecs int    // Shadow queue maintenance interval in seconds
 	ShadowQueueMaxAgeHours             int    // Maximum age of shadow queue items in hours
 	ShadowQueuePreferenceEnabled       bool   // Prefer shadow queue over Spotify API for position/duration
+	QueueSyncWarningTimeoutMinutes     int    // Timeout for queue sync warning in minutes
 }
 
 func DefaultConfig() *Config {
@@ -141,6 +143,7 @@ func DefaultConfig() *Config {
 			ShadowQueueMaintenanceIntervalSecs: DefaultShadowQueueMaintenanceIntervalSecs,
 			ShadowQueueMaxAgeHours:             DefaultShadowQueueMaxAgeHours,
 			ShadowQueuePreferenceEnabled:       DefaultShadowQueuePreferenceEnabled,
+			QueueSyncWarningTimeoutMinutes:     DefaultQueueSyncWarningTimeoutMinutes,
 		},
 	}
 }
