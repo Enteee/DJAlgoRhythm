@@ -49,29 +49,19 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 		zap.Int("count", len(initialSpotifyTracks)))
 
 	// Stage 2: LLM ranking of Spotify results with user context (or extraction if no results)
-	var rankedCandidates []LLMCandidate
+	var rankedTracks []Track
 
 	if len(initialSpotifyTracks) > 0 {
 		d.logger.Debug("Stage 2: LLM ranking of Spotify results")
-		spotifyContext := d.buildSpotifyContextForLLM(initialSpotifyTracks, msgCtx.Input.Text)
-		rankedCandidates, err = d.llm.RankCandidates(ctx, spotifyContext)
+		rankedTracks = d.llm.RankTracks(ctx, msgCtx.Input.Text, initialSpotifyTracks)
 	} else {
-		d.logger.Debug("Stage 2: No initial Spotify results, using LLM extraction")
-		rankedCandidates, err = d.llm.RankCandidates(ctx, msgCtx.Input.Text)
-	}
-	if err != nil {
-		d.logger.Error("LLM ranking failed", zap.Error(err))
-		if len(initialSpotifyTracks) > 0 {
-			// Fallback to Spotify results without LLM ranking
-			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
-		} else {
-			d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.llm.understand"))
-		}
+		d.logger.Debug("Stage 2: No initial Spotify results, cannot process without tracks")
+		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.no_matches"))
 		return
 	}
 
-	if len(rankedCandidates) == 0 {
-		d.logger.Warn("LLM returned no ranked candidates")
+	if len(rankedTracks) == 0 {
+		d.logger.Warn("LLM returned no ranked tracks")
 		if len(initialSpotifyTracks) > 0 {
 			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
 		} else {
@@ -81,9 +71,19 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 	}
 
 	d.logger.Info("Stage 2 complete: LLM ranked Spotify results",
-		zap.Int("count", len(rankedCandidates)),
+		zap.Int("count", len(rankedTracks)),
 		zap.String("top_candidate", fmt.Sprintf("%s - %s",
-			rankedCandidates[0].Track.Artist, rankedCandidates[0].Track.Title)))
+			rankedTracks[0].Artist, rankedTracks[0].Title)))
+
+	// Convert tracks to LLMCandidates for compatibility with existing Stage 3 logic
+	var rankedCandidates []LLMCandidate
+	for _, track := range rankedTracks {
+		rankedCandidates = append(rankedCandidates, LLMCandidate{
+			Track:      track,
+			Confidence: 1.0, // Default confidence since RankTracks doesn't provide it
+			Reasoning:  "Ranked by LLM",
+		})
+	}
 
 	// Stage 3: Enhanced disambiguation with more targeted Spotify search
 	d.enhancedLLMDisambiguate(ctx, msgCtx, originalMsg, rankedCandidates)
@@ -140,19 +140,21 @@ func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *Messag
 	// Stage 3b: Final LLM ranking of targeted Spotify results
 	d.logger.Debug("Stage 3b: Final LLM ranking of targeted results")
 
-	spotifyContext := d.buildSpotifyContextForLLM(allSpotifyTracks, msgCtx.Input.Text)
-	finalCandidates, err := d.llm.RankCandidates(ctx, spotifyContext)
-	if err != nil {
-		d.logger.Error("Final LLM ranking failed", zap.Error(err))
-		// Fallback to targeted Spotify search results
+	finalTracks := d.llm.RankTracks(ctx, msgCtx.Input.Text, allSpotifyTracks)
+	if len(finalTracks) == 0 {
+		d.logger.Warn("Final LLM returned no tracks, using targeted Spotify results")
 		d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, allSpotifyTracks)
 		return
 	}
 
-	if len(finalCandidates) == 0 {
-		d.logger.Warn("Final LLM returned no candidates, using targeted Spotify results")
-		d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, allSpotifyTracks)
-		return
+	// Convert final tracks to LLMCandidates for compatibility with existing logic
+	var finalCandidates []LLMCandidate
+	for _, track := range finalTracks {
+		finalCandidates = append(finalCandidates, LLMCandidate{
+			Track:      track,
+			Confidence: 1.0, // Default confidence since RankTracks doesn't provide it
+			Reasoning:  "Final LLM ranking",
+		})
 	}
 
 	d.logger.Info("Stage 3b complete: Final ranking finished",
@@ -181,25 +183,6 @@ func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *Messag
 	} else {
 		d.clarifyAsk(ctx, msgCtx, originalMsg, &best)
 	}
-}
-
-// buildSpotifyContextForLLM creates enhanced context for LLM re-ranking
-func (d *Dispatcher) buildSpotifyContextForLLM(tracks []Track, originalText string) string {
-	context := fmt.Sprintf("User said: %q\n\nAvailable songs from Spotify:\n", originalText)
-
-	for i, track := range tracks {
-		context += fmt.Sprintf("%d. %s - %s", i+1, track.Artist, track.Title)
-		if track.Album != "" {
-			context += fmt.Sprintf(" (Album: %s)", track.Album)
-		}
-		if track.Year > 0 {
-			context += fmt.Sprintf(" (%d)", track.Year)
-		}
-		context += "\n"
-	}
-
-	context += "\nPlease rank these songs based on how well they match what the user is looking for."
-	return context
 }
 
 // matchSpotifyTrackData matches LLM candidates back to original Spotify tracks to restore URLs and IDs

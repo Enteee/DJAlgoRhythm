@@ -1,3 +1,4 @@
+// Package llm provides LLM (Large Language Model) integration for music request processing.
 package llm
 
 import (
@@ -20,23 +21,14 @@ type OpenAIClient struct {
 	client *openai.Client
 }
 
-type OpenAIResponse struct {
-	Candidates []struct {
-		Title      string  `json:"title"`
-		Artist     string  `json:"artist"`
-		Album      string  `json:"album,omitempty"`
-		Year       int     `json:"year,omitempty"`
-		Confidence float64 `json:"confidence"`
-		Reasoning  string  `json:"reasoning,omitempty"`
-	} `json:"candidates"`
-}
-
 const (
 	defaultTemperature    = 0.1
+	rankingTemperature    = 0.3
 	maxTokensRanking      = 1000
 	maxTokensChatter      = 200
 	maxTokensPriority     = 200
 	maxTokensSearchQuery  = 50
+	maxTokensTrackRanking = 100
 	maxSeedTracksInPrompt = 3
 	defaultModel          = "gpt-3.5-turbo"
 )
@@ -60,78 +52,6 @@ func NewOpenAIClient(config *core.LLMConfig, logger *zap.Logger) (*OpenAIClient,
 		logger: logger,
 		client: &client,
 	}, nil
-}
-
-func (o *OpenAIClient) RankCandidates(ctx context.Context, text string) ([]core.LLMCandidate, error) {
-	if strings.TrimSpace(text) == "" {
-		return nil, fmt.Errorf("empty text provided")
-	}
-
-	prompt := o.buildRankCandidatesPrompt(text)
-
-	o.logger.Debug("Calling OpenAI for candidate ranking",
-		zap.String("text", text),
-		zap.String("model", o.config.Model))
-
-	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(prompt),
-			openai.UserMessage(text),
-		},
-		Model:       o.getModel(),
-		Temperature: openai.Float(defaultTemperature),
-		MaxTokens:   openai.Int(maxTokensRanking),
-	})
-	if err != nil {
-		o.logger.Error("OpenAI API call failed", zap.Error(err))
-		return nil, fmt.Errorf("OpenAI API call failed: %w", err)
-	}
-
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response from OpenAI")
-	}
-
-	content := resp.Choices[0].Message.Content
-	o.logger.Debug("OpenAI response received", zap.String("content", content))
-
-	var response OpenAIResponse
-	if err := json.Unmarshal([]byte(content), &response); err != nil {
-		o.logger.Error("Failed to parse OpenAI response",
-			zap.Error(err),
-			zap.String("content", content))
-		return nil, fmt.Errorf("failed to parse OpenAI response: %w", err)
-	}
-
-	var candidates []core.LLMCandidate
-	for _, candidate := range response.Candidates {
-		if candidate.Confidence < o.config.Threshold {
-			o.logger.Debug("Skipping low confidence candidate",
-				zap.String("title", candidate.Title),
-				zap.String("artist", candidate.Artist),
-				zap.Float64("confidence", candidate.Confidence),
-				zap.Float64("threshold", o.config.Threshold))
-			continue
-		}
-
-		track := core.Track{
-			Title:  candidate.Title,
-			Artist: candidate.Artist,
-			Album:  candidate.Album,
-			Year:   candidate.Year,
-		}
-
-		candidates = append(candidates, core.LLMCandidate{
-			Track:      track,
-			Confidence: candidate.Confidence,
-			Reasoning:  candidate.Reasoning,
-		})
-	}
-
-	o.logger.Info("OpenAI candidate ranking completed",
-		zap.Int("total_candidates", len(response.Candidates)),
-		zap.Int("filtered_candidates", len(candidates)))
-
-	return candidates, nil
 }
 
 type ChatterDetectionResponse struct {
@@ -295,51 +215,72 @@ func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []cor
 	return searchQuery, nil
 }
 
+func (o *OpenAIClient) RankTracks(ctx context.Context, searchQuery string, tracks []core.Track) []core.Track {
+	if len(tracks) == 0 {
+		return tracks
+	}
+
+	if len(tracks) == 1 {
+		// No need to rank a single track
+		return tracks
+	}
+
+	o.logger.Debug("Calling OpenAI for track ranking",
+		zap.String("searchQuery", searchQuery),
+		zap.Int("trackCount", len(tracks)))
+
+	// Create a prompt for ranking tracks based on search query relevance
+	prompt := fmt.Sprintf("You are a music expert. Given the search query %q, rank these tracks by "+
+		"how well they match the search intent.\n\nTracks to rank:\n", searchQuery)
+	for i, track := range tracks {
+		prompt += fmt.Sprintf("%d. %s by %s", i+1, track.Title, track.Artist)
+		if track.Album != "" {
+			prompt += fmt.Sprintf(" (from %s)", track.Album)
+		}
+		prompt += "\n"
+	}
+	prompt += fmt.Sprintf("\nRespond with only the track numbers in order of best match first "+
+		"(e.g., \"3,1,5,2,4\"). Consider genre, mood, tempo, and lyrical themes that would "+
+		"match the search query %q.", searchQuery)
+
+	// Use OpenAI to rank the tracks
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage("You are a music expert helping to rank tracks by relevance to a search query."),
+			openai.UserMessage(prompt),
+		},
+		Model:       o.getModel(),
+		Temperature: openai.Float(rankingTemperature),  // Lower temperature for more consistent ranking
+		MaxTokens:   openai.Int(maxTokensTrackRanking), // Short response expected
+	})
+	if err != nil {
+		o.logger.Warn("Failed to rank tracks with OpenAI, using original order", zap.Error(err))
+		return tracks // Fallback to original order
+	}
+
+	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
+		o.logger.Warn("OpenAI returned empty response for track ranking, using original order")
+		return tracks
+	}
+
+	// Parse the ranking response
+	rankingText := strings.TrimSpace(resp.Choices[0].Message.Content)
+	rankedTracks := parseTrackRanking(rankingText, tracks, o.logger)
+
+	o.logger.Info("Ranked tracks with OpenAI",
+		zap.String("searchQuery", searchQuery),
+		zap.Int("originalCount", len(tracks)),
+		zap.Int("rankedCount", len(rankedTracks)),
+		zap.String("ranking", rankingText))
+
+	return rankedTracks
+}
+
 func (o *OpenAIClient) getModel() shared.ChatModel {
 	if o.config.Model != "" {
 		return o.config.Model
 	}
 	return defaultModel
-}
-
-func (o *OpenAIClient) buildRankCandidatesPrompt(_ string) string {
-	return `You are a music expert helping to identify songs from user messages.
-
-Your task is to analyze the user's message and identify potential song candidates. The user might mention:
-- Song title and artist
-- Just a song title
-- Just an artist name
-- Lyrics or parts of lyrics
-- Album name
-- Description of a song
-
-Respond with a JSON object in this exact format:
-{
-  "candidates": [
-    {
-      "title": "Song Title",
-      "artist": "Artist Name",
-      "album": "Album Name (optional)",
-      "year": 2023,
-      "confidence": 0.85,
-      "reasoning": "Why this is likely the correct song"
-    }
-  ]
-}
-
-Rules:
-1. confidence should be between 0.0 and 1.0
-2. Only include candidates you're reasonably confident about (>0.5)
-3. Order by confidence (highest first)
-4. Include up to 3 candidates maximum
-5. Be conservative - if unclear, use lower confidence scores
-6. If no clear song can be identified, return empty candidates array
-
-Examples of good confidence scoring:
-- 0.9+: Exact title + artist match
-- 0.7-0.9: Title + artist with minor variations
-- 0.5-0.7: Partial matches or common song references
-- <0.5: Unclear or very uncertain matches`
 }
 
 func (o *OpenAIClient) buildChatterDetectionPrompt() string {

@@ -132,7 +132,7 @@ type SpotifyClient interface {
 	SetTargetPlaylist(playlistID string)
 	GetNextPlaylistTracks(ctx context.Context, count int) ([]Track, error)
 	GetNextPlaylistTracksFromPosition(ctx context.Context, startPosition, count int) ([]Track, error)
-	GetQueueManagementTrack(ctx context.Context) (string, error)
+	GetRecommendedTrack(ctx context.Context) (string, error)
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
 	SetShuffle(ctx context.Context, shuffle bool) error
 	SetRepeat(ctx context.Context, state string) error
@@ -141,7 +141,7 @@ type SpotifyClient interface {
 }
 
 type LLMProvider interface {
-	RankCandidates(ctx context.Context, text string) ([]LLMCandidate, error)
+	RankTracks(ctx context.Context, searchQuery string, tracks []Track) []Track
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
 	GenerateSearchQuery(ctx context.Context, seedTracks []Track) (string, error)

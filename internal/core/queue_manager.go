@@ -364,7 +364,7 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
 
 	// Always use the unified approval workflow
-	trackID, err := d.spotify.GetQueueManagementTrack(ctx)
+	trackID, err := d.spotify.GetRecommendedTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get queue-filling track", zap.Error(err))
 		return
@@ -527,7 +527,7 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
 
 	// Always use the unified approval workflow
-	newTrackID, err := d.spotify.GetQueueManagementTrack(ctx)
+	newTrackID, err := d.spotify.GetRecommendedTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get replacement queue track", zap.Error(err))
 		d.resetQueueManagementFlag()
