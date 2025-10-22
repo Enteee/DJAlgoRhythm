@@ -210,7 +210,8 @@ func (d *Dispatcher) convertToInputMessage(msg *chat.Message) InputMessage {
 		urls = msg.URLs
 		// Check if any URL is a Spotify link
 		for _, url := range msg.URLs {
-			if strings.Contains(url, "spotify.com") || strings.Contains(url, "spotify:") {
+			if strings.Contains(url, "spotify.com") || strings.Contains(url, "spotify:") ||
+				strings.Contains(url, "spotify.link") || strings.Contains(url, "spotify.app.link") {
 				msgType = MessageTypeSpotifyLink
 				break
 			}
