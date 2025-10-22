@@ -36,12 +36,14 @@ var berneseGermanMessages = map[string]string{
 	"admin.button_deny":    "❌ Ablehnä",
 
 	// Success messages
-	"success.track_added":                    "Hinzuegfüegt: %s - %s (%s)",
-	"success.track_added_with_queue":         "Hinzuegfüegt: %s - %s (%s) - Warteschlange-Position: %d",
-	"success.admin_approved_and_added":       "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
-	"success.admin_approved_and_added_queue": "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s) - Warteschlange-Position: %d",
-	"success.track_priority_playing":         "🚀 Spielt jetzt: %s - %s (%s)",
-	"success.duplicate":                      "Isch scho i dr Playlist.",
+	"success.track_added":                        "Hinzuegfüegt: %s - %s (%s)",
+	"success.track_added_with_queue":             "Hinzuegfüegt: %s - %s (%s) - Warteschlange-Position: %d",
+	"success.admin_approved_and_added":           "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
+	"success.admin_approved_and_added_queue":     "✅ Admin hets guetgeheisse und hinzuegfüegt: %s - %s (%s) - Warteschlange-Position: %d",
+	"success.community_approved_and_added":       "✅ Community hets guetgeheisse und hinzuegfüegt: %s - %s (%s)",
+	"success.community_approved_and_added_queue": "✅ Community hets guetgeheisse und hinzuegfüegt: %s - %s (%s) - Warteschlange-Position: %d",
+	"success.track_priority_playing":             "🚀 Spielt jetzt: %s - %s (%s)",
+	"success.duplicate":                          "Isch scho i dr Playlist.",
 
 	// Callback messages
 	"callback.approved":       "✅ Lied isch vom Admin guet geheisse worde.",
@@ -63,7 +65,7 @@ var berneseGermanMessages = map[string]string{
 
 	// Queue management messages
 	"bot.queue_management": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
-		"💭 Bitte füegt meh Lieder hinzu dass d Musig wiiter geit!",
+		"💭 Bitte füegt meh Lieder hinzu dass d Musig witer geit!",
 	"bot.queue_management_auto": "🤖 D Playlist wird chlii läär! Automatisch hinzuegfüegt: %s - %s\n%s\n\n" +
 		"✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
 	"bot.queue_replacement":        "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",

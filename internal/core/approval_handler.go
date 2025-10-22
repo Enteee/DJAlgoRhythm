@@ -234,7 +234,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 
 	if !supportsAdminApproval {
 		d.logger.Error("Frontend doesn't support admin approval, proceeding without")
-		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
 
@@ -365,7 +365,7 @@ func (d *Dispatcher) handleApprovalResult(
 			zap.String("approval_source", approvalSource))
 
 		// Skip individual approval message - will be combined with success message
-		d.executePlaylistAddAfterApproval(ctx, msgCtx, originalMsg, trackID)
+		d.executePlaylistAddAfterApproval(ctx, msgCtx, originalMsg, trackID, approvalSource)
 	} else {
 		d.logger.Info("Song addition denied",
 			zap.String("user", originalMsg.SenderName),
@@ -388,10 +388,46 @@ func (d *Dispatcher) handleApprovalResult(
 	}
 }
 
-// executePlaylistAddAfterApproval performs playlist addition after admin approval
+// executePlaylistAddAfterApproval performs playlist addition after approval with appropriate messaging
 func (d *Dispatcher) executePlaylistAddAfterApproval(
-	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
-	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, true)
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, approvalSource string) {
+	msgCtx.State = StateAddToPlaylist
+
+	// Add track to playlist
+	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
+		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+			d.logger.Error("Failed to add to playlist",
+				zap.String("trackID", trackID),
+				zap.Int("retry", retry),
+				zap.Error(err))
+
+			if retry == d.config.App.MaxRetries-1 {
+				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
+				return
+			}
+
+			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
+			continue
+		}
+
+		d.dedup.Add(trackID)
+
+		// React with thumbs up
+		if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsUpReaction); reactErr != nil {
+			d.logger.Error("Failed to react with thumbs up", zap.Error(reactErr))
+		}
+
+		// Send appropriate success message based on approval source
+		if approvalSource == "admin" {
+			d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
+		} else if approvalSource == "community" {
+			d.reactAddedAfterCommunityApproval(ctx, msgCtx, originalMsg, trackID)
+		} else {
+			// Fallback for unknown approval sources
+			d.reactAdded(ctx, msgCtx, originalMsg, trackID)
+		}
+		return
+	}
 }
 
 // sendQueueTrackApprovalMessage sends an queue approval message with fallback to regular text

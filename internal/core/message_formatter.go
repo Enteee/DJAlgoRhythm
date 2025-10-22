@@ -25,6 +25,12 @@ func (d *Dispatcher) reactAddedAfterApproval(ctx context.Context, msgCtx *Messag
 	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.admin_approved_and_added")
 }
 
+// reactAddedAfterCommunityApproval reacts to successfully added tracks after community approval
+func (d *Dispatcher) reactAddedAfterCommunityApproval(
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
+	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.community_approved_and_added")
+}
+
 // reactPriorityQueued reacts to priority tracks that were queued successfully
 func (d *Dispatcher) reactPriorityQueued(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	d.reactAddedWithMessage(ctx, msgCtx, originalMsg, trackID, "success.track_priority_playing")

@@ -52,7 +52,7 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 		return
 	}
 
-	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+	d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID)
 }
 
 // executePriorityQueue adds priority track to queue and playlist
@@ -65,7 +65,7 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 		d.logger.Error("Failed to get track details for priority queue",
 			zap.String("trackID", trackID),
 			zap.Error(err))
-		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
 
@@ -76,7 +76,7 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 			zap.String("trackID", trackID),
 			zap.Error(queueErr))
 		// If queue fails, fall back to regular playlist addition
-		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID, false)
+		d.executePlaylistAddWithReaction(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
 
@@ -123,9 +123,9 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 	}
 }
 
-// executePlaylistAddWithReaction performs the actual playlist addition with appropriate reaction based on approval status
+// executePlaylistAddWithReaction performs the actual playlist addition with appropriate reaction
 func (d *Dispatcher) executePlaylistAddWithReaction(
-	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string, wasAdminApproved bool) {
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.State = StateAddToPlaylist
 
 	// Add track to playlist
@@ -146,12 +146,7 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 		}
 
 		d.dedup.Add(trackID)
-
-		if wasAdminApproved {
-			d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
-		} else {
-			d.reactAdded(ctx, msgCtx, originalMsg, trackID)
-		}
+		d.reactAdded(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
 }
