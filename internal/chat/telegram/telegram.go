@@ -431,6 +431,14 @@ func (f *Frontend) handleMessage(_ context.Context, msg *models.Message) {
 		return
 	}
 
+	// Check if this is a service message and ignore it
+	if f.isServiceMessage(msg) {
+		f.logger.Debug("Ignoring service message",
+			zap.String("type", f.getServiceMessageType(msg)),
+			zap.String("text", msg.Text))
+		return
+	}
+
 	// Extract URLs from the message
 	urls := f.extractURLs(msg)
 
@@ -1692,4 +1700,61 @@ func (f *Frontend) GetChatMember(ctx context.Context, chatID, userID int64) (*ch
 	}
 
 	return chatMember, nil
+}
+
+// isServiceMessage checks if a message is a service message that should be ignored
+func (f *Frontend) isServiceMessage(msg *models.Message) bool {
+	// Check for member-related service messages
+	if len(msg.NewChatMembers) > 0 || msg.LeftChatMember != nil {
+		return true
+	}
+
+	// Check for chat setting changes
+	if msg.NewChatTitle != "" || msg.NewChatPhoto != nil || msg.DeleteChatPhoto {
+		return true
+	}
+
+	// Check for group creation events
+	if msg.GroupChatCreated || msg.SupergroupChatCreated || msg.ChannelChatCreated {
+		return true
+	}
+
+	// Check for other service message types
+	if msg.MessageAutoDeleteTimerChanged != nil {
+		return true
+	}
+
+	return false
+}
+
+// getServiceMessageType returns a description of the service message type for logging
+func (f *Frontend) getServiceMessageType(msg *models.Message) string {
+	if len(msg.NewChatMembers) > 0 {
+		return "new_chat_members"
+	}
+	if msg.LeftChatMember != nil {
+		return "left_chat_member"
+	}
+	if msg.NewChatTitle != "" {
+		return "new_chat_title"
+	}
+	if msg.NewChatPhoto != nil {
+		return "new_chat_photo"
+	}
+	if msg.DeleteChatPhoto {
+		return "delete_chat_photo"
+	}
+	if msg.GroupChatCreated {
+		return "group_chat_created"
+	}
+	if msg.SupergroupChatCreated {
+		return "supergroup_chat_created"
+	}
+	if msg.ChannelChatCreated {
+		return "channel_chat_created"
+	}
+	if msg.MessageAutoDeleteTimerChanged != nil {
+		return "message_auto_delete_timer_changed"
+	}
+	return "unknown_service_message"
 }
