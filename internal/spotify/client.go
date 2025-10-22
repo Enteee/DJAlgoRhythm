@@ -20,6 +20,7 @@ import (
 
 	"whatdj/internal/core"
 	"whatdj/pkg/fuzzy"
+	"whatdj/pkg/text"
 )
 
 const (
@@ -27,36 +28,18 @@ const (
 	MinValidYear = 1950
 	// FilePermission is the permission for token files
 	FilePermission = 0600
-	// MinTracksForEndDetection is the minimum tracks needed for end-of-playlist detection
-	MinTracksForEndDetection = 3
-	// EndOfPlaylistThreshold is the number of tracks from the end to consider "near end"
-	EndOfPlaylistThreshold = 3
 	// RecommendationSeedTracks is the number of recent tracks to use as seeds for recommendations
 	RecommendationSeedTracks = 5
 	// SpotifyIDLength is the expected length of a Spotify track/artist/album ID
 	SpotifyIDLength = 22
 	// MaxSearchResults is the maximum number of search results to return
 	MaxSearchResults = 10
-	// SearchResultsMultiplier is used to get more search results for better filtering
-	SearchResultsMultiplier = 2
 	// MaxPlaylistTracks is a reasonable upper bound for playlist track count conversion
 	MaxPlaylistTracks = 1000
 	// ReleaseDateYearLength is the expected length of a release date year string
 	ReleaseDateYearLength = 4
-	// URLResolveTimeout is the timeout for resolving shortened URLs
-	URLResolveTimeout = 10 * time.Second
-	// MaxRedirects is the maximum number of redirects to follow
-	MaxRedirects = 10
-	// ReadBufferSize is the buffer size for reading page content
-	ReadBufferSize = 8192
-	// SpotifyAppLinkDomain is the domain for Spotify app links
-	SpotifyAppLinkDomain = "spotify.app.link"
 	// UnknownArtist is the default value when artist name is not available
 	UnknownArtist = "Unknown"
-	// PlaybackStartDelay is the delay to wait for playback to start
-	PlaybackStartDelay = 500 * time.Millisecond
-	// SkipDelay is the delay between track skips to avoid rate limiting
-	SkipDelay = 100 * time.Millisecond
 
 	// RepeatStateTrack represents the "track" repeat state
 	RepeatStateTrack = "track"
@@ -64,16 +47,6 @@ const (
 	RepeatStateOff = "off"
 	// RepeatStateContext represents the "context" repeat state
 	RepeatStateContext = "context"
-	// DefaultStatusNone represents the default "none" status
-	DefaultStatusNone = "none"
-
-	// QueueClearDelay is the delay to wait for queue clearing
-	QueueClearDelay = 500 * time.Millisecond
-	// TrackAddDelay is the delay between track additions to avoid rate limits
-	TrackAddDelay = 100 * time.Millisecond
-
-	// MaxVolume is the maximum volume level (0-100)
-	MaxVolume = 100
 )
 
 var (
@@ -731,13 +704,13 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]st
 
 // resolveShortURL resolves shortened Spotify URLs to their final destination
 func (c *Client) resolveShortURL(shortURL string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), URLResolveTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), text.URLResolveTimeout)
 	defer cancel()
 
 	client := &http.Client{
-		Timeout: URLResolveTimeout,
+		Timeout: text.URLResolveTimeout,
 		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
-			if len(via) >= MaxRedirects {
+			if len(via) >= text.MaxRedirects {
 				return http.ErrUseLastResponse
 			}
 			return nil
@@ -772,7 +745,7 @@ func (c *Client) resolveShortURL(shortURL string) (string, error) {
 	}
 
 	// If still a shortened URL, try fetching page content
-	if hostname == SpotifyAppLinkDomain {
+	if hostname == text.SpotifyAppLinkDomain {
 		return c.resolveWithPageContent(shortURL)
 	}
 
@@ -781,10 +754,10 @@ func (c *Client) resolveShortURL(shortURL string) (string, error) {
 
 // resolveWithPageContent fetches page content to extract Spotify URL
 func (c *Client) resolveWithPageContent(shortURL string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), URLResolveTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), text.URLResolveTimeout)
 	defer cancel()
 
-	client := &http.Client{Timeout: URLResolveTimeout}
+	client := &http.Client{Timeout: text.URLResolveTimeout}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", shortURL, http.NoBody)
 	if err != nil {
@@ -802,7 +775,7 @@ func (c *Client) resolveWithPageContent(shortURL string) (string, error) {
 	defer resp.Body.Close()
 
 	// Read page content to extract Spotify URL
-	buf := make([]byte, ReadBufferSize)
+	buf := make([]byte, text.ReadBufferSize)
 	n, _ := resp.Body.Read(buf)
 	content := string(buf[:n])
 
@@ -835,7 +808,7 @@ func (c *Client) ExtractTrackID(rawURL string) (string, error) {
 
 	// Handle shortened URLs by resolving them first
 	hostname := strings.ToLower(u.Hostname())
-	if hostname == "spotify.link" || hostname == SpotifyAppLinkDomain {
+	if hostname == "spotify.link" || hostname == text.SpotifyAppLinkDomain {
 		resolvedURL, err := c.resolveShortURL(rawURL)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve shortened URL: %w", err)
