@@ -384,7 +384,8 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 	d.queueManagementMutex.Unlock()
 
 	// Send approval message to group (will auto-approve if rejection limit exceeded)
-	d.sendQueueTrackApprovalMessage(ctx, trackID, track, "bot.queue_management", "queue management track", autoApprove)
+	messageKey := getQueueApprovalMessageKey("bot.queue_management", autoApprove)
+	d.sendQueueTrackApprovalMessage(ctx, trackID, track, messageKey, "queue management track", autoApprove)
 
 	if autoApprove {
 		d.logger.Info("Auto-approving queue-filling track after rejection limit",
@@ -547,7 +548,8 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 	d.queueManagementMutex.Unlock()
 
 	// Send message to chat about the replacement track (will auto-approve if rejection limit exceeded)
-	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, "bot.queue_replacement", "replacement queue track", autoApprove)
+	messageKey := getQueueApprovalMessageKey("bot.queue_replacement", autoApprove)
+	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, messageKey, "replacement queue track", autoApprove)
 
 	if autoApprove {
 		d.logger.Info("Auto-approving replacement track after rejection limit",

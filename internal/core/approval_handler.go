@@ -430,6 +430,21 @@ func (d *Dispatcher) executePlaylistAddAfterApproval(
 	}
 }
 
+// getQueueApprovalMessageKey determines the correct message key based on auto-approval status
+func getQueueApprovalMessageKey(baseKey string, autoApprove bool) string {
+	if !autoApprove {
+		return baseKey
+	}
+	switch baseKey {
+	case "bot.queue_management":
+		return "bot.queue_management_auto"
+	case "bot.queue_replacement":
+		return "bot.queue_replacement_auto"
+	default:
+		return baseKey
+	}
+}
+
 // sendQueueTrackApprovalMessage sends an queue approval message with fallback to regular text
 func (d *Dispatcher) sendQueueTrackApprovalMessage(
 	ctx context.Context, trackID string, track *Track, messageKey, logContext string, autoApprove bool,
@@ -439,18 +454,7 @@ func (d *Dispatcher) sendQueueTrackApprovalMessage(
 		return
 	}
 
-	// Choose message based on auto-approval status
-	actualMessageKey := messageKey
-	if autoApprove {
-		// Use auto-approval variant of the message
-		if messageKey == "bot.queue_management" {
-			actualMessageKey = "bot.queue_management_auto"
-		} else if messageKey == "bot.queue_replacement" {
-			actualMessageKey = "bot.queue_replacement_auto"
-		}
-	}
-
-	message := d.localizer.T(actualMessageKey, track.Artist, track.Title, track.URL)
+	message := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
 
 	if autoApprove {
 		// For auto-approval: send plain text message (no interactive buttons)
