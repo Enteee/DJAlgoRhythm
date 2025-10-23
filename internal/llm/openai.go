@@ -170,7 +170,7 @@ func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []cor
 	}
 
 	// Create a prompt describing the seed tracks
-	prompt := "Based on these recent songs in a playlist:\n"
+	prompt := "Based on all these songs in a playlist:\n"
 	for i, track := range seedTracks {
 		if i >= maxSeedTracksInPrompt {
 			break
