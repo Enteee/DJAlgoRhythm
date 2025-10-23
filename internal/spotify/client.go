@@ -104,6 +104,208 @@ func NewClient(config *core.SpotifyConfig, logger *zap.Logger, llm core.LLMProvi
 	}
 }
 
+// searchWithFiltering performs a Spotify search and filters out empty/invalid results
+func (c *Client) searchWithFiltering(ctx context.Context, query string, searchType spotify.SearchType) (*spotify.SearchResult, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("client not authenticated")
+	}
+
+	normalizedQuery := c.normalizer.NormalizeTitle(query)
+
+	results, err := c.client.Search(ctx, normalizedQuery, searchType)
+	if err != nil {
+		return nil, fmt.Errorf("search failed: %w", err)
+	}
+
+	// Filter empty results for all search types (searchType is a bitfield)
+	c.filterEmptyTracks(results)
+	c.filterEmptyPlaylists(results)
+	c.filterEmptyArtists(results)
+	c.filterEmptyAlbums(results)
+	c.filterEmptyShows(results)
+	c.filterEmptyEpisodes(results)
+
+	return results, nil
+}
+
+// filterEmptyTracks removes tracks with empty essential fields from search results
+//
+//nolint:dupl // Similar structure needed for different types
+func (c *Client) filterEmptyTracks(results *spotify.SearchResult) {
+	if results.Tracks == nil {
+		return
+	}
+
+	validTracks := make([]spotify.FullTrack, 0, len(results.Tracks.Tracks))
+	skippedCount := 0
+
+	for i := range results.Tracks.Tracks {
+		track := &results.Tracks.Tracks[i]
+		// Filter out tracks with empty essential fields
+		if track.ID == "" || track.Name == "" {
+			skippedCount++
+			c.logger.Debug("Skipping track with empty essential fields",
+				zap.String("trackID", string(track.ID)),
+				zap.String("trackName", track.Name))
+			continue
+		}
+		validTracks = append(validTracks, *track)
+	}
+
+	c.logFilterResults("tracks", skippedCount, len(validTracks))
+	results.Tracks.Tracks = validTracks
+}
+
+// filterEmptyPlaylists removes playlists with empty essential fields from search results
+//
+//nolint:dupl // Similar structure needed for different types
+func (c *Client) filterEmptyPlaylists(results *spotify.SearchResult) {
+	if results.Playlists == nil {
+		return
+	}
+
+	validPlaylists := make([]spotify.SimplePlaylist, 0, len(results.Playlists.Playlists))
+	skippedCount := 0
+
+	for i := range results.Playlists.Playlists {
+		playlist := &results.Playlists.Playlists[i]
+		// Filter out playlists with empty essential fields
+		if playlist.ID == "" || playlist.Name == "" {
+			skippedCount++
+			c.logger.Debug("Skipping playlist with empty essential fields",
+				zap.String("playlistID", string(playlist.ID)),
+				zap.String("playlistName", playlist.Name))
+			continue
+		}
+		validPlaylists = append(validPlaylists, *playlist)
+	}
+
+	c.logFilterResults("playlists", skippedCount, len(validPlaylists))
+	results.Playlists.Playlists = validPlaylists
+}
+
+// logFilterResults logs the filtering results if any items were skipped
+func (c *Client) logFilterResults(itemType string, skippedCount, validCount int) {
+	if skippedCount > 0 {
+		c.logger.Debug("Filtered empty items from search results",
+			zap.String("itemType", itemType),
+			zap.Int("skippedCount", skippedCount),
+			zap.Int("validCount", validCount))
+	}
+}
+
+// filterEmptyArtists removes artists with empty essential fields from search results
+//
+//nolint:dupl // Similar structure needed for different types
+func (c *Client) filterEmptyArtists(results *spotify.SearchResult) {
+	if results.Artists == nil {
+		return
+	}
+
+	validArtists := make([]spotify.FullArtist, 0, len(results.Artists.Artists))
+	skippedCount := 0
+
+	for i := range results.Artists.Artists {
+		artist := &results.Artists.Artists[i]
+		// Filter out artists with empty essential fields
+		if artist.ID == "" || artist.Name == "" {
+			skippedCount++
+			c.logger.Debug("Skipping artist with empty essential fields",
+				zap.String("artistID", string(artist.ID)),
+				zap.String("artistName", artist.Name))
+			continue
+		}
+		validArtists = append(validArtists, *artist)
+	}
+
+	c.logFilterResults("artists", skippedCount, len(validArtists))
+	results.Artists.Artists = validArtists
+}
+
+// filterEmptyAlbums removes albums with empty essential fields from search results
+//
+//nolint:dupl // Similar structure needed for different types
+func (c *Client) filterEmptyAlbums(results *spotify.SearchResult) {
+	if results.Albums == nil {
+		return
+	}
+
+	validAlbums := make([]spotify.SimpleAlbum, 0, len(results.Albums.Albums))
+	skippedCount := 0
+
+	for i := range results.Albums.Albums {
+		album := &results.Albums.Albums[i]
+		// Filter out albums with empty essential fields
+		if album.ID == "" || album.Name == "" {
+			skippedCount++
+			c.logger.Debug("Skipping album with empty essential fields",
+				zap.String("albumID", string(album.ID)),
+				zap.String("albumName", album.Name))
+			continue
+		}
+		validAlbums = append(validAlbums, *album)
+	}
+
+	c.logFilterResults("albums", skippedCount, len(validAlbums))
+	results.Albums.Albums = validAlbums
+}
+
+// filterEmptyShows removes shows with empty essential fields from search results
+//
+//nolint:dupl // Similar structure needed for different types
+func (c *Client) filterEmptyShows(results *spotify.SearchResult) {
+	if results.Shows == nil {
+		return
+	}
+
+	validShows := make([]spotify.FullShow, 0, len(results.Shows.Shows))
+	skippedCount := 0
+
+	for i := range results.Shows.Shows {
+		show := &results.Shows.Shows[i]
+		// Filter out shows with empty essential fields
+		if show.ID == "" || show.Name == "" {
+			skippedCount++
+			c.logger.Debug("Skipping show with empty essential fields",
+				zap.String("showID", string(show.ID)),
+				zap.String("showName", show.Name))
+			continue
+		}
+		validShows = append(validShows, *show)
+	}
+
+	c.logFilterResults("shows", skippedCount, len(validShows))
+	results.Shows.Shows = validShows
+}
+
+// filterEmptyEpisodes removes episodes with empty essential fields from search results
+//
+//nolint:dupl // Similar structure needed for different types
+func (c *Client) filterEmptyEpisodes(results *spotify.SearchResult) {
+	if results.Episodes == nil {
+		return
+	}
+
+	validEpisodes := make([]spotify.EpisodePage, 0, len(results.Episodes.Episodes))
+	skippedCount := 0
+
+	for i := range results.Episodes.Episodes {
+		episode := &results.Episodes.Episodes[i]
+		// Filter out episodes with empty essential fields
+		if episode.ID == "" || episode.Name == "" {
+			skippedCount++
+			c.logger.Debug("Skipping episode with empty essential fields",
+				zap.String("episodeID", string(episode.ID)),
+				zap.String("episodeName", episode.Name))
+			continue
+		}
+		validEpisodes = append(validEpisodes, *episode)
+	}
+
+	c.logFilterResults("episodes", skippedCount, len(validEpisodes))
+	results.Episodes.Episodes = validEpisodes
+}
+
 func (c *Client) Authenticate(ctx context.Context) error {
 	token, err := c.loadToken()
 	if err != nil {
@@ -125,15 +327,9 @@ func (c *Client) Authenticate(ctx context.Context) error {
 }
 
 func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, error) {
-	if c.client == nil {
-		return nil, fmt.Errorf("client not authenticated")
-	}
-
-	normalizedQuery := c.normalizer.NormalizeTitle(query)
-
-	results, err := c.client.Search(ctx, normalizedQuery, spotify.SearchTypeTrack)
+	results, err := c.searchWithFiltering(ctx, query, spotify.SearchTypeTrack)
 	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
+		return nil, err
 	}
 
 	if results.Tracks == nil || len(results.Tracks.Tracks) == 0 {
@@ -155,13 +351,7 @@ func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, e
 
 // SearchPlaylist searches for playlists based on a query string
 func (c *Client) SearchPlaylist(ctx context.Context, query string) ([]core.Playlist, error) {
-	if c.client == nil {
-		return nil, fmt.Errorf("client not authenticated")
-	}
-
-	normalizedQuery := c.normalizer.NormalizeTitle(query)
-
-	results, err := c.client.Search(ctx, normalizedQuery, spotify.SearchTypePlaylist)
+	results, err := c.searchWithFiltering(ctx, query, spotify.SearchTypePlaylist)
 	if err != nil {
 		return nil, fmt.Errorf("playlist search failed: %w", err)
 	}
