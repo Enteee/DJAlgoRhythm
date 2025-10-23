@@ -230,12 +230,12 @@ func (d *Dispatcher) GetShadowQueuePosition(trackID string) int {
 }
 
 // getLogicalPlaylistPosition returns the logical playlist position to use for next track selection
-func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
+// Returns (position, error). Position is nil if current track is not found in playlist.
+func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, error) {
 	// Get current track ID
 	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
 	if err != nil {
-		d.logger.Debug("No current track playing, using position 0")
-		return 0
+		return nil, fmt.Errorf("failed to get current track ID: %w", err)
 	}
 
 	// Check if current track is a priority track using the registry
@@ -246,8 +246,7 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
 	// Get all playlist tracks to find positions
 	playlistTrackIDs, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
 	if err != nil {
-		d.logger.Warn("Failed to get playlist tracks for position tracking", zap.Error(err))
-		return 0
+		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
 	if isPriorityTrack {
@@ -262,25 +261,29 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
 						zap.String("currentTrackID", currentTrackID),
 						zap.Int("currentPosition", i),
 						zap.Int("resumePosition", resumePosition))
-					return resumePosition
+					return &resumePosition, nil
 				}
 			}
-		} else {
-			// Find where the resume song currently is in the playlist
-			for i, trackID := range playlistTrackIDs {
-				if trackID == resumeSongID {
-					d.logger.Debug("Priority track playing, found resume song position",
-						zap.String("currentTrackID", currentTrackID),
-						zap.String("resumeSongID", resumeSongID),
-						zap.Int("resumePosition", i))
-					return i
-				}
-			}
-			// Resume song not found in playlist, fall back to normal logic
-			d.logger.Debug("Priority track playing, resume song not found in playlist",
-				zap.String("currentTrackID", currentTrackID),
-				zap.String("resumeSongID", resumeSongID))
+			// Current priority track not found in playlist
+			d.logger.Warn("Priority track not found in playlist",
+				zap.String("currentTrackID", currentTrackID))
+			return nil, nil
 		}
+
+		// Find where the resume song currently is in the playlist
+		for i, trackID := range playlistTrackIDs {
+			if trackID == resumeSongID {
+				d.logger.Debug("Priority track playing, found resume song position",
+					zap.String("currentTrackID", currentTrackID),
+					zap.String("resumeSongID", resumeSongID),
+					zap.Int("resumePosition", i))
+				return &i, nil
+			}
+		}
+		// Resume song not found in playlist, fall back to normal logic
+		d.logger.Debug("Priority track playing, resume song not found in playlist",
+			zap.String("currentTrackID", currentTrackID),
+			zap.String("resumeSongID", resumeSongID))
 	}
 
 	// Normal track or fallback case - find current track position
@@ -289,12 +292,14 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) int {
 			d.logger.Debug("Normal track playing, using current position",
 				zap.String("currentTrackID", currentTrackID),
 				zap.Int("position", i))
-			return i
+			return &i, nil
 		}
 	}
 
-	d.logger.Debug("Current track not found in playlist, using position 0")
-	return 0
+	// Current track not found in playlist - return nil instead of fallback
+	d.logger.Warn("Current track not found in playlist",
+		zap.String("currentTrackID", currentTrackID))
+	return nil, nil
 }
 
 // checkQueueSyncStatus detects potential queue sync issues and warns admins

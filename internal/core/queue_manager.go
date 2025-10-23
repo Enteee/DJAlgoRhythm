@@ -283,10 +283,18 @@ func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDurati
 	}
 
 	// Get logical playlist position to ensure correct progression after priority songs
-	logicalPosition := d.getLogicalPlaylistPosition(ctx)
+	logicalPosition, err := d.getLogicalPlaylistPosition(ctx)
+	if err != nil {
+		d.logger.Warn("Failed to get logical playlist position", zap.Error(err))
+		return currentDuration
+	}
+	if logicalPosition == nil {
+		d.logger.Debug("Current track not found in playlist, cannot determine position for queue filling")
+		return currentDuration
+	}
 
 	// Get ALL available next tracks from playlist (up to reasonable limit) using logical position
-	nextTracks, err := d.spotify.GetNextPlaylistTracksFromPosition(ctx, logicalPosition, maxTracksToFetch)
+	nextTracks, err := d.spotify.GetNextPlaylistTracksFromPosition(ctx, *logicalPosition, maxTracksToFetch)
 	if err != nil {
 		d.logger.Warn("Failed to get next playlist tracks", zap.Error(err))
 		return currentDuration
