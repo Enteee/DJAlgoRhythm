@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +24,9 @@ import (
 	"whatdj/pkg/text"
 )
 
+// Package-level random number generator for consistent random operations
+var rng = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // Music selection doesn't require crypto-secure randomness
+
 const (
 	// MinValidYear represents the minimum reasonable year for music tracks
 	MinValidYear = 1950
@@ -32,16 +36,18 @@ const (
 	RecommendationSeedTracks = 5
 	// SpotifyIDLength is the expected length of a Spotify track/artist/album ID
 	SpotifyIDLength = 22
-	// MaxSearchResults is the maximum number of search results to return
-	MaxSearchResults = 10
+	// MaxTrackSearchResults limits track search results for user queries and disambiguation
+	MaxTrackSearchResults = 10
+	// MaxPlaylistSearchResults limits playlist search results for automated recommendations
+	MaxPlaylistSearchResults = 10
 	// DefaultPlaylistSearchQuery is the fallback search query when LLM is unavailable
 	DefaultPlaylistSearchQuery = "popular music playlist"
 	// MaxCandidateTracksPerPlaylist is the number of tracks to sample from each playlist
 	MaxCandidateTracksPerPlaylist = 2
 	// MaxTotalCandidates is the maximum total number of candidate tracks to collect
 	MaxTotalCandidates = 12
-	// MaxPlaylistTracks is a reasonable upper bound for playlist track count conversion
-	MaxPlaylistTracks = 1000
+	// MaxPlaylistsForCandidates limits playlists used for candidate track collection
+	MaxPlaylistsForCandidates = 3
 	// ReleaseDateYearLength is the expected length of a release date year string
 	ReleaseDateYearLength = 4
 	// UnknownArtist is the default value when artist name is not available
@@ -136,7 +142,7 @@ func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, e
 
 	var tracks []core.Track
 	for i := range results.Tracks.Tracks {
-		if len(tracks) >= MaxSearchResults {
+		if len(tracks) >= MaxTrackSearchResults {
 			break
 		}
 
@@ -166,18 +172,13 @@ func (c *Client) SearchPlaylist(ctx context.Context, query string) ([]core.Playl
 
 	var playlists []core.Playlist
 	for i := range results.Playlists.Playlists {
-		if len(playlists) >= MaxSearchResults {
+		if len(playlists) >= MaxPlaylistSearchResults {
 			break
 		}
 
 		playlist := &results.Playlists.Playlists[i]
-		// Safe conversion with bounds checking
-		var trackCount int
-		if playlist.Tracks.Total > MaxPlaylistTracks {
-			trackCount = MaxPlaylistTracks
-		} else {
-			trackCount = int(playlist.Tracks.Total) //nolint:gosec // Bounded by check above
-		}
+		// Safe conversion from Spotify API uint to int
+		trackCount := int(playlist.Tracks.Total) //nolint:gosec // Spotify playlist counts are reasonable for int conversion
 
 		corePlaylists := core.Playlist{
 			ID:          string(playlist.ID),
@@ -190,48 +191,6 @@ func (c *Client) SearchPlaylist(ctx context.Context, query string) ([]core.Playl
 	}
 
 	return playlists, nil
-}
-
-// GetRandomTrackFromPlaylist gets a random track from the specified playlist, excluding duplicates
-func (c *Client) GetRandomTrackFromPlaylist(ctx context.Context, playlistID string, excludeSet map[string]bool) (*core.Track, error) {
-	if c.client == nil {
-		return nil, fmt.Errorf("client not authenticated")
-	}
-
-	// Get all track IDs from the playlist
-	trackIDs, err := c.GetPlaylistTracks(ctx, playlistID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
-	}
-
-	if len(trackIDs) == 0 {
-		return nil, fmt.Errorf("playlist is empty")
-	}
-
-	// Filter out excluded tracks
-	var availableTrackIDs []string
-	for _, trackID := range trackIDs {
-		if !excludeSet[trackID] {
-			availableTrackIDs = append(availableTrackIDs, trackID)
-		}
-	}
-
-	if len(availableTrackIDs) == 0 {
-		return nil, fmt.Errorf("no non-duplicate tracks available in playlist")
-	}
-
-	// Pick a random track from available tracks
-	// Use a simple approach with time-based seeding
-	randomIndex := int(time.Now().UnixNano()) % len(availableTrackIDs)
-	selectedTrackID := availableTrackIDs[randomIndex]
-
-	// Get track details
-	track, err := c.GetTrack(ctx, selectedTrackID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get track details: %w", err)
-	}
-
-	return track, nil
 }
 
 func (c *Client) GetTrack(ctx context.Context, trackID string) (*core.Track, error) {
@@ -520,81 +479,55 @@ func (c *Client) generateSearchQuery(ctx context.Context, recentTracks []core.Tr
 	return searchQuery
 }
 
-// collectCandidateTracksFromPlaylists gathers random tracks from multiple playlists
+// collectCandidateTracksFromPlaylists gathers random tracks from multiple playlists using batch optimization
 func (c *Client) collectCandidateTracksFromPlaylists(
 	ctx context.Context,
 	playlists []core.Playlist,
 	exclusionSet map[string]bool,
 	maxCandidates int,
 ) ([]core.Track, error) {
-	var candidates []core.Track
-	candidateCount := 0
+	// Batch fetch all tracks from all playlists
+	playlistTracks := c.getAllTracksFromPlaylists(ctx, playlists)
+	if len(playlistTracks) == 0 {
+		return nil, fmt.Errorf("no tracks available from any of the %d playlists", len(playlists))
+	}
 
-	c.logger.Debug("Collecting candidate tracks from playlists",
-		zap.Int("totalPlaylists", len(playlists)),
-		zap.Int("maxCandidates", maxCandidates))
-
-	// Try to collect tracks from each playlist until we have enough candidates
-	for _, playlist := range playlists {
-		if candidateCount >= maxCandidates {
-			break
+	// Collect all non-excluded track IDs
+	var availableTrackIDs []string
+	for _, trackIDs := range playlistTracks {
+		for _, trackID := range trackIDs {
+			if !exclusionSet[trackID] {
+				availableTrackIDs = append(availableTrackIDs, trackID)
+			}
 		}
+	}
 
-		if playlist.TrackCount < 1 {
-			c.logger.Debug("Skipping empty playlist",
-				zap.String("playlistID", playlist.ID),
-				zap.String("playlistName", playlist.Name))
+	if len(availableTrackIDs) == 0 {
+		return nil, fmt.Errorf("no non-excluded tracks available from any playlist")
+	}
+
+	// Randomly select track IDs
+	numToSelect := maxCandidates
+	if numToSelect > len(availableTrackIDs) {
+		numToSelect = len(availableTrackIDs)
+	}
+
+	// Randomly select track IDs using Go's built-in rand
+	selectedIndices := rng.Perm(len(availableTrackIDs))[:numToSelect]
+	var selectedTrackIDs []string
+	for _, idx := range selectedIndices {
+		selectedTrackIDs = append(selectedTrackIDs, availableTrackIDs[idx])
+	}
+
+	// Fetch track details for selected tracks
+	var candidates []core.Track
+	for _, trackID := range selectedTrackIDs {
+		track, err := c.GetTrack(ctx, trackID)
+		if err != nil {
+			c.logger.Debug("Failed to get track details, skipping", zap.String("trackID", trackID), zap.Error(err))
 			continue
 		}
-
-		// Collect up to MaxCandidateTracksPerPlaylist tracks from this playlist
-		tracksFromPlaylist := 0
-		maxFromThisPlaylist := MaxCandidateTracksPerPlaylist
-		if candidateCount+maxFromThisPlaylist > maxCandidates {
-			maxFromThisPlaylist = maxCandidates - candidateCount
-		}
-
-		c.logger.Debug("Collecting tracks from playlist",
-			zap.String("playlistID", playlist.ID),
-			zap.String("playlistName", playlist.Name),
-			zap.Int("targetTracks", maxFromThisPlaylist))
-
-		// Try multiple times to get tracks from this playlist
-		for attempt := 0; attempt < maxFromThisPlaylist*3 && tracksFromPlaylist < maxFromThisPlaylist; attempt++ {
-			track, err := c.GetRandomTrackFromPlaylist(ctx, playlist.ID, exclusionSet)
-			if err != nil {
-				c.logger.Debug("Failed to get random track from playlist",
-					zap.String("playlistID", playlist.ID),
-					zap.Error(err))
-				break // Stop trying this playlist if it fails
-			}
-
-			// Check if we already have this track in candidates (avoid duplicates)
-			alreadyHave := false
-			for _, existing := range candidates {
-				if existing.ID == track.ID {
-					alreadyHave = true
-					break
-				}
-			}
-
-			if !alreadyHave {
-				candidates = append(candidates, *track)
-				tracksFromPlaylist++
-				candidateCount++
-
-				c.logger.Debug("Added candidate track",
-					zap.String("trackID", track.ID),
-					zap.String("title", track.Title),
-					zap.String("artist", track.Artist),
-					zap.String("fromPlaylist", playlist.Name))
-			}
-		}
-
-		c.logger.Debug("Collected tracks from playlist",
-			zap.String("playlistName", playlist.Name),
-			zap.Int("tracksCollected", tracksFromPlaylist),
-			zap.Int("totalCandidates", candidateCount))
+		candidates = append(candidates, *track)
 	}
 
 	if len(candidates) == 0 {
@@ -603,9 +536,27 @@ func (c *Client) collectCandidateTracksFromPlaylists(
 
 	c.logger.Info("Candidate track collection completed",
 		zap.Int("totalCandidates", len(candidates)),
-		zap.Int("playlistsUsed", len(playlists)))
+		zap.Int("fromPlaylists", len(playlistTracks)))
 
 	return candidates, nil
+}
+
+// selectRandomPlaylists randomly selects up to maxCount playlists from the given slice
+func (c *Client) selectRandomPlaylists(playlists []core.Playlist, maxCount int) []core.Playlist {
+	if len(playlists) <= maxCount {
+		return playlists // Return all if we have fewer than maxCount
+	}
+
+	// Create a copy and shuffle to get random selection
+	playlistsCopy := make([]core.Playlist, len(playlists))
+	copy(playlistsCopy, playlists)
+
+	// Shuffle the copy and take first maxCount elements
+	rng.Shuffle(len(playlistsCopy), func(i, j int) {
+		playlistsCopy[i], playlistsCopy[j] = playlistsCopy[j], playlistsCopy[i]
+	})
+
+	return playlistsCopy[:maxCount]
 }
 
 // findTrackFromSearch searches for playlists and uses AI to select the best matching track
@@ -620,12 +571,13 @@ func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, ex
 		return "", fmt.Errorf("no playlists found for query: %s", searchQuery)
 	}
 
-	// Collect candidate tracks from multiple playlists
-	candidates, err := c.collectCandidateTracksFromPlaylists(ctx, playlists, exclusionSet, MaxTotalCandidates)
+	// Randomly select up to MaxPlaylistsForCandidates playlists for variety and performance
+	selectedPlaylists := c.selectRandomPlaylists(playlists, MaxPlaylistsForCandidates)
+
+	// Collect candidate tracks from selected playlists
+	candidates, err := c.collectCandidateTracksFromPlaylists(ctx, selectedPlaylists, exclusionSet, MaxTotalCandidates)
 	if err != nil {
-		c.logger.Warn("Failed to collect candidate tracks, falling back to simple selection",
-			zap.Error(err))
-		return c.findTrackFromSearchFallback(ctx, searchQuery, playlists, exclusionSet)
+		return "", fmt.Errorf("failed to collect candidate tracks: %w", err)
 	}
 
 	if len(candidates) == 0 {
@@ -653,42 +605,42 @@ func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, ex
 	return selectedTrack.ID, nil
 }
 
-// findTrackFromSearchFallback implements the original simple selection logic as fallback
-func (c *Client) findTrackFromSearchFallback(
-	ctx context.Context,
-	searchQuery string,
-	playlists []core.Playlist,
-	exclusionSet map[string]bool,
-) (string, error) {
-	c.logger.Debug("Using fallback track selection method")
+// getAllTracksFromPlaylists fetches all tracks from multiple playlists in batch
+func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core.Playlist) map[string][]string {
+	playlistTracks := make(map[string][]string)
 
-	// Try each playlist until we find a suitable track
-	for i, playlist := range playlists {
+	c.logger.Debug("Batch fetching tracks from all playlists",
+		zap.Int("playlistCount", len(playlists)))
+
+	for _, playlist := range playlists {
 		if playlist.TrackCount < 1 {
-			continue
-		}
-
-		track, err := c.GetRandomTrackFromPlaylist(ctx, playlist.ID, exclusionSet)
-		if err != nil {
-			c.logger.Debug("Failed to get track from playlist, trying next",
+			c.logger.Debug("Skipping empty playlist",
 				zap.String("playlistID", playlist.ID),
-				zap.Error(err))
+				zap.String("playlistName", playlist.Name))
 			continue
 		}
 
-		c.logger.Info("Selected track using fallback method",
-			zap.String("searchQuery", searchQuery),
-			zap.String("selectedPlaylistID", playlist.ID),
-			zap.String("selectedPlaylistName", playlist.Name),
-			zap.String("selectedTrackID", track.ID),
-			zap.String("title", track.Title),
-			zap.String("artist", track.Artist),
-			zap.Int("playlistPosition", i+1))
+		trackIDs, err := c.GetPlaylistTracks(ctx, playlist.ID)
+		if err != nil {
+			c.logger.Warn("Failed to fetch tracks from playlist",
+				zap.String("playlistID", playlist.ID),
+				zap.String("playlistName", playlist.Name),
+				zap.Error(err))
+			continue // Skip this playlist but continue with others
+		}
 
-		return track.ID, nil
+		playlistTracks[playlist.ID] = trackIDs
+		c.logger.Debug("Fetched tracks from playlist",
+			zap.String("playlistID", playlist.ID),
+			zap.String("playlistName", playlist.Name),
+			zap.Int("trackCount", len(trackIDs)))
 	}
 
-	return "", fmt.Errorf("no suitable tracks found in any of the %d playlists (fallback)", len(playlists))
+	c.logger.Info("Batch playlist fetch completed",
+		zap.Int("playlistsRequested", len(playlists)),
+		zap.Int("playlistsSuccess", len(playlistTracks)))
+
+	return playlistTracks
 }
 
 func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
