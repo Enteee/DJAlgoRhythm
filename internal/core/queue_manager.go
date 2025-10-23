@@ -372,7 +372,7 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
 
 	// Always use the unified approval workflow
-	trackID, err := d.spotify.GetRecommendedTrack(ctx)
+	trackID, searchQuery, err := d.spotify.GetRecommendedTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get queue-filling track", zap.Error(err))
 		return
@@ -393,7 +393,7 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 
 	// Send approval message to group (will auto-approve if rejection limit exceeded)
 	messageKey := getQueueApprovalMessageKey("bot.queue_management", autoApprove)
-	d.sendQueueTrackApprovalMessage(ctx, trackID, track, messageKey, "queue management track", autoApprove)
+	d.sendQueueTrackApprovalMessage(ctx, trackID, track, messageKey, "queue management track", autoApprove, searchQuery)
 
 	if autoApprove {
 		d.logger.Info("Auto-approving queue-filling track after rejection limit",
@@ -535,7 +535,7 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
 
 	// Always use the unified approval workflow
-	newTrackID, err := d.spotify.GetRecommendedTrack(ctx)
+	newTrackID, newSearchQuery, err := d.spotify.GetRecommendedTrack(ctx)
 	if err != nil {
 		d.logger.Warn("Failed to get replacement queue track", zap.Error(err))
 		d.resetQueueManagementFlag()
@@ -557,7 +557,7 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 
 	// Send message to chat about the replacement track (will auto-approve if rejection limit exceeded)
 	messageKey := getQueueApprovalMessageKey("bot.queue_replacement", autoApprove)
-	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, messageKey, "replacement queue track", autoApprove)
+	d.sendQueueTrackApprovalMessage(ctx, newTrackID, track, messageKey, "replacement queue track", autoApprove, newSearchQuery)
 
 	if autoApprove {
 		d.logger.Info("Auto-approving replacement track after rejection limit",

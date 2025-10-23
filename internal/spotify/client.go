@@ -383,29 +383,34 @@ func (c *Client) checkSettingsCompliance(state *spotify.PlayerState, compliance 
 }
 
 // GetRecommendedTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
-func (c *Client) GetRecommendedTrack(ctx context.Context) (string, error) {
+func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery string, err error) {
 	if c.client == nil {
-		return "", fmt.Errorf("client not authenticated")
+		return "", "", fmt.Errorf("client not authenticated")
 	}
 
 	// Get playlist tracks and build exclusion set in single pass
 	playlistTracks, exclusionSet, err := c.getPlaylistTracksWithExclusions(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to get playlist tracks: %w", err)
+		return "", "", fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
 	if len(playlistTracks) == 0 {
-		return "", fmt.Errorf("playlist is empty, cannot generate recommendations")
+		return "", "", fmt.Errorf("playlist is empty, cannot generate recommendations")
 	}
 
 	// Get recent tracks for search context (simple approach)
 	recentTracks := c.getRecentTracksForSearch(ctx, playlistTracks, RecommendationSeedTracks)
 
 	// Generate search query with LLM or fallback
-	searchQuery := c.generateSearchQuery(ctx, recentTracks)
+	searchQuery = c.generateSearchQuery(ctx, recentTracks)
 
-	// Find and return track
-	return c.findTrackFromSearch(ctx, searchQuery, exclusionSet)
+	// Find and return track along with search query
+	trackID, err = c.findTrackFromSearch(ctx, searchQuery, exclusionSet)
+	if err != nil {
+		return "", "", err
+	}
+
+	return trackID, searchQuery, nil
 }
 
 // getPlaylistTracksWithExclusions gets playlist tracks and builds exclusion set in single operation

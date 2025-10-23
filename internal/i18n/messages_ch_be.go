@@ -62,11 +62,12 @@ var berneseGermanMessages = map[string]string{
 
 	// Queue management messages
 	"bot.queue_management": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +
-		"💭 Bitte füegt meh Lieder hinzu dass d Musig witer geit!",
+		"💭 Aktuelli Stimmig: %s\n\nBitte füegt meh Lieder hinzu dass d Musig witer geit!",
 	"bot.queue_management_auto": "🤖 D Playlist wird chlii läär! Automatisch hinzuegfüegt: %s - %s\n%s\n\n" +
-		"✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
-	"bot.queue_replacement":      "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Findsch das guet?",
-	"bot.queue_replacement_auto": "🔄 Automatisch Ersatz hinzuegfüegt: %s - %s\n%s\n\n✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
+		"💭 Aktuelli Stimmig: %s\n\n✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
+	"bot.queue_replacement": "🔄 Ersatz-Track vorgschlage: %s - %s\n%s\n\n💭 Aktuelli Stimmig: %s\n\nFindsch das guet?",
+	"bot.queue_replacement_auto": "🔄 Automatisch Ersatz hinzuegfüegt: %s - %s\n%s\n\n" +
+		"💭 Aktuelli Stimmig: %s\n\n✅ Automatisch hinzuegfüegt nach mehrere Ablehnige.",
 
 	// Playlist monitoring messages
 	"bot.shuffle_warning": "⚠️ Warnig: Shuffle isch igschalte!\n\n" +

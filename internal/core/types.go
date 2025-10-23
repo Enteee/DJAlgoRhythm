@@ -132,7 +132,7 @@ type SpotifyClient interface {
 	SetTargetPlaylist(playlistID string)
 	GetNextPlaylistTracks(ctx context.Context, count int) ([]Track, error)
 	GetNextPlaylistTracksFromPosition(ctx context.Context, startPosition, count int) ([]Track, error)
-	GetRecommendedTrack(ctx context.Context) (string, error)
+	GetRecommendedTrack(ctx context.Context) (trackID, searchQuery string, err error)
 	CheckPlaybackCompliance(ctx context.Context) (*PlaybackCompliance, error)
 	SetShuffle(ctx context.Context, shuffle bool) error
 	SetRepeat(ctx context.Context, state string) error

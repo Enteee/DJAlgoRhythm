@@ -447,14 +447,14 @@ func getQueueApprovalMessageKey(baseKey string, autoApprove bool) string {
 
 // sendQueueTrackApprovalMessage sends an queue approval message with fallback to regular text
 func (d *Dispatcher) sendQueueTrackApprovalMessage(
-	ctx context.Context, trackID string, track *Track, messageKey, logContext string, autoApprove bool,
+	ctx context.Context, trackID string, track *Track, messageKey, logContext string, autoApprove bool, mood string,
 ) {
 	groupID := d.getGroupID()
 	if groupID == "" {
 		return
 	}
 
-	message := d.localizer.T(messageKey, track.Artist, track.Title, track.URL)
+	message := d.localizer.T(messageKey, track.Artist, track.Title, track.URL, mood)
 
 	if autoApprove {
 		// For auto-approval: send plain text message (no interactive buttons)
