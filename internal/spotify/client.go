@@ -693,19 +693,17 @@ func (c *Client) collectCandidateTracksFromPlaylists(
 	exclusionSet map[string]bool,
 	maxCandidates int,
 ) ([]core.Track, error) {
-	// Batch fetch all tracks from all playlists
-	playlistTracks := c.getAllTracksFromPlaylists(ctx, playlists)
-	if len(playlistTracks) == 0 {
+	// Batch fetch all tracks from all playlists (deduplicated)
+	allTrackIDs := c.getAllTracksFromPlaylists(ctx, playlists)
+	if len(allTrackIDs) == 0 {
 		return nil, fmt.Errorf("no tracks available from any of the %d playlists", len(playlists))
 	}
 
 	// Collect all non-excluded track IDs
 	var availableTrackIDs []string
-	for _, trackIDs := range playlistTracks {
-		for _, trackID := range trackIDs {
-			if !exclusionSet[trackID] {
-				availableTrackIDs = append(availableTrackIDs, trackID)
-			}
+	for _, trackID := range allTrackIDs {
+		if !exclusionSet[trackID] {
+			availableTrackIDs = append(availableTrackIDs, trackID)
 		}
 	}
 
@@ -743,7 +741,7 @@ func (c *Client) collectCandidateTracksFromPlaylists(
 
 	c.logger.Info("Candidate track collection completed",
 		zap.Int("totalCandidates", len(candidates)),
-		zap.Int("fromPlaylists", len(playlistTracks)))
+		zap.Int("fromPlaylists", len(playlists)))
 
 	return candidates, nil
 }
@@ -839,9 +837,11 @@ func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, ex
 	return selectedTrack.ID, nil
 }
 
-// getAllTracksFromPlaylists fetches all tracks from multiple playlists in batch
-func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core.Playlist) map[string][]string {
-	playlistTracks := make(map[string][]string)
+// getAllTracksFromPlaylists fetches all tracks from multiple playlists and returns a deduplicated flat list
+func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core.Playlist) []string {
+	seenTracks := make(map[string]bool)
+	var allTrackIDs []string
+	playlistsProcessed := 0
 
 	c.logger.Debug("Batch fetching tracks from all playlists",
 		zap.Int("playlistCount", len(playlists)))
@@ -863,18 +863,30 @@ func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core
 			continue // Skip this playlist but continue with others
 		}
 
-		playlistTracks[playlist.ID] = trackIDs
+		// Add unique tracks to the result
+		uniqueTracksAdded := 0
+		for _, trackID := range trackIDs {
+			if !seenTracks[trackID] {
+				seenTracks[trackID] = true
+				allTrackIDs = append(allTrackIDs, trackID)
+				uniqueTracksAdded++
+			}
+		}
+
+		playlistsProcessed++
 		c.logger.Debug("Fetched tracks from playlist",
 			zap.String("playlistID", playlist.ID),
 			zap.String("playlistName", playlist.Name),
-			zap.Int("trackCount", len(trackIDs)))
+			zap.Int("totalTracks", len(trackIDs)),
+			zap.Int("uniqueTracksAdded", uniqueTracksAdded))
 	}
 
 	c.logger.Info("Batch playlist fetch completed",
 		zap.Int("playlistsRequested", len(playlists)),
-		zap.Int("playlistsSuccess", len(playlistTracks)))
+		zap.Int("playlistsProcessed", playlistsProcessed),
+		zap.Int("totalUniqueTrackIDs", len(allTrackIDs)))
 
-	return playlistTracks
+	return allTrackIDs
 }
 
 func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
