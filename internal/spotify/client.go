@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -747,22 +748,49 @@ func (c *Client) collectCandidateTracksFromPlaylists(
 	return candidates, nil
 }
 
-// selectRandomPlaylists randomly selects up to maxCount playlists from the given slice
+// selectRandomPlaylists selects up to maxCount playlists with bias towards earlier playlists
 func (c *Client) selectRandomPlaylists(playlists []core.Playlist, maxCount int) []core.Playlist {
 	if len(playlists) <= maxCount {
 		return playlists // Return all if we have fewer than maxCount
 	}
 
-	// Create a copy and shuffle to get random selection
-	playlistsCopy := make([]core.Playlist, len(playlists))
-	copy(playlistsCopy, playlists)
+	// Use weighted selection biased towards earlier playlists
+	const decayFactor = 0.5 // Controls bias strength - higher values = more bias
 
-	// Shuffle the copy and take first maxCount elements
-	rng.Shuffle(len(playlistsCopy), func(i, j int) {
-		playlistsCopy[i], playlistsCopy[j] = playlistsCopy[j], playlistsCopy[i]
-	})
+	// Calculate weights using exponential decay
+	weights := make([]float64, len(playlists))
+	totalWeight := 0.0
+	for i := range playlists {
+		weight := math.Exp(-float64(i) * decayFactor)
+		weights[i] = weight
+		totalWeight += weight
+	}
 
-	return playlistsCopy[:maxCount]
+	// Select playlists using weighted random sampling without replacement
+	selected := make([]core.Playlist, 0, maxCount)
+	selectedIndices := make(map[int]bool)
+
+	for len(selected) < maxCount {
+		// Generate random value in [0, totalWeight)
+		r := rng.Float64() * totalWeight
+
+		// Find the selected playlist
+		cumWeight := 0.0
+		for i, weight := range weights {
+			if selectedIndices[i] {
+				continue // Skip already selected playlists
+			}
+			cumWeight += weight
+			if r <= cumWeight {
+				selected = append(selected, playlists[i])
+				selectedIndices[i] = true
+				totalWeight -= weight // Remove weight from total
+				break
+			}
+		}
+	}
+
+	return selected
 }
 
 // findTrackFromSearch searches for playlists and uses AI to select the best matching track
