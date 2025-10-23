@@ -118,10 +118,10 @@ func TestI18nMessageValues(t *testing.T) {
 		"success.admin_approved_and_added":  3, // artist, title, url
 		"success.track_priority_playing":    3, // artist, title, url
 		"bot.startup":                       1, // playlist url
-		"bot.queue_management":              4, // artist, title, url, mood
-		"bot.queue_management_auto":         4, // artist, title, url, mood
-		"bot.queue_replacement":             4, // artist, title, url, mood
-		"bot.queue_replacement_auto":        4, // artist, title, url, mood
+		"bot.queue_management":              5, // artist, title, url, mood, newTrackMood
+		"bot.queue_management_auto":         5, // artist, title, url, mood, newTrackMood
+		"bot.queue_replacement":             5, // artist, title, url, mood, newTrackMood
+		"bot.queue_replacement_auto":        5, // artist, title, url, mood, newTrackMood
 		"format.album":                      1, // album name
 		"format.year":                       1, // year number
 		"format.url":                        1, // url

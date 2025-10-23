@@ -63,12 +63,13 @@ var englishMessages = map[string]string{
 
 	// Queue management messages
 	"bot.queue_management": "🤖 Playlist is running low! Added: %s - %s\n%s\n\n" +
-		"💭 Current mood: %s\n\nPlease add more songs to keep the music going!",
+		"💭 Current mood: %s\n🎯 New track mood: %s\n\nPlease add more songs to keep the music going!",
 	"bot.queue_management_auto": "🤖 Playlist is running low! Auto-adding: %s - %s\n%s\n\n" +
-		"💭 Current mood: %s\n\n✅ Added automatically after multiple rejections.",
-	"bot.queue_replacement": "🔄 Replacement track suggested: %s - %s\n%s\n\n💭 Current mood: %s\n\nDo you approve this replacement?",
+		"💭 Current mood: %s\n🎯 New track mood: %s\n\n✅ Added automatically after multiple rejections.",
+	"bot.queue_replacement": "🔄 Replacement track suggested: %s - %s\n%s\n\n" +
+		"💭 Current mood: %s\n🎯 New track mood: %s\n\nDo you approve this replacement?",
 	"bot.queue_replacement_auto": "🔄 Auto-adding replacement: %s - %s\n%s\n\n" +
-		"💭 Current mood: %s\n\n✅ Added automatically after multiple rejections.",
+		"💭 Current mood: %s\n🎯 New track mood: %s\n\n✅ Added automatically after multiple rejections.",
 
 	// Playlist monitoring messages
 	"bot.shuffle_warning": "⚠️ Warning: Shuffle is enabled!\n\n" +

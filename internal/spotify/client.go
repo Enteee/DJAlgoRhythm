@@ -383,19 +383,19 @@ func (c *Client) checkSettingsCompliance(state *spotify.PlayerState, compliance 
 }
 
 // GetRecommendedTrack gets a track ID using LLM-enhanced search based on recent playlist tracks
-func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery string, err error) {
+func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery, newTrackMood string, err error) {
 	if c.client == nil {
-		return "", "", fmt.Errorf("client not authenticated")
+		return "", "", "", fmt.Errorf("client not authenticated")
 	}
 
 	// Get playlist tracks and build exclusion set in single pass
 	playlistTracks, exclusionSet, err := c.getPlaylistTracksWithExclusions(ctx)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get playlist tracks: %w", err)
+		return "", "", "", fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
 	if len(playlistTracks) == 0 {
-		return "", "", fmt.Errorf("playlist is empty, cannot generate recommendations")
+		return "", "", "", fmt.Errorf("playlist is empty, cannot generate recommendations")
 	}
 
 	// Get recent tracks for search context (simple approach)
@@ -407,10 +407,21 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery 
 	// Find and return track along with search query
 	trackID, err = c.findTrackFromSearch(ctx, searchQuery, exclusionSet)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
-	return trackID, searchQuery, nil
+	// Get the new track details and generate its mood
+	newTrack, err := c.GetTrack(ctx, trackID)
+	if err != nil {
+		c.logger.Warn("Failed to get new track details for mood generation",
+			zap.String("trackID", trackID), zap.Error(err))
+		newTrackMood = "unknown"
+	} else {
+		// Generate mood for the new track using just this track
+		newTrackMood = c.generateSearchQuery(ctx, []core.Track{*newTrack})
+	}
+
+	return trackID, searchQuery, newTrackMood, nil
 }
 
 // getPlaylistTracksWithExclusions gets playlist tracks and builds exclusion set in single operation
