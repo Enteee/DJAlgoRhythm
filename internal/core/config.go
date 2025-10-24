@@ -9,7 +9,6 @@ import (
 
 // Default configuration values
 const (
-	DefaultMaxCandidates                      = 3
 	DefaultServerPort                         = 8080
 	DefaultTimeoutSeconds                     = 10
 	DefaultConfirmTimeoutSecs                 = 120
@@ -63,11 +62,10 @@ type SpotifyConfig struct {
 }
 
 type LLMConfig struct {
-	Provider      string
-	Model         string
-	APIKey        string
-	BaseURL       string
-	MaxCandidates int
+	Provider string
+	Model    string
+	APIKey   string
+	BaseURL  string
 }
 
 type ServerConfig struct {
@@ -115,9 +113,8 @@ func DefaultConfig() *Config {
 			TokenPath:   "./spotify_token.json",
 		},
 		LLM: LLMConfig{
-			Provider:      "none",
-			Model:         "",
-			MaxCandidates: DefaultMaxCandidates,
+			Provider: "none",
+			Model:    "",
 		},
 		Server: ServerConfig{
 			Host:         "0.0.0.0",
