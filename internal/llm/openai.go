@@ -24,11 +24,15 @@ type OpenAIClient struct {
 const (
 	defaultTemperature    = 0.1
 	rankingTemperature    = 0.3
+	extractionTemperature = 0.1 // Deterministic for extraction
+	moodTemperature       = 0.2 // Slightly creative for mood descriptions
 	maxTokensRanking      = 1000
 	maxTokensChatter      = 200
 	maxTokensPriority     = 200
 	maxTokensSearchQuery  = 50
 	maxTokensTrackRanking = 100
+	maxTokensExtraction   = 500 // For song extraction response
+	maxTokensMood         = 50  // For track mood generation
 	maxSeedTracksInPrompt = 3
 	defaultModel          = "gpt-3.5-turbo"
 )
@@ -169,46 +173,52 @@ func (o *OpenAIClient) GenerateTrackMood(ctx context.Context, tracks []core.Trac
 		return fallbackSearchQuery, nil
 	}
 
-	// Create a prompt describing the tracks
-	prompt := "Based on on all these songs:\n"
+	// Build user prompt with track information
+	userPrompt := "Based on all these songs:\n"
 	for i, track := range tracks {
 		if i >= maxSeedTracksInPrompt {
 			break
 		}
-		prompt += fmt.Sprintf("- %s by %s", track.Title, track.Artist)
+		userPrompt += fmt.Sprintf("- %s by %s", track.Title, track.Artist)
 		if track.Album != "" {
-			prompt += fmt.Sprintf(" (from %s)", track.Album)
+			userPrompt += fmt.Sprintf(" (from %s)", track.Album)
 		}
-		prompt += "\n"
+		userPrompt += "\n"
 	}
-	prompt += "\nGenerate a short, descriptive mood/style phrase (3-6 words) describing the musical style. "
-	prompt += "Focus on genre, mood, or artist style. Respond with just the mood phrase, no other text."
+
+	systemPrompt := o.buildTrackMoodPrompt()
 
 	o.logger.Debug("Calling OpenAI for track mood generation",
 		zap.Int("tracks", len(tracks)),
 		zap.String("model", o.config.Model))
 
-	// Use OpenAI to generate a mood description
 	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are a music expert helping to describe musical moods and styles."),
-			openai.UserMessage(prompt),
+			openai.SystemMessage(systemPrompt),
+			openai.UserMessage(userPrompt),
 		},
 		Model:       o.getModel(),
-		Temperature: openai.Float(defaultTemperature),
-		MaxTokens:   openai.Int(maxTokensSearchQuery),
+		Temperature: openai.Float(moodTemperature),
+		MaxTokens:   openai.Int(maxTokensMood),
 	})
 	if err != nil {
-		o.logger.Warn("Failed to generate track mood with OpenAI, using fallback", zap.Error(err))
+		o.logger.Error("OpenAI API call failed for track mood generation", zap.Error(err))
 		return fallbackSearchQuery, nil
 	}
 
-	if len(resp.Choices) == 0 || resp.Choices[0].Message.Content == "" {
+	if len(resp.Choices) == 0 {
+		o.logger.Warn("OpenAI returned no response for track mood generation")
 		return fallbackSearchQuery, nil
 	}
 
-	trackMood := strings.TrimSpace(resp.Choices[0].Message.Content)
-	o.logger.Debug("Generated track mood with OpenAI",
+	content := resp.Choices[0].Message.Content
+	if content == "" {
+		o.logger.Warn("OpenAI returned empty response for track mood generation")
+		return fallbackSearchQuery, nil
+	}
+
+	trackMood := strings.TrimSpace(content)
+	o.logger.Debug("Track mood generation completed",
 		zap.String("mood", trackMood),
 		zap.Int("tracks", len(tracks)))
 
@@ -335,6 +345,74 @@ Examples of is_not_music_request = FALSE (LET THROUGH):
 IMPORTANT: When uncertain, always return FALSE. Better to process a non-music message than to miss a music request.`
 }
 
+func (o *OpenAIClient) ExtractSongQuery(ctx context.Context, userText string) (string, error) {
+	if strings.TrimSpace(userText) == "" {
+		return "", fmt.Errorf("empty text provided")
+	}
+
+	prompt := o.buildSongExtractionPrompt()
+
+	o.logger.Debug("Calling OpenAI for song extraction",
+		zap.String("text", userText),
+		zap.String("model", o.config.Model))
+
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(prompt),
+			openai.UserMessage(userText),
+		},
+		Model:       o.getModel(),
+		Temperature: openai.Float(extractionTemperature),
+		MaxTokens:   openai.Int(maxTokensExtraction),
+	})
+	if err != nil {
+		o.logger.Error("OpenAI API call failed for song extraction", zap.Error(err))
+		// Fallback to original text
+		return userText, nil
+	}
+
+	if len(resp.Choices) == 0 {
+		o.logger.Warn("OpenAI returned no response for song extraction")
+		return userText, nil
+	}
+
+	extractedQuery := strings.TrimSpace(resp.Choices[0].Message.Content)
+	o.logger.Debug("Song extraction completed",
+		zap.String("original_text", userText),
+		zap.String("extracted_query", extractedQuery))
+
+	// If extraction is empty, fall back to original text
+	if extractedQuery == "" {
+		return userText, nil
+	}
+
+	return extractedQuery, nil
+}
+
+func (o *OpenAIClient) buildSongExtractionPrompt() string {
+	return `Extract and normalize song requests from chat messages. Return only the normalized search query as plain text.
+
+TASK: Transform casual song requests into clean search queries suitable for music services like Spotify.
+
+RULES:
+- Remove polite fillers: "please play", "can you queue", "yo bot", etc.
+- Fix common misspellings and normalize artist/song names
+- Preserve proper nouns and diacritics
+- For artist-only requests, return just the artist name
+- For song-only requests, return just the song title
+- For artist + song, return "Artist Song Title" format
+
+EXAMPLES:
+"please play acdc hells bells" → "AC/DC Hells Bells"
+"hells bells" → "Hells Bells"
+"acdc" → "AC/DC"
+"queue some taylor swift" → "Taylor Swift"
+"can you add bohemian rhapsody by queen" → "Queen Bohemian Rhapsody"
+
+If the message is clearly not a song request, return empty string.
+Return only the normalized query, no explanations or formatting.`
+}
+
 func (o *OpenAIClient) buildPriorityDetectionPrompt() string {
 	return `You are analyzing messages to detect priority music requests from group administrators.
 
@@ -376,4 +454,19 @@ EXAMPLES:
 - "good song choice" → FALSE (0.05)
 
 IMPORTANT: Be conservative. Only mark as priority when there are clear indicators. Default to FALSE when uncertain.`
+}
+
+func (o *OpenAIClient) buildTrackMoodPrompt() string {
+	return `You are a music expert helping to describe musical moods and styles.
+
+Generate a short, descriptive mood/style phrase (3-6 words) describing the musical style of the provided songs.
+
+Focus on genre, mood, or artist style. Respond with just the mood phrase, no other text.
+
+Examples:
+- "energetic rock anthems"
+- "mellow indie folk"
+- "upbeat pop hits"
+- "dark electronic beats"
+- "classic jazz standards"`
 }

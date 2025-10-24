@@ -141,6 +141,7 @@ type LLMProvider interface {
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
 	GenerateTrackMood(ctx context.Context, tracks []Track) (string, error)
+	ExtractSongQuery(ctx context.Context, userText string) (string, error)
 }
 
 type DedupStore interface {

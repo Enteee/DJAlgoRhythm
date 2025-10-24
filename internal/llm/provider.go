@@ -24,6 +24,7 @@ type Client interface {
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
 	GenerateTrackMood(ctx context.Context, tracks []core.Track) (string, error)
+	ExtractSongQuery(ctx context.Context, userText string) (string, error)
 }
 
 func NewProvider(config *core.LLMConfig, logger *zap.Logger) (*Provider, error) {
@@ -70,6 +71,10 @@ func (p *Provider) GenerateTrackMood(ctx context.Context, tracks []core.Track) (
 	return p.client.GenerateTrackMood(ctx, tracks)
 }
 
+func (p *Provider) ExtractSongQuery(ctx context.Context, userText string) (string, error) {
+	return p.client.ExtractSongQuery(ctx, userText)
+}
+
 type NoOpClient struct{}
 
 func (n *NoOpClient) RankTracks(_ context.Context, _ string, tracks []core.Track) []core.Track {
@@ -89,6 +94,11 @@ func (n *NoOpClient) IsPriorityRequest(_ context.Context, _ string) (bool, error
 
 func (n *NoOpClient) GenerateTrackMood(_ context.Context, _ []core.Track) (string, error) {
 	return "", fmt.Errorf("LLM provider not configured")
+}
+
+func (n *NoOpClient) ExtractSongQuery(_ context.Context, userText string) (string, error) {
+	// Safe default for testing - return passthrough
+	return userText, nil
 }
 
 // parseTrackRanking parses LLM ranking response and returns tracks in ranked order

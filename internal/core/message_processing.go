@@ -25,7 +25,7 @@ func (d *Dispatcher) askWhichSong(ctx context.Context, msgCtx *MessageContext, o
 	}
 }
 
-// llmDisambiguate uses enhanced three-stage LLM disambiguation with Spotify search
+// llmDisambiguate uses enhanced four-stage LLM disambiguation with Spotify search
 func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	msgCtx.State = StateLLMDisambiguate
 
@@ -34,11 +34,29 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 		return
 	}
 
-	// Stage 1: Initial Spotify search using user input directly
-	d.logger.Debug("Stage 1: Performing initial Spotify search",
-		zap.String("text", msgCtx.Input.Text))
+	// Stage 0: Extract normalized song query from user text
+	d.logger.Debug("Stage 0: Extracting song request from message", zap.String("text", msgCtx.Input.Text))
 
-	initialSpotifyTracks, err := d.spotify.SearchTrack(ctx, msgCtx.Input.Text)
+	normalizedQuery := msgCtx.Input.Text
+	if d.llm != nil {
+		if extractedQuery, err := d.llm.ExtractSongQuery(ctx, msgCtx.Input.Text); err != nil {
+			d.logger.Warn("Extraction failed; falling back to raw text", zap.Error(err))
+		} else if extractedQuery != "" {
+			normalizedQuery = extractedQuery
+			d.logger.Info("Stage 0 complete: Using normalized query",
+				zap.String("original_text", msgCtx.Input.Text),
+				zap.String("normalized_query", normalizedQuery))
+		} else {
+			d.logger.Debug("Stage 0: Empty extraction result; using raw text")
+		}
+	}
+
+	// Stage 1: Initial Spotify search using normalized query
+	d.logger.Debug("Stage 1: Performing initial Spotify search",
+		zap.String("original_text", msgCtx.Input.Text),
+		zap.String("search_query", normalizedQuery))
+
+	initialSpotifyTracks, err := d.spotify.SearchTrack(ctx, normalizedQuery)
 	if err != nil {
 		d.logger.Error("Initial Spotify search failed", zap.Error(err))
 		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.search_failed"))
@@ -48,12 +66,12 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 	d.logger.Info("Stage 1 complete: Found Spotify tracks",
 		zap.Int("count", len(initialSpotifyTracks)))
 
-	// Stage 2: LLM ranking of Spotify results with user context (or extraction if no results)
+	// Stage 2: LLM ranking of Spotify results with normalized query
 	var rankedTracks []Track
 
 	if len(initialSpotifyTracks) > 0 {
 		d.logger.Debug("Stage 2: LLM ranking of Spotify results")
-		rankedTracks = d.llm.RankTracks(ctx, msgCtx.Input.Text, initialSpotifyTracks)
+		rankedTracks = d.llm.RankTracks(ctx, normalizedQuery, initialSpotifyTracks)
 	} else {
 		d.logger.Debug("Stage 2: No initial Spotify results, cannot process without tracks")
 		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.no_matches"))
