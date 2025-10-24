@@ -652,12 +652,12 @@ func generateTelegramSection(content *strings.Builder, cmd *cobra.Command) {
 	// Get flag defaults
 	enabledDefault := getDefaultValueString(cmd, "telegram-enabled")
 
-	content.WriteString(fmt.Sprintf("%s=%s                           # Enable Telegram bot (default: %s)\n",
-		flagToEnvVar("telegram-enabled"), enabledDefault, enabledDefault))
-	content.WriteString(fmt.Sprintf("%s=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11  # Bot token from @BotFather\n",
-		flagToEnvVar("telegram-bot-token")))
-	content.WriteString(fmt.Sprintf("%s=-100xxxxxxxxxx                # Group ID (get from @userinfobot)\n",
-		flagToEnvVar("telegram-group-id")))
+	fmt.Fprintf(content, "%s=%s                           # Enable Telegram bot (default: %s)\n",
+		flagToEnvVar("telegram-enabled"), enabledDefault, enabledDefault)
+	fmt.Fprintf(content, "%s=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11  # Bot token from @BotFather\n",
+		flagToEnvVar("telegram-bot-token"))
+	fmt.Fprintf(content, "%s=-100xxxxxxxxxx                # Group ID (get from @userinfobot)\n",
+		flagToEnvVar("telegram-group-id"))
 	content.WriteString("\n")
 	content.WriteString("# Admin and Community Approval\n")
 	content.WriteString("# CLI: --admin-needs-approval, --community-approval\n")
@@ -665,12 +665,12 @@ func generateTelegramSection(content *strings.Builder, cmd *cobra.Command) {
 	adminDefault := getDefaultValueString(cmd, "admin-needs-approval")
 	communityDefault := getDefaultValueString(cmd, "community-approval")
 
-	content.WriteString(fmt.Sprintf("%s=false                           # Require admin approval for all songs (default: false)\n",
-		flagToEnvVar("admin-approval")))
-	content.WriteString(fmt.Sprintf("%s=%s                     # Require approval even from admins - for testing (default: %s)\n",
-		flagToEnvVar("admin-needs-approval"), adminDefault, adminDefault))
-	content.WriteString(fmt.Sprintf("%s=%s                           # Number of 👍 reactions to bypass admin approval, 0=disabled (default: %s)\n",
-		flagToEnvVar("community-approval"), communityDefault, communityDefault))
+	fmt.Fprintf(content, "%s=false                           # Require admin approval for all songs (default: false)\n",
+		flagToEnvVar("admin-approval"))
+	fmt.Fprintf(content, "%s=%s                     # Require approval even from admins - for testing (default: %s)\n",
+		flagToEnvVar("admin-needs-approval"), adminDefault, adminDefault)
+	fmt.Fprintf(content, "%s=%s                           # Number of 👍 reactions to bypass admin approval, 0=disabled (default: %s)\n",
+		flagToEnvVar("community-approval"), communityDefault, communityDefault)
 	content.WriteString("\n")
 }
 
@@ -683,14 +683,14 @@ func generateWhatsAppSection(content *strings.Builder, cmd *cobra.Command) {
 	enabledDefault := getDefaultValueString(cmd, "whatsapp-enabled")
 	deviceDefault := getDefaultValueString(cmd, "whatsapp-device-name")
 
-	content.WriteString(fmt.Sprintf("%s=%s                         # Enable WhatsApp integration (default: %s)\n",
-		flagToEnvVar("whatsapp-enabled"), enabledDefault, enabledDefault))
-	content.WriteString(fmt.Sprintf("%s=120363123456789@g.us        # WhatsApp group JID (use debug logging to find)\n",
-		flagToEnvVar("whatsapp-group-jid")))
-	content.WriteString(fmt.Sprintf("%s=\"%s\"           # Device name shown in WhatsApp (default: \"%s\")\n",
-		flagToEnvVar("whatsapp-device-name"), deviceDefault, deviceDefault))
-	content.WriteString(fmt.Sprintf("%s=\"./whatsapp_session.db\"  # Session file path (default: \"./whatsapp_session.db\")\n",
-		flagToEnvVar("whatsapp-session-path")))
+	fmt.Fprintf(content, "%s=%s                         # Enable WhatsApp integration (default: %s)\n",
+		flagToEnvVar("whatsapp-enabled"), enabledDefault, enabledDefault)
+	fmt.Fprintf(content, "%s=120363123456789@g.us        # WhatsApp group JID (use debug logging to find)\n",
+		flagToEnvVar("whatsapp-group-jid"))
+	fmt.Fprintf(content, "%s=\"%s\"           # Device name shown in WhatsApp (default: \"%s\")\n",
+		flagToEnvVar("whatsapp-device-name"), deviceDefault, deviceDefault)
+	fmt.Fprintf(content, "%s=\"./whatsapp_session.db\"  # Session file path (default: \"./whatsapp_session.db\")\n",
+		flagToEnvVar("whatsapp-session-path"))
 	content.WriteString("\n")
 }
 
@@ -702,16 +702,16 @@ func generateSpotifySection(content *strings.Builder, _ *cobra.Command) {
 	content.WriteString("# CLI: --spotify-client-id, --spotify-client-secret, --spotify-playlist-id\n")
 	content.WriteString("\n")
 
-	content.WriteString(fmt.Sprintf("%s=your_spotify_client_id_here          # Spotify app client ID\n",
-		flagToEnvVar("spotify-client-id")))
-	content.WriteString(fmt.Sprintf("%s=your_spotify_client_secret_here  # Spotify app client secret\n",
-		flagToEnvVar("spotify-client-secret")))
-	content.WriteString(fmt.Sprintf("%s=your_target_playlist_id_here       # Target playlist ID (from Spotify URL)\n",
-		flagToEnvVar("spotify-playlist-id")))
-	content.WriteString(fmt.Sprintf("%s=http://127.0.0.1:8080/callback    # OAuth callback URL (default: auto-generated)\n",
-		flagToEnvVar("spotify-redirect-url")))
-	content.WriteString(fmt.Sprintf("%s=./spotify_token.json                # Token storage path (default: \"./spotify_token.json\")\n",
-		flagToEnvVar("spotify-token-path")))
+	fmt.Fprintf(content, "%s=your_spotify_client_id_here          # Spotify app client ID\n",
+		flagToEnvVar("spotify-client-id"))
+	fmt.Fprintf(content, "%s=your_spotify_client_secret_here  # Spotify app client secret\n",
+		flagToEnvVar("spotify-client-secret"))
+	fmt.Fprintf(content, "%s=your_target_playlist_id_here       # Target playlist ID (from Spotify URL)\n",
+		flagToEnvVar("spotify-playlist-id"))
+	fmt.Fprintf(content, "%s=http://127.0.0.1:8080/callback    # OAuth callback URL (default: auto-generated)\n",
+		flagToEnvVar("spotify-redirect-url"))
+	fmt.Fprintf(content, "%s=./spotify_token.json                # Token storage path (default: \"./spotify_token.json\")\n",
+		flagToEnvVar("spotify-token-path"))
 	content.WriteString("\n")
 }
 
@@ -727,35 +727,35 @@ func generateLLMSection(content *strings.Builder, cmd *cobra.Command) {
 
 	providerDefault := getDefaultValueString(cmd, "llm-provider")
 
-	content.WriteString(fmt.Sprintf("%s=%s                              # Provider: none, openai, anthropic, ollama (default: %s)\n",
-		flagToEnvVar("llm-provider"), providerDefault, providerDefault))
+	fmt.Fprintf(content, "%s=%s                              # Provider: none, openai, anthropic, ollama (default: %s)\n",
+		flagToEnvVar("llm-provider"), providerDefault, providerDefault)
 	content.WriteString("\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# OpenAI Configuration (Recommended for best results)\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Uncomment these lines and set DJALGORHYTHM_LLM_PROVIDER=openai\n")
-	content.WriteString(fmt.Sprintf("# %s=sk-...                           # OpenAI API key\n",
-		flagToEnvVar("llm-api-key")))
-	content.WriteString(fmt.Sprintf("# %s=gpt-4o-mini                        # Model name (gpt-4o-mini is cost-effective)\n",
-		flagToEnvVar("llm-model")))
+	fmt.Fprintf(content, "# %s=sk-...                           # OpenAI API key\n",
+		flagToEnvVar("llm-api-key"))
+	fmt.Fprintf(content, "# %s=gpt-4o-mini                        # Model name (gpt-4o-mini is cost-effective)\n",
+		flagToEnvVar("llm-model"))
 	content.WriteString("\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Anthropic Configuration\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Uncomment these lines and set DJALGORHYTHM_LLM_PROVIDER=anthropic\n")
-	content.WriteString(fmt.Sprintf("# %s=sk-ant-...                       # Anthropic API key\n",
-		flagToEnvVar("llm-api-key")))
-	content.WriteString(fmt.Sprintf("# %s=claude-3-haiku-20240307           # Model name (Haiku is fastest/cheapest)\n",
-		flagToEnvVar("llm-model")))
+	fmt.Fprintf(content, "# %s=sk-ant-...                       # Anthropic API key\n",
+		flagToEnvVar("llm-api-key"))
+	fmt.Fprintf(content, "# %s=claude-3-haiku-20240307           # Model name (Haiku is fastest/cheapest)\n",
+		flagToEnvVar("llm-model"))
 	content.WriteString("\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Ollama Configuration (Local/Self-hosted)\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Uncomment these lines and set DJALGORHYTHM_LLM_PROVIDER=ollama\n")
-	content.WriteString(fmt.Sprintf("# %s=http://localhost:11434          # Ollama server URL (default: http://localhost:11434)\n",
-		flagToEnvVar("llm-base-url")))
-	content.WriteString(fmt.Sprintf("# %s=llama3.2                          # Model name (must be installed in Ollama)\n",
-		flagToEnvVar("llm-model")))
+	fmt.Fprintf(content, "# %s=http://localhost:11434          # Ollama server URL (default: http://localhost:11434)\n",
+		flagToEnvVar("llm-base-url"))
+	fmt.Fprintf(content, "# %s=llama3.2                          # Model name (must be installed in Ollama)\n",
+		flagToEnvVar("llm-model"))
 	content.WriteString("\n")
 }
 
@@ -764,6 +764,14 @@ func generateAppSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("# APPLICATION SETTINGS\n")
 	content.WriteString("# =============================================================================\n")
 	content.WriteString("\n")
+	generateAppLocalizationSection(content, cmd)
+	generateAppTimeoutsSection(content, cmd)
+	generateAppQueueSection(content, cmd)
+	generateAppShadowQueueSection(content, cmd)
+	generateAppFloodPreventionSection(content, cmd)
+}
+
+func generateAppLocalizationSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Localization\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
@@ -772,9 +780,12 @@ func generateAppSection(content *strings.Builder, cmd *cobra.Command) {
 	langDefault := getDefaultValueString(cmd, "language")
 	supportedLangs := strings.Join(i18n.GetSupportedLanguages(), ", ")
 
-	content.WriteString(fmt.Sprintf("%s=%s                                    # Bot language: %s (default: %s)\n",
-		flagToEnvVar("language"), langDefault, supportedLangs, langDefault))
+	fmt.Fprintf(content, "%s=%s                                    # Bot language: %s (default: %s)\n",
+		flagToEnvVar("language"), langDefault, supportedLangs, langDefault)
 	content.WriteString("\n")
+}
+
+func generateAppTimeoutsSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Timeouts and Retries (all values in seconds)\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
@@ -785,19 +796,22 @@ func generateAppSection(content *strings.Builder, cmd *cobra.Command) {
 	queueApprovalDefault := getDefaultValueString(cmd, "queue-track-approval-timeout-secs")
 	maxReplacementsDefault := getDefaultValueString(cmd, "max-queue-track-replacements")
 
-	content.WriteString(fmt.Sprintf("%s=%s                       # User confirmation timeout (default: %s)\n",
-		flagToEnvVar("confirm-timeout-secs"), confirmDefault, confirmDefault))
-	content.WriteString(fmt.Sprintf("%s=%s               # Admin confirmation timeout (default: %s)\n",
-		flagToEnvVar("confirm-admin-timeout-secs"), confirmAdminDefault, confirmAdminDefault))
-	content.WriteString(fmt.Sprintf("%s=%s          # Queue track approval timeout (default: %s)\n",
-		flagToEnvVar("queue-track-approval-timeout-secs"), queueApprovalDefault, queueApprovalDefault))
-	content.WriteString(fmt.Sprintf("%s=%s                # Max replacement attempts before auto-accept (default: %s)\n",
-		flagToEnvVar("max-queue-track-replacements"), maxReplacementsDefault, maxReplacementsDefault))
-	content.WriteString(fmt.Sprintf("%s=3                                  # Max retry attempts for failed operations (default: 3)\n",
-		flagToEnvVar("max-retries")))
-	content.WriteString(fmt.Sprintf("%s=5                            # Delay between retries (default: 5)\n",
-		flagToEnvVar("retry-delay-secs")))
+	fmt.Fprintf(content, "%s=%s                       # User confirmation timeout (default: %s)\n",
+		flagToEnvVar("confirm-timeout-secs"), confirmDefault, confirmDefault)
+	fmt.Fprintf(content, "%s=%s               # Admin confirmation timeout (default: %s)\n",
+		flagToEnvVar("confirm-admin-timeout-secs"), confirmAdminDefault, confirmAdminDefault)
+	fmt.Fprintf(content, "%s=%s          # Queue track approval timeout (default: %s)\n",
+		flagToEnvVar("queue-track-approval-timeout-secs"), queueApprovalDefault, queueApprovalDefault)
+	fmt.Fprintf(content, "%s=%s                # Max replacement attempts before auto-accept (default: %s)\n",
+		flagToEnvVar("max-queue-track-replacements"), maxReplacementsDefault, maxReplacementsDefault)
+	fmt.Fprintf(content, "%s=3                                  # Max retry attempts for failed operations (default: 3)\n",
+		flagToEnvVar("max-retries"))
+	fmt.Fprintf(content, "%s=5                            # Delay between retries (default: 5)\n",
+		flagToEnvVar("retry-delay-secs"))
 	content.WriteString("\n")
+}
+
+func generateAppQueueSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Queue Management - Ensures continuous playback\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
@@ -806,13 +820,16 @@ func generateAppSection(content *strings.Builder, cmd *cobra.Command) {
 	queueAheadDefault := getDefaultValueString(cmd, "queue-ahead-duration-secs")
 	queueCheckDefault := getDefaultValueString(cmd, "queue-check-interval-secs")
 
-	content.WriteString(fmt.Sprintf("%s=%s                  # Target queue duration ahead of current song (default: %s)\n",
-		flagToEnvVar("queue-ahead-duration-secs"), queueAheadDefault, queueAheadDefault))
-	content.WriteString(fmt.Sprintf("%s=%s                  # How often to check queue status (default: %s)\n",
-		flagToEnvVar("queue-check-interval-secs"), queueCheckDefault, queueCheckDefault))
-	content.WriteString(fmt.Sprintf("%s=30         # Warning timeout for queue sync issues (default: 30)\n",
-		flagToEnvVar("queue-sync-warning-timeout-minutes")))
+	fmt.Fprintf(content, "%s=%s                  # Target queue duration ahead of current song (default: %s)\n",
+		flagToEnvVar("queue-ahead-duration-secs"), queueAheadDefault, queueAheadDefault)
+	fmt.Fprintf(content, "%s=%s                  # How often to check queue status (default: %s)\n",
+		flagToEnvVar("queue-check-interval-secs"), queueCheckDefault, queueCheckDefault)
+	fmt.Fprintf(content, "%s=30         # Warning timeout for queue sync issues (default: 30)\n",
+		flagToEnvVar("queue-sync-warning-timeout-minutes"))
 	content.WriteString("\n")
+}
+
+func generateAppShadowQueueSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Shadow Queue - Maintains reliable queue state tracking\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
@@ -822,13 +839,16 @@ func generateAppSection(content *strings.Builder, cmd *cobra.Command) {
 	shadowMaxAgeDefault := getDefaultValueString(cmd, "shadow-queue-max-age-hours")
 	shadowPreferenceDefault := getDefaultValueString(cmd, "shadow-queue-preference-enabled")
 
-	content.WriteString(fmt.Sprintf("%s=30     # Maintenance interval in seconds (CLI uses minutes!) (default: converted from %s mins)\n",
-		flagToEnvVar("shadow-queue-maintenance-interval-secs"), shadowMaintenanceDefault))
-	content.WriteString(fmt.Sprintf("%s=%s                  # Max age of shadow queue items (default: %s)\n",
-		flagToEnvVar("shadow-queue-max-age-hours"), shadowMaxAgeDefault, shadowMaxAgeDefault))
-	content.WriteString(fmt.Sprintf("%s=%s          # Prefer shadow queue over Spotify API (default: %s)\n",
-		flagToEnvVar("shadow-queue-preference-enabled"), shadowPreferenceDefault, shadowPreferenceDefault))
+	fmt.Fprintf(content, "%s=30     # Maintenance interval in seconds (CLI uses minutes!) (default: converted from %s mins)\n",
+		flagToEnvVar("shadow-queue-maintenance-interval-secs"), shadowMaintenanceDefault)
+	fmt.Fprintf(content, "%s=%s                  # Max age of shadow queue items (default: %s)\n",
+		flagToEnvVar("shadow-queue-max-age-hours"), shadowMaxAgeDefault, shadowMaxAgeDefault)
+	fmt.Fprintf(content, "%s=%s          # Prefer shadow queue over Spotify API (default: %s)\n",
+		flagToEnvVar("shadow-queue-preference-enabled"), shadowPreferenceDefault, shadowPreferenceDefault)
 	content.WriteString("\n")
+}
+
+func generateAppFloodPreventionSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Flood Prevention - Anti-spam protection\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
@@ -836,8 +856,8 @@ func generateAppSection(content *strings.Builder, cmd *cobra.Command) {
 
 	floodDefault := getDefaultValueString(cmd, "flood-limit-per-minute")
 
-	content.WriteString(fmt.Sprintf("%s=%s                      # Max messages per user per minute (default: %s)\n",
-		flagToEnvVar("flood-limit-per-minute"), floodDefault, floodDefault))
+	fmt.Fprintf(content, "%s=%s                      # Max messages per user per minute (default: %s)\n",
+		flagToEnvVar("flood-limit-per-minute"), floodDefault, floodDefault)
 	content.WriteString("\n")
 }
 
@@ -850,10 +870,10 @@ func generateServerSection(content *strings.Builder, cmd *cobra.Command) {
 	hostDefault := getDefaultValueString(cmd, "server-host")
 	portDefault := getDefaultValueString(cmd, "server-port")
 
-	content.WriteString(fmt.Sprintf("%s=%s                         # Server bind address (default: %s)\n",
-		flagToEnvVar("server-host"), "127.0.0.1", hostDefault))
-	content.WriteString(fmt.Sprintf("%s=%s                              # Server port (default: %s)\n",
-		flagToEnvVar("server-port"), portDefault, portDefault))
+	fmt.Fprintf(content, "%s=%s                         # Server bind address (default: %s)\n",
+		flagToEnvVar("server-host"), "127.0.0.1", hostDefault)
+	fmt.Fprintf(content, "%s=%s                              # Server port (default: %s)\n",
+		flagToEnvVar("server-port"), portDefault, portDefault)
 	content.WriteString("\n")
 }
 
@@ -865,18 +885,27 @@ func generateLoggingSection(content *strings.Builder, cmd *cobra.Command) {
 
 	logDefault := getDefaultValueString(cmd, "log-level")
 
-	content.WriteString(fmt.Sprintf("%s=%s                                # Log level: debug, info, warn, error (default: %s)\n",
-		flagToEnvVar("log-level"), logDefault, logDefault))
-	content.WriteString(fmt.Sprintf("%s=json                               # Log format: json, text (default: json)\n",
-		flagToEnvVar("log-format")))
+	fmt.Fprintf(content, "%s=%s                                # Log level: debug, info, warn, error (default: %s)\n",
+		flagToEnvVar("log-level"), logDefault, logDefault)
+	fmt.Fprintf(content, "%s=json                               # Log format: json, text (default: json)\n",
+		flagToEnvVar("log-format"))
 	content.WriteString("\n")
 }
 
 func generateQuickSetupGuide(content *strings.Builder) {
+	generateSetupGuideHeader(content)
+	generateSetupSteps(content)
+	generateTroubleshootingSection(content)
+}
+
+func generateSetupGuideHeader(content *strings.Builder) {
 	content.WriteString("# =============================================================================\n")
 	content.WriteString("# QUICK SETUP GUIDE\n")
 	content.WriteString("# =============================================================================\n")
 	content.WriteString("\n")
+}
+
+func generateSetupSteps(content *strings.Builder) {
 	content.WriteString("# 1. TELEGRAM SETUP (Recommended):\n")
 	content.WriteString("#    - Message @BotFather on Telegram\n")
 	content.WriteString("#    - Create bot with /newbot command\n")
@@ -904,6 +933,9 @@ func generateQuickSetupGuide(content *strings.Builder) {
 	content.WriteString("#    go run ./cmd/djalgorhythm --log-level=debug            # Run with debug logging\n")
 	content.WriteString("#    make build && ./bin/djalgorhythm                       # Build and run\n")
 	content.WriteString("\n")
+}
+
+func generateTroubleshootingSection(content *strings.Builder) {
 	content.WriteString("# =============================================================================\n")
 	content.WriteString("# TROUBLESHOOTING\n")
 	content.WriteString("# =============================================================================\n")
