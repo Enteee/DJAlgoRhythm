@@ -13,10 +13,11 @@ import (
 
 func TestNewFrontend(t *testing.T) {
 	config := &Config{
-		BotToken:        "test-token",
-		GroupID:         -123456789,
-		Enabled:         true,
-		ReactionSupport: true,
+		BotToken:            "test-token",
+		GroupID:             -123456789,
+		Enabled:             true,
+		ReactionSupport:     true,
+		FloodLimitPerMinute: 10,
 	}
 
 	logger := zap.NewNop()
@@ -33,6 +34,19 @@ func TestNewFrontend(t *testing.T) {
 
 	if frontend.config.GroupID != config.GroupID {
 		t.Errorf("Expected group ID %d, got %d", config.GroupID, frontend.config.GroupID)
+	}
+
+	if frontend.floodgate == nil {
+		t.Error("Floodgate was not initialized")
+	}
+
+	// Test floodgate functionality
+	stats := frontend.floodgate.GetStats()
+	if stats.LimitPerMinute != config.FloodLimitPerMinute {
+		t.Errorf("Expected flood limit %d, got %d", config.FloodLimitPerMinute, stats.LimitPerMinute)
+	}
+	if stats.WindowSeconds != 60 {
+		t.Errorf("Expected flood window 60 seconds, got %d", stats.WindowSeconds)
 	}
 }
 

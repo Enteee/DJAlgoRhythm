@@ -24,6 +24,7 @@ const (
 	DefaultShadowQueueMaxAgeHours             = 2
 	DefaultShadowQueuePreferenceEnabled       = true
 	DefaultQueueSyncWarningTimeoutMinutes     = 30
+	DefaultFloodLimitPerMinute                = 6
 )
 
 type Config struct {
@@ -95,6 +96,7 @@ type AppConfig struct {
 	ShadowQueueMaxAgeHours             int    // Maximum age of shadow queue items in hours
 	ShadowQueuePreferenceEnabled       bool   // Prefer shadow queue over Spotify API for position/duration
 	QueueSyncWarningTimeoutMinutes     int    // Timeout for queue sync warning in minutes
+	FloodLimitPerMinute                int    // Maximum messages per user per minute (default: 6)
 }
 
 func DefaultConfig() *Config {
@@ -141,6 +143,7 @@ func DefaultConfig() *Config {
 			ShadowQueueMaxAgeHours:             DefaultShadowQueueMaxAgeHours,
 			ShadowQueuePreferenceEnabled:       DefaultShadowQueuePreferenceEnabled,
 			QueueSyncWarningTimeoutMinutes:     DefaultQueueSyncWarningTimeoutMinutes,
+			FloodLimitPerMinute:                DefaultFloodLimitPerMinute,
 		},
 	}
 }

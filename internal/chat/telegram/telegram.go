@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"djalgorhythm/internal/chat"
+	"djalgorhythm/internal/flood"
 	"djalgorhythm/internal/i18n"
 	"djalgorhythm/pkg/text"
 )
@@ -26,6 +27,7 @@ const (
 	chatTypeSuperGroup    = "supergroup"
 	groupDiscoveryTimeout = 15 // seconds for group discovery
 	thumbsUpEmoji         = "👍"
+	floodEmoji            = "🌊"
 	// Sleep durations for group discovery
 	botStopDelay       = 200 * time.Millisecond
 	discoveryFinalWait = 50 * time.Millisecond
@@ -33,14 +35,15 @@ const (
 
 // Config holds Telegram-specific configuration
 type Config struct {
-	BotToken           string
-	GroupID            int64 // Chat ID of the group to monitor
-	Enabled            bool
-	ReactionSupport    bool   // Whether the group supports reactions
-	AdminApproval      bool   // Whether admin approval is required for songs
-	AdminNeedsApproval bool   // Whether admins also need approval (for testing)
-	CommunityApproval  int    // Number of 👍 reactions needed to bypass admin approval (0 disables)
-	Language           string // Bot language for user-facing messages
+	BotToken            string
+	GroupID             int64 // Chat ID of the group to monitor
+	Enabled             bool
+	ReactionSupport     bool   // Whether the group supports reactions
+	AdminApproval       bool   // Whether admin approval is required for songs
+	AdminNeedsApproval  bool   // Whether admins also need approval (for testing)
+	CommunityApproval   int    // Number of 👍 reactions needed to bypass admin approval (0 disables)
+	Language            string // Bot language for user-facing messages
+	FloodLimitPerMinute int    // Maximum messages per user per minute
 }
 
 // Frontend implements the chat.Frontend interface for Telegram
@@ -50,6 +53,7 @@ type Frontend struct {
 	bot       *bot.Bot
 	parser    *text.Parser
 	localizer *i18n.Localizer
+	floodgate *flood.Floodgate
 
 	// Message handling
 	messageHandler func(*chat.Message)
@@ -116,6 +120,7 @@ func NewFrontend(config *Config, logger *zap.Logger) *Frontend {
 		logger:                    logger,
 		parser:                    text.NewParser(),
 		localizer:                 i18n.NewLocalizer(language),
+		floodgate:                 flood.New(config.FloodLimitPerMinute),
 		pendingApprovals:          make(map[string]*approvalContext),
 		pendingAdminApprovals:     make(map[string]*adminApprovalContext),
 		pendingCommunityApprovals: make(map[string]*communityApprovalContext),
@@ -437,6 +442,22 @@ func (f *Frontend) handleMessage(_ context.Context, msg *models.Message) {
 		f.logger.Debug("Ignoring service message",
 			zap.String("type", f.getServiceMessageType(msg)),
 			zap.String("text", msg.Text))
+		return
+	}
+
+	// Check flood prevention - block messages that exceed rate limit
+	chatID := strconv.FormatInt(msg.Chat.ID, 10)
+	userID := strconv.FormatInt(msg.From.ID, 10)
+	if !f.floodgate.CheckMessage(chatID, userID) {
+		f.logger.Debug("Message blocked due to flood prevention",
+			zap.String("chatID", chatID),
+			zap.String("userID", userID),
+			zap.String("userName", f.getUserDisplayName(msg.From)))
+
+		// React with flood emoji to indicate the message was blocked
+		if err := f.React(context.Background(), chatID, strconv.Itoa(msg.ID), chat.ReactionYawning); err != nil {
+			f.logger.Debug("Failed to add flood reaction to message", zap.Error(err))
+		}
 		return
 	}
 

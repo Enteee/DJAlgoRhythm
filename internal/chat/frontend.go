@@ -24,6 +24,7 @@ type Reaction string
 const (
 	ReactionThumbsUp   Reaction = "👍"
 	ReactionThumbsDown Reaction = "👎"
+	ReactionYawning    Reaction = "🥱"
 )
 
 // User represents a Telegram user
