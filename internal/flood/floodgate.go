@@ -93,6 +93,9 @@ func (fg *Floodgate) CheckMessage(chatID, userID string) bool {
 
 // cleanup removes idle user entries to prevent memory leaks
 func (fg *Floodgate) cleanup() {
+	// Run immediately on startup
+	fg.performCleanup()
+
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 

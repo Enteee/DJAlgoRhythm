@@ -15,6 +15,9 @@ import (
 func (d *Dispatcher) runPlaybackSettingsMonitoring(ctx context.Context) {
 	d.logger.Info("Starting playback settings monitoring")
 
+	// Run immediately on startup
+	d.checkPlaybackSettingsCompliance(ctx)
+
 	ticker := time.NewTicker(playbackSettingsCheckInterval)
 	defer ticker.Stop()
 

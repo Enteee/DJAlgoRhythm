@@ -140,6 +140,9 @@ func (d *Dispatcher) runQueueAndPlaylistManagement(ctx context.Context) {
 		zap.Duration("interval", time.Duration(d.config.App.QueueCheckIntervalSecs)*time.Second),
 		zap.Duration("targetDuration", time.Duration(d.config.App.QueueAheadDurationSecs)*time.Second))
 
+	// Run immediately on startup
+	d.checkAndManageQueue(ctx)
+
 	interval := time.Duration(d.config.App.QueueCheckIntervalSecs) * time.Second
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

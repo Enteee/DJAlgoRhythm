@@ -428,6 +428,9 @@ func (d *Dispatcher) runShadowQueueMaintenance(ctx context.Context) {
 		zap.Int("intervalSecs", d.config.App.ShadowQueueMaintenanceIntervalSecs),
 		zap.Duration("interval", maintenanceInterval))
 
+	// Run immediately on startup
+	d.performShadowQueueMaintenance(ctx)
+
 	ticker := time.NewTicker(maintenanceInterval)
 	defer ticker.Stop()
 

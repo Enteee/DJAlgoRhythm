@@ -17,6 +17,9 @@ import (
 func (d *Dispatcher) runAdminPermissionsMonitoring(ctx context.Context) {
 	d.logger.Info("Starting admin permissions monitoring")
 
+	// Run immediately on startup
+	d.checkAdminPermissionsCompliance(ctx)
+
 	ticker := time.NewTicker(adminPermissionsCheckInterval)
 	defer ticker.Stop()
 
