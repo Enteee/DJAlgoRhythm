@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/openai/openai-go"
@@ -33,7 +34,6 @@ const (
 	maxTokensTrackRanking = 100
 	maxTokensExtraction   = 500 // For song extraction response
 	maxTokensMood         = 50  // For track mood generation
-	maxSeedTracksInPrompt = 3
 	defaultModel          = "gpt-3.5-turbo"
 )
 
@@ -173,12 +173,16 @@ func (o *OpenAIClient) GenerateTrackMood(ctx context.Context, tracks []core.Trac
 		return fallbackSearchQuery, nil
 	}
 
+	// Shuffle tracks to eliminate order bias
+	shuffledTracks := make([]core.Track, len(tracks))
+	copy(shuffledTracks, tracks)
+	rand.Shuffle(len(shuffledTracks), func(i, j int) {
+		shuffledTracks[i], shuffledTracks[j] = shuffledTracks[j], shuffledTracks[i]
+	})
+
 	// Build user prompt with track information
 	userPrompt := "Based on all these songs:\n"
-	for i, track := range tracks {
-		if i >= maxSeedTracksInPrompt {
-			break
-		}
+	for _, track := range shuffledTracks {
 		userPrompt += fmt.Sprintf("- %s by %s", track.Title, track.Artist)
 		if track.Album != "" {
 			userPrompt += fmt.Sprintf(" (from %s)", track.Album)
@@ -459,9 +463,15 @@ IMPORTANT: Be conservative. Only mark as priority when there are clear indicator
 func (o *OpenAIClient) buildTrackMoodPrompt() string {
 	return `You are a music expert helping to describe musical moods and styles.
 
-Generate a short, descriptive mood/style phrase (3-6 words) describing the musical style of the provided songs.
+Generate a short, descriptive mood/style phrase (3-6 words) describing the overall musical style of the provided songs.
 
-Focus on genre, mood, or artist style. Respond with just the mood phrase, no other text.
+IMPORTANT: Give equal weight to each song in your analysis.
+
+Consider the common themes, genres, and moods that span across ALL the songs, not just the first one.
+
+Look for the overall consensus and dominant characteristics that best represent the collection as a whole.
+
+Focus on genre, mood, or artist style that captures the essence of the entire set. Respond with just the mood phrase, no other text.
 
 Examples:
 - "energetic rock anthems"
