@@ -112,46 +112,8 @@ func initConfig() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	viper.AutomaticEnv()
 
-	// Add backward compatibility for old WHATDJ_ environment variables
-	setupBackwardCompatibilityEnvVars()
-
 	config = buildConfig()
 	logger = buildLogger(config.Log.Level)
-}
-
-// setupBackwardCompatibilityEnvVars sets up backward compatibility for old WHATDJ_ environment variables
-// This allows existing configurations to continue working while preferring new DJALGORHYTHM_ names
-func setupBackwardCompatibilityEnvVars() {
-	// List of all environment variable keys (without prefix)
-	envKeys := []string{
-		"TELEGRAM_ENABLED", "TELEGRAM_BOT_TOKEN", "TELEGRAM_GROUP_ID", "TELEGRAM_REACTION_SUPPORT",
-		"WHATSAPP_ENABLED", "WHATSAPP_GROUP_JID", "WHATSAPP_DEVICE_NAME", "WHATSAPP_SESSION_PATH",
-		"SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_PLAYLIST_ID", "SPOTIFY_REDIRECT_URL", "SPOTIFY_TOKEN_PATH",
-		"LLM_PROVIDER", "LLM_API_KEY", "LLM_MODEL", "LLM_BASE_URL",
-		"ADMIN_APPROVAL", "ADMIN_NEEDS_APPROVAL", "COMMUNITY_APPROVAL",
-		"CONFIRM_TIMEOUT_SECS", "CONFIRM_ADMIN_TIMEOUT_SECS", "QUEUE_TRACK_APPROVAL_TIMEOUT_SECS",
-		"MAX_QUEUE_TRACK_REPLACEMENTS", "RETRY_DELAY_SECS",
-		"QUEUE_AHEAD_DURATION_SECS", "QUEUE_CHECK_INTERVAL_SECS",
-		"SHADOW_QUEUE_MAINTENANCE_INTERVAL_SECS", "SHADOW_QUEUE_MAX_AGE_HOURS", "SHADOW_QUEUE_PREFERENCE_ENABLED",
-		"QUEUE_SYNC_WARNING_TIMEOUT_MINUTES", "FLOOD_LIMIT_PER_MINUTE",
-		"SERVER_HOST", "SERVER_PORT", "LOG_LEVEL", "LOG_FORMAT", "LANGUAGE",
-	}
-
-	for _, key := range envKeys {
-		newEnvVar := "DJALGORHYTHM_" + key
-		oldEnvVar := "WHATDJ_" + key
-
-		// If new env var is not set but old one is, use the old value
-		if os.Getenv(newEnvVar) == "" && os.Getenv(oldEnvVar) != "" {
-			_ = os.Setenv(newEnvVar, os.Getenv(oldEnvVar))
-			// Log deprecation warning
-			if logger != nil {
-				logger.Warn("Using deprecated environment variable",
-					zap.String("deprecated", oldEnvVar),
-					zap.String("preferred", newEnvVar))
-			}
-		}
-	}
 }
 
 func buildConfig() *core.Config {
