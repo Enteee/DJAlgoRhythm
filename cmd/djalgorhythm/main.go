@@ -130,7 +130,7 @@ func setupBackwardCompatibilityEnvVars() {
 		"LLM_PROVIDER", "LLM_API_KEY", "LLM_MODEL", "LLM_BASE_URL",
 		"ADMIN_APPROVAL", "ADMIN_NEEDS_APPROVAL", "COMMUNITY_APPROVAL",
 		"CONFIRM_TIMEOUT_SECS", "CONFIRM_ADMIN_TIMEOUT_SECS", "QUEUE_TRACK_APPROVAL_TIMEOUT_SECS",
-		"MAX_QUEUE_TRACK_REPLACEMENTS", "MAX_RETRIES", "RETRY_DELAY_SECS",
+		"MAX_QUEUE_TRACK_REPLACEMENTS", "RETRY_DELAY_SECS",
 		"QUEUE_AHEAD_DURATION_SECS", "QUEUE_CHECK_INTERVAL_SECS",
 		"SHADOW_QUEUE_MAINTENANCE_INTERVAL_SECS", "SHADOW_QUEUE_MAX_AGE_HOURS", "SHADOW_QUEUE_PREFERENCE_ENABLED",
 		"QUEUE_SYNC_WARNING_TIMEOUT_MINUTES", "FLOOD_LIMIT_PER_MINUTE",
@@ -227,10 +227,6 @@ func configureApp(cfg *core.Config) {
 	cfg.App.ConfirmAdminTimeoutSecs = viper.GetInt("confirm-admin-timeout-secs")
 	cfg.App.QueueTrackApprovalTimeoutSecs = viper.GetInt("queue-track-approval-timeout-secs")
 	cfg.App.MaxQueueTrackReplacements = viper.GetInt("max-queue-track-replacements")
-	cfg.App.MaxRetries = viper.GetInt("max-retries")
-	if cfg.App.MaxRetries == 0 {
-		cfg.App.MaxRetries = 3
-	}
 
 	// Queue-ahead configuration
 	cfg.App.QueueAheadDurationSecs = viper.GetInt("queue-ahead-duration-secs")
@@ -804,8 +800,6 @@ func generateAppTimeoutsSection(content *strings.Builder, cmd *cobra.Command) {
 		flagToEnvVar("queue-track-approval-timeout-secs"), queueApprovalDefault, queueApprovalDefault)
 	fmt.Fprintf(content, "%s=%s                # Max replacement attempts before auto-accept (default: %s)\n",
 		flagToEnvVar("max-queue-track-replacements"), maxReplacementsDefault, maxReplacementsDefault)
-	fmt.Fprintf(content, "%s=3                                  # Max retry attempts for failed operations (default: 3)\n",
-		flagToEnvVar("max-retries"))
 	fmt.Fprintf(content, "%s=5                            # Delay between retries (default: 5)\n",
 		flagToEnvVar("retry-delay-secs"))
 	content.WriteString("\n")

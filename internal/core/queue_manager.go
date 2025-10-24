@@ -104,26 +104,16 @@ func (d *Dispatcher) executePriorityQueue(ctx context.Context, msgCtx *MessageCo
 		zap.String("resumeSongID", currentTrackID))
 
 	// Add to playlist at position 0 (top) for history/deduplication to avoid replaying later
-	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
-		if err := d.spotify.AddToPlaylistAtPosition(ctx, d.config.Spotify.PlaylistID, trackID, 0); err != nil {
-			d.logger.Error("Failed to add priority track to playlist",
-				zap.String("trackID", trackID),
-				zap.Int("retry", retry),
-				zap.Error(err))
-
-			if retry == d.config.App.MaxRetries-1 {
-				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
-				return
-			}
-
-			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
-			continue
-		}
-
-		d.dedup.Add(trackID)
-		d.reactPriorityQueued(ctx, msgCtx, originalMsg, trackID)
+	if err := d.spotify.AddToPlaylistAtPosition(ctx, d.config.Spotify.PlaylistID, trackID, 0); err != nil {
+		d.logger.Error("Failed to add priority track to playlist",
+			zap.String("trackID", trackID),
+			zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
 		return
 	}
+
+	d.dedup.Add(trackID)
+	d.reactPriorityQueued(ctx, msgCtx, originalMsg, trackID)
 }
 
 // executePlaylistAddWithReaction performs the actual playlist addition with appropriate reaction
@@ -132,26 +122,16 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 	msgCtx.State = StateAddToPlaylist
 
 	// Add track to playlist
-	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
-		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
-			d.logger.Error("Failed to add to playlist",
-				zap.String("trackID", trackID),
-				zap.Int("retry", retry),
-				zap.Error(err))
-
-			if retry == d.config.App.MaxRetries-1 {
-				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
-				return
-			}
-
-			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
-			continue
-		}
-
-		d.dedup.Add(trackID)
-		d.reactAdded(ctx, msgCtx, originalMsg, trackID)
+	if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+		d.logger.Error("Failed to add to playlist",
+			zap.String("trackID", trackID),
+			zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
 		return
 	}
+
+	d.dedup.Add(trackID)
+	d.reactAdded(ctx, msgCtx, originalMsg, trackID)
 }
 
 // runQueueAndPlaylistManagement manages queue duration and automatic track filling

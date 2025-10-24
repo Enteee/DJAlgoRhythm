@@ -15,7 +15,6 @@ const (
 	DefaultConfirmAdminTimeoutSecs            = 3600
 	DefaultQueueTrackApprovalTimeoutSecs      = 30
 	DefaultMaxQueueTrackReplacements          = 3
-	DefaultMaxRetries                         = 3
 	DefaultRetryDelaySecs                     = 5
 	DefaultQueueAheadDurationSecs             = 90
 	DefaultQueueCheckIntervalSecs             = 45
@@ -84,7 +83,6 @@ type AppConfig struct {
 	ConfirmAdminTimeoutSecs            int
 	QueueTrackApprovalTimeoutSecs      int
 	MaxQueueTrackReplacements          int
-	MaxRetries                         int
 	RetryDelaySecs                     int
 	Language                           string // Bot language for user-facing messages
 	QueueAheadDurationSecs             int    // Target queue duration in seconds
@@ -129,7 +127,6 @@ func DefaultConfig() *Config {
 			ConfirmAdminTimeoutSecs:            DefaultConfirmAdminTimeoutSecs,
 			QueueTrackApprovalTimeoutSecs:      DefaultQueueTrackApprovalTimeoutSecs,
 			MaxQueueTrackReplacements:          DefaultMaxQueueTrackReplacements,
-			MaxRetries:                         DefaultMaxRetries,
 			RetryDelaySecs:                     DefaultRetryDelaySecs,
 			Language:                           i18n.DefaultLanguage, // Default to English
 			QueueAheadDurationSecs:             DefaultQueueAheadDurationSecs,

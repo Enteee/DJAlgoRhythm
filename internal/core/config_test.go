@@ -62,10 +62,6 @@ func TestConfigConstants(t *testing.T) {
 		t.Error("Admin timeout should be longer than regular timeout")
 	}
 
-	if DefaultMaxRetries <= 0 {
-		t.Error("DefaultMaxRetries should be positive")
-	}
-
 	if DefaultServerPort <= 0 || DefaultServerPort > 65535 {
 		t.Error("DefaultServerPort should be a valid port number")
 	}

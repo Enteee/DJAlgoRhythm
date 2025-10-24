@@ -396,39 +396,29 @@ func (d *Dispatcher) executePlaylistAddAfterApproval(
 	}
 
 	// Add track to playlist
-	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
-		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
-			d.logger.Error("Failed to add to playlist",
-				zap.String("trackID", trackID),
-				zap.Int("retry", retry),
-				zap.Error(err))
-
-			if retry == d.config.App.MaxRetries-1 {
-				d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
-				return
-			}
-
-			time.Sleep(time.Duration(d.config.App.RetryDelaySecs) * time.Second)
-			continue
-		}
-
-		d.dedup.Add(trackID)
-
-		// React with thumbs up
-		if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsUpReaction); reactErr != nil {
-			d.logger.Error("Failed to react with thumbs up", zap.Error(reactErr))
-		}
-
-		// Send appropriate success message based on approval source
-		if approvalSource == "admin" {
-			d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
-		} else if approvalSource == "community" {
-			d.reactAddedAfterCommunityApproval(ctx, msgCtx, originalMsg, trackID)
-		} else {
-			// Fallback for unknown approval sources
-			d.reactAdded(ctx, msgCtx, originalMsg, trackID)
-		}
+	if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+		d.logger.Error("Failed to add to playlist",
+			zap.String("trackID", trackID),
+			zap.Error(err))
+		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
 		return
+	}
+
+	d.dedup.Add(trackID)
+
+	// React with thumbs up
+	if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsUpReaction); reactErr != nil {
+		d.logger.Error("Failed to react with thumbs up", zap.Error(reactErr))
+	}
+
+	// Send appropriate success message based on approval source
+	if approvalSource == "admin" {
+		d.reactAddedAfterApproval(ctx, msgCtx, originalMsg, trackID)
+	} else if approvalSource == "community" {
+		d.reactAddedAfterCommunityApproval(ctx, msgCtx, originalMsg, trackID)
+	} else {
+		// Fallback for unknown approval sources
+		d.reactAdded(ctx, msgCtx, originalMsg, trackID)
 	}
 }
 
