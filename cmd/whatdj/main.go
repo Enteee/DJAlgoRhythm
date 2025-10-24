@@ -175,10 +175,6 @@ func configureLLM(cfg *core.Config) {
 	cfg.LLM.Model = viper.GetString("llm-model")
 	cfg.LLM.APIKey = viper.GetString("llm-api-key")
 	cfg.LLM.BaseURL = viper.GetString("llm-base-url")
-	cfg.LLM.Threshold = viper.GetFloat64("llm-threshold")
-	if cfg.LLM.Threshold == 0 {
-		cfg.LLM.Threshold = 0.65
-	}
 }
 
 func configureServer(cfg *core.Config) {

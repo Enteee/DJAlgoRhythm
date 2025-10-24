@@ -17,8 +17,6 @@ var berneseGermanMessages = map[string]string{
 	// Questions and prompts
 	"prompt.which_song":        "Weles Lied meinsch de gnau?",
 	"prompt.enhanced_approval": "🎵 Gfunde: %s - %s%s%s%s\n\n🎯 Track-Stimmig: %s\n\nIsch das z'richtige?",
-	"prompt.basic_approval":    "Meinsch %s - %s%s%s?\n\n🎯 Track-Stimmig: %s",
-	"prompt.clarification":     "Meinsch %s - %s? 🎯 %s\n\nWenn nid, chasch das bitte gnauer erlüterä?",
 
 	// Format helpers for prompts
 	"format.album": " (Album: %s)",

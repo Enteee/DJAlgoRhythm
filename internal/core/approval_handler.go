@@ -21,24 +21,16 @@ const (
 )
 
 // generateTrackMoodForCandidate generates track mood for a candidate and stores it in MessageContext
-func (d *Dispatcher) generateTrackMoodForCandidate(ctx context.Context, msgCtx *MessageContext, candidate *LLMCandidate) {
+func (d *Dispatcher) generateTrackMoodForCandidate(ctx context.Context, msgCtx *MessageContext, candidate *Track) {
 	if msgCtx.TrackMood != "" {
 		// Already generated, don't regenerate
 		return
 	}
 
 	if d.llm != nil {
-		track := Track{
-			Artist: candidate.Track.Artist,
-			Title:  candidate.Track.Title,
-			Album:  candidate.Track.Album,
-			Year:   candidate.Track.Year,
-			URL:    candidate.Track.URL,
-		}
-
-		if mood, moodErr := d.llm.GenerateTrackMood(ctx, []Track{track}); moodErr != nil {
+		if mood, moodErr := d.llm.GenerateTrackMood(ctx, []Track{*candidate}); moodErr != nil {
 			d.logger.Warn("Failed to generate track mood for user prompt, using fallback",
-				zap.Error(moodErr), zap.String("artist", candidate.Track.Artist), zap.String("title", candidate.Track.Title))
+				zap.Error(moodErr), zap.String("artist", candidate.Artist), zap.String("title", candidate.Title))
 			msgCtx.TrackMood = unknownTrackMood
 		} else {
 			msgCtx.TrackMood = mood
@@ -54,7 +46,7 @@ func (d *Dispatcher) generateTrackMoodForCandidate(ctx context.Context, msgCtx *
 
 // promptEnhancedApproval asks for user approval with enhanced context
 func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *MessageContext,
-	originalMsg *chat.Message, candidate *LLMCandidate) {
+	originalMsg *chat.Message, candidate *Track) {
 	msgCtx.State = StateConfirmationPrompt
 
 	// Generate track mood for this candidate
@@ -62,22 +54,22 @@ func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *Message
 
 	// Build format components
 	albumPart := ""
-	if candidate.Track.Album != "" {
-		albumPart = d.localizer.T("format.album", candidate.Track.Album)
+	if candidate.Album != "" {
+		albumPart = d.localizer.T("format.album", candidate.Album)
 	}
 
 	yearPart := ""
-	if candidate.Track.Year > 0 {
-		yearPart = d.localizer.T("format.year", candidate.Track.Year)
+	if candidate.Year > 0 {
+		yearPart = d.localizer.T("format.year", candidate.Year)
 	}
 
 	urlPart := ""
-	if candidate.Track.URL != "" {
-		urlPart = d.localizer.T("format.url", candidate.Track.URL)
+	if candidate.URL != "" {
+		urlPart = d.localizer.T("format.url", candidate.URL)
 	}
 
 	prompt := d.localizer.T("prompt.enhanced_approval",
-		candidate.Track.Artist, candidate.Track.Title, albumPart, yearPart, urlPart, msgCtx.TrackMood)
+		candidate.Artist, candidate.Title, albumPart, yearPart, urlPart, msgCtx.TrackMood)
 	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
@@ -103,9 +95,9 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 
 	best := msgCtx.Candidates[0]
 
-	// For enhanced candidates, we already have validated Spotify data
+	// For enhanced tracks, we already have validated Spotify data
 	// Try to find the exact track ID from our previous search
-	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
+	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Artist, best.Title))
 	if err != nil || len(tracks) == 0 {
 		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.not_found"))
 		return
@@ -114,7 +106,7 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 	// Find the best matching track (should be the same as our enhanced result)
 	var trackID string
 	for _, track := range tracks {
-		if track.Artist == best.Track.Artist && track.Title == best.Track.Title {
+		if track.Artist == best.Artist && track.Title == best.Title {
 			trackID = track.ID
 			break
 		}
@@ -125,66 +117,6 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 		trackID = tracks[0].ID
 	}
 
-	if d.dedup.Has(trackID) {
-		d.reactDuplicate(ctx, msgCtx, originalMsg)
-		return
-	}
-
-	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
-}
-
-// promptApproval asks for user approval with high confidence
-func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
-	msgCtx.State = StateConfirmationPrompt
-
-	// Generate track mood for this candidate
-	d.generateTrackMoodForCandidate(ctx, msgCtx, candidate)
-
-	// Build format components
-	yearPart := ""
-	if candidate.Track.Year > 0 {
-		yearPart = d.localizer.T("format.year", candidate.Track.Year)
-	}
-
-	urlPart := ""
-	if candidate.Track.URL != "" {
-		urlPart = d.localizer.T("format.url", candidate.Track.URL)
-	}
-
-	prompt := d.localizer.T("prompt.basic_approval",
-		candidate.Track.Artist, candidate.Track.Title, yearPart, urlPart, msgCtx.TrackMood)
-	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
-
-	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
-	if err != nil {
-		d.logger.Error("Failed to get approval", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
-		return
-	}
-
-	if approved {
-		d.handleApproval(ctx, msgCtx, originalMsg)
-	} else {
-		d.handleRejection(ctx, msgCtx, originalMsg)
-	}
-}
-
-// handleApproval processes user approval
-func (d *Dispatcher) handleApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
-	if len(msgCtx.Candidates) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
-		return
-	}
-
-	best := msgCtx.Candidates[0]
-
-	tracks, err := d.spotify.SearchTrack(ctx, fmt.Sprintf("%s %s", best.Track.Artist, best.Track.Title))
-	if err != nil || len(tracks) == 0 {
-		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.spotify.not_found"))
-		return
-	}
-
-	trackID := tracks[0].ID
 	if d.dedup.Has(trackID) {
 		d.reactDuplicate(ctx, msgCtx, originalMsg)
 		return

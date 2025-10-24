@@ -44,12 +44,6 @@ type Playlist struct {
 	Owner       string
 }
 
-type LLMCandidate struct {
-	Track      Track
-	Confidence float64
-	Reasoning  string
-}
-
 type PlaybackCompliance struct {
 	IsCorrectShuffle bool
 	IsCorrectRepeat  bool
@@ -101,7 +95,7 @@ const (
 type MessageContext struct {
 	Input      InputMessage
 	State      MessageState
-	Candidates []LLMCandidate
+	Candidates []Track
 	SelectedID string
 	Error      error
 	RetryCount int

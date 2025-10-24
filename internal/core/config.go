@@ -9,7 +9,6 @@ import (
 
 // Default configuration values
 const (
-	DefaultLLMThreshold                       = 0.65
 	DefaultMaxCandidates                      = 3
 	DefaultServerPort                         = 8080
 	DefaultTimeoutSeconds                     = 10
@@ -67,7 +66,6 @@ type LLMConfig struct {
 	Model         string
 	APIKey        string
 	BaseURL       string
-	Threshold     float64
 	MaxCandidates int
 }
 
@@ -117,7 +115,6 @@ func DefaultConfig() *Config {
 		LLM: LLMConfig{
 			Provider:      "none",
 			Model:         "",
-			Threshold:     DefaultLLMThreshold,
 			MaxCandidates: DefaultMaxCandidates,
 		},
 		Server: ServerConfig{

@@ -17,8 +17,6 @@ var englishMessages = map[string]string{
 	// Questions and prompts
 	"prompt.which_song":        "Which song do you mean by that?",
 	"prompt.enhanced_approval": "🎵 Found: %s - %s%s%s%s\n\n🎯 Track mood: %s\n\nIs this what you're looking for?",
-	"prompt.basic_approval":    "Did you mean %s - %s%s%s?\n\n🎯 Track mood: %s",
-	"prompt.clarification":     "Did you mean %s - %s? 🎯 %s\n\nIf not, please clarify.",
 
 	// Format helpers for prompts
 	"format.album": " (Album: %s)",

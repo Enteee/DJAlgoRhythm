@@ -111,8 +111,6 @@ func TestI18nMessageValues(t *testing.T) {
 	// Test specific keys that should have placeholders
 	testsWithPlaceholders := map[string]int{
 		"prompt.enhanced_approval":          6, // %s - %s, album, year, url, mood
-		"prompt.basic_approval":             5, // %s - %s, album, year, mood
-		"prompt.clarification":              3, // artist, title, mood
 		"admin.approval_prompt":             4, // user, song, link, mood
 		"admin.approval_required_community": 7, // artist, title, album, year, url, mood, threshold
 		"success.track_added":               3, // artist, title, playlist

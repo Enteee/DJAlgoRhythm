@@ -62,11 +62,7 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 
 	if len(rankedTracks) == 0 {
 		d.logger.Warn("LLM returned no ranked tracks")
-		if len(initialSpotifyTracks) > 0 {
-			d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, initialSpotifyTracks)
-		} else {
-			d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.llm.no_songs"))
-		}
+		d.askWhichSong(ctx, msgCtx, originalMsg)
 		return
 	}
 
@@ -75,23 +71,13 @@ func (d *Dispatcher) llmDisambiguate(ctx context.Context, msgCtx *MessageContext
 		zap.String("top_candidate", fmt.Sprintf("%s - %s",
 			rankedTracks[0].Artist, rankedTracks[0].Title)))
 
-	// Convert tracks to LLMCandidates for compatibility with existing Stage 3 logic
-	var rankedCandidates []LLMCandidate
-	for _, track := range rankedTracks {
-		rankedCandidates = append(rankedCandidates, LLMCandidate{
-			Track:      track,
-			Confidence: 1.0, // Default confidence since RankTracks doesn't provide it
-			Reasoning:  "Ranked by LLM",
-		})
-	}
-
 	// Stage 3: Enhanced disambiguation with more targeted Spotify search
-	d.enhancedLLMDisambiguate(ctx, msgCtx, originalMsg, rankedCandidates)
+	d.enhancedLLMDisambiguate(ctx, msgCtx, originalMsg, rankedTracks)
 }
 
 // enhancedLLMDisambiguate performs Stage 3: targeted Spotify search and final LLM ranking
 func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *MessageContext,
-	originalMsg *chat.Message, rankedCandidates []LLMCandidate) {
+	originalMsg *chat.Message, rankedTracks []Track) {
 	msgCtx.State = StateEnhancedLLMDisambiguate
 
 	// Stage 3a: Targeted Spotify search with LLM-ranked candidates
@@ -99,15 +85,14 @@ func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *Messag
 
 	const maxRankedCandidates = 3 // Limit API calls
 	var allSpotifyTracks []Track
-	for i, candidate := range rankedCandidates {
+	for i, track := range rankedTracks {
 		if i >= maxRankedCandidates {
 			break
 		}
 
-		searchQuery := fmt.Sprintf("%s %s", candidate.Track.Artist, candidate.Track.Title)
+		searchQuery := fmt.Sprintf("%s %s", track.Artist, track.Title)
 		d.logger.Debug("Searching Spotify",
-			zap.String("query", searchQuery),
-			zap.Float64("confidence", candidate.Confidence))
+			zap.String("query", searchQuery))
 
 		tracks, err := d.spotify.SearchTrack(ctx, searchQuery)
 		if err != nil {
@@ -142,66 +127,51 @@ func (d *Dispatcher) enhancedLLMDisambiguate(ctx context.Context, msgCtx *Messag
 
 	finalTracks := d.llm.RankTracks(ctx, msgCtx.Input.Text, allSpotifyTracks)
 	if len(finalTracks) == 0 {
-		d.logger.Warn("Final LLM returned no tracks, using targeted Spotify results")
-		d.fallbackToSpotifyResults(ctx, msgCtx, originalMsg, allSpotifyTracks)
+		d.logger.Warn("Final LLM returned no tracks, asking which song")
+		d.askWhichSong(ctx, msgCtx, originalMsg)
 		return
-	}
-
-	// Convert final tracks to LLMCandidates for compatibility with existing logic
-	var finalCandidates []LLMCandidate
-	for _, track := range finalTracks {
-		finalCandidates = append(finalCandidates, LLMCandidate{
-			Track:      track,
-			Confidence: 1.0, // Default confidence since RankTracks doesn't provide it
-			Reasoning:  "Final LLM ranking",
-		})
 	}
 
 	d.logger.Info("Stage 3b complete: Final ranking finished",
-		zap.Int("final_candidates", len(finalCandidates)),
+		zap.Int("final_tracks", len(finalTracks)),
 		zap.String("top_result", fmt.Sprintf("%s - %s",
-			finalCandidates[0].Track.Artist, finalCandidates[0].Track.Title)))
+			finalTracks[0].Artist, finalTracks[0].Title)))
 
-	// Match LLM candidates back to original Spotify tracks to restore URLs and IDs
-	d.matchSpotifyTrackData(finalCandidates, allSpotifyTracks)
+	// Match LLM tracks back to original Spotify tracks to restore URLs and IDs
+	d.matchSpotifyTrackData(finalTracks, allSpotifyTracks)
 
-	// Store enhanced candidates and proceed with user approval
-	msgCtx.Candidates = finalCandidates
-	best := finalCandidates[0]
+	// Store tracks and proceed with user approval
+	msgCtx.Candidates = finalTracks
+	best := finalTracks[0]
 
-	// Validate that we have a Spotify URL (since we're reranking actual Spotify tracks)
-	if best.Track.URL == "" {
-		d.logger.Warn("Enhanced LLM candidate missing Spotify URL, asking for clarification",
-			zap.String("artist", best.Track.Artist),
-			zap.String("title", best.Track.Title))
-		d.clarifyAsk(ctx, msgCtx, originalMsg, &best)
-		return
-	}
-
-	if best.Confidence >= d.config.LLM.Threshold {
+	// Binary decision: if we have a valid Spotify URL, use enhanced approval, otherwise ask which song
+	if best.URL != "" {
 		d.promptEnhancedApproval(ctx, msgCtx, originalMsg, &best)
 	} else {
-		d.clarifyAsk(ctx, msgCtx, originalMsg, &best)
+		d.logger.Warn("Enhanced LLM track missing Spotify URL, asking which song",
+			zap.String("artist", best.Artist),
+			zap.String("title", best.Title))
+		d.askWhichSong(ctx, msgCtx, originalMsg)
 	}
 }
 
 // matchSpotifyTrackData matches LLM candidates back to original Spotify tracks to restore URLs and IDs
-func (d *Dispatcher) matchSpotifyTrackData(candidates []LLMCandidate, spotifyTracks []Track) {
+func (d *Dispatcher) matchSpotifyTrackData(candidates, spotifyTracks []Track) {
 	for i := range candidates {
 		candidate := &candidates[i]
 
 		// Find best matching Spotify track
-		bestMatch := d.findBestSpotifyMatch(&candidate.Track, spotifyTracks)
+		bestMatch := d.findBestSpotifyMatch(candidate, spotifyTracks)
 		if bestMatch != nil {
 			// Restore complete Spotify data
-			candidate.Track.ID = bestMatch.ID
-			candidate.Track.URL = bestMatch.URL
-			candidate.Track.Duration = bestMatch.Duration
+			candidate.ID = bestMatch.ID
+			candidate.URL = bestMatch.URL
+			candidate.Duration = bestMatch.Duration
 			// Keep LLM's values for other fields as they might be more accurate
 		} else {
-			d.logger.Warn("Could not match LLM candidate to Spotify track",
-				zap.String("artist", candidate.Track.Artist),
-				zap.String("title", candidate.Track.Title))
+			d.logger.Warn("Could not match LLM track to Spotify track",
+				zap.String("artist", candidate.Artist),
+				zap.String("title", candidate.Title))
 		}
 	}
 }
@@ -255,58 +225,4 @@ func (d *Dispatcher) isPartialMatch(track1, track2 *Track) bool {
 	// Check if artist and title contain each other (for variations)
 	return (strings.Contains(artist1, artist2) || strings.Contains(artist2, artist1)) &&
 		(strings.Contains(title1, title2) || strings.Contains(title2, title1))
-}
-
-// fallbackToSpotifyResults handles fallback when enhanced LLM fails
-func (d *Dispatcher) fallbackToSpotifyResults(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, tracks []Track) {
-	const (
-		baseConfidence      = 0.7
-		confidenceDecrement = 0.1
-		minConfidence       = 0.3
-	)
-
-	// Convert Spotify tracks to LLM candidates with moderate confidence
-	var candidates []LLMCandidate
-	for i, track := range tracks {
-		confidence := baseConfidence - float64(i)*confidenceDecrement
-		if confidence < minConfidence {
-			confidence = minConfidence
-		}
-
-		candidates = append(candidates, LLMCandidate{
-			Track:      track,
-			Confidence: confidence,
-			Reasoning:  "Spotify search result",
-		})
-	}
-
-	msgCtx.Candidates = candidates
-	best := candidates[0]
-
-	// Use regular approval flow since these are search results
-	d.promptApproval(ctx, msgCtx, originalMsg, &best)
-}
-
-// clarifyAsk asks for clarification with lower confidence
-func (d *Dispatcher) clarifyAsk(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
-	msgCtx.State = StateClarifyAsk
-
-	// Generate track mood for this candidate
-	d.generateTrackMoodForCandidate(ctx, msgCtx, candidate)
-
-	prompt := d.localizer.T("prompt.clarification", candidate.Track.Artist, candidate.Track.Title, msgCtx.TrackMood)
-	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
-
-	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
-	if err != nil {
-		d.logger.Error("Failed to get clarification", zap.Error(err))
-		d.replyError(ctx, msgCtx, originalMsg, d.localizer.T("error.generic"))
-		return
-	}
-
-	if approved {
-		d.handleApproval(ctx, msgCtx, originalMsg)
-	} else {
-		d.askWhichSong(ctx, msgCtx, originalMsg)
-	}
 }

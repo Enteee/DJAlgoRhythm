@@ -227,7 +227,6 @@ never gonna give you up rick astley
 | `WHATDJ_LLM_PROVIDER` | AI provider (openai/anthropic/ollama/none) | `none` | ❌ |
 | `WHATDJ_LLM_API_KEY` | LLM API key | - | ❌ |
 | `WHATDJ_LLM_MODEL` | Model name | Provider default | ❌ |
-| `WHATDJ_LLM_THRESHOLD` | Confidence threshold (0-1) | `0.65` | ❌ |
 | **General** | | | |
 | `WHATDJ_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
 | `WHATDJ_CONFIRM_ADMIN_TIMEOUT_SECS` | Reaction timeout for admins (seconds) | `3600` | ❌ |
