@@ -58,6 +58,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .env)")
 	rootCmd.PersistentFlags().String("log-level", "info", "log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().String("log-format", "text", "log format (json, text)")
 	rootCmd.PersistentFlags().Bool("whatsapp-enabled", false, "Enable WhatsApp integration")
 	rootCmd.PersistentFlags().String("whatsapp-group-jid", "", "WhatsApp group JID")
 	rootCmd.PersistentFlags().String("whatsapp-device-name", "DJAlgoRhythm", "WhatsApp device name")
@@ -112,7 +113,7 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	config = buildConfig()
-	logger = buildLogger(config.Log.Level)
+	logger = buildLogger(config.Log.Level, config.Log.Format)
 }
 
 func buildConfig() *core.Config {
@@ -181,6 +182,7 @@ func configureServer(cfg *core.Config) {
 	}
 	cfg.Server.Port = viper.GetInt("server-port")
 	cfg.Log.Level = viper.GetString("log-level")
+	cfg.Log.Format = viper.GetString("log-format")
 }
 
 func configureApp(cfg *core.Config) {
@@ -235,7 +237,7 @@ func configureApp(cfg *core.Config) {
 	}
 }
 
-func buildLogger(level string) *zap.Logger {
+func buildLogger(level, format string) *zap.Logger {
 	var zapLevel zapcore.Level
 	switch strings.ToLower(level) {
 	case "debug":
@@ -250,7 +252,15 @@ func buildLogger(level string) *zap.Logger {
 		zapLevel = zapcore.InfoLevel
 	}
 
-	cfg := zap.NewProductionConfig()
+	var cfg zap.Config
+	switch strings.ToLower(format) {
+	case "text":
+		cfg = zap.NewDevelopmentConfig()
+	case "json":
+		cfg = zap.NewProductionConfig()
+	default:
+		cfg = zap.NewDevelopmentConfig() // Default to text format
+	}
 	cfg.Level = zap.NewAtomicLevelAt(zapLevel)
 
 	builtLogger, err := cfg.Build()
@@ -836,7 +846,7 @@ func generateLoggingSection(content *strings.Builder, cmd *cobra.Command) {
 
 	fmt.Fprintf(content, "%s=%s                                # Log level: debug, info, warn, error (default: %s)\n",
 		flagToEnvVar("log-level"), logDefault, logDefault)
-	fmt.Fprintf(content, "%s=json                               # Log format: json, text (default: json)\n",
+	fmt.Fprintf(content, "%s=text                               # Log format: json, text (default: text)\n",
 		flagToEnvVar("log-format"))
 	content.WriteString("\n")
 }

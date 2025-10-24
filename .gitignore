@@ -101,6 +101,7 @@ debug
 debug.test
 *.prof
 *.pprof
+__debug_bin*
 
 # Build artifacts
 ./djalgorhythm

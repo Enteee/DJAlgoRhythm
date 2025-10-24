@@ -116,7 +116,7 @@ func DefaultConfig() *Config {
 		},
 		Log: LogConfig{
 			Level:  "info",
-			Format: "json",
+			Format: "text",
 		},
 		App: AppConfig{
 			ConfirmTimeoutSecs:                 DefaultConfirmTimeoutSecs,
