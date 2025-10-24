@@ -291,7 +291,10 @@ func (d *Dispatcher) fallbackToSpotifyResults(ctx context.Context, msgCtx *Messa
 func (d *Dispatcher) clarifyAsk(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateClarifyAsk
 
-	prompt := d.localizer.T("prompt.clarification", candidate.Track.Artist, candidate.Track.Title)
+	// Generate track mood for this candidate
+	d.generateTrackMoodForCandidate(ctx, msgCtx, candidate)
+
+	prompt := d.localizer.T("prompt.clarification", candidate.Track.Artist, candidate.Track.Title, msgCtx.TrackMood)
 	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)

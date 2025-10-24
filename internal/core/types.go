@@ -108,6 +108,7 @@ type MessageContext struct {
 	StartTime  time.Time
 	TimeoutAt  time.Time
 	IsPriority bool
+	TrackMood  string
 }
 
 type WhatsAppClient interface {

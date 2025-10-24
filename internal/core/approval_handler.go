@@ -20,6 +20,34 @@ const (
 	unknownTrackMood = "unknown style"
 )
 
+// generateTrackMoodForCandidate generates track mood for a candidate and stores it in MessageContext
+func (d *Dispatcher) generateTrackMoodForCandidate(ctx context.Context, msgCtx *MessageContext, candidate *LLMCandidate) {
+	if msgCtx.TrackMood != "" {
+		// Already generated, don't regenerate
+		return
+	}
+
+	if d.llm != nil {
+		track := Track{
+			Artist: candidate.Track.Artist,
+			Title:  candidate.Track.Title,
+			Album:  candidate.Track.Album,
+			Year:   candidate.Track.Year,
+			URL:    candidate.Track.URL,
+		}
+
+		if mood, moodErr := d.llm.GenerateTrackMood(ctx, []Track{track}); moodErr != nil {
+			d.logger.Warn("Failed to generate track mood for user prompt, using fallback",
+				zap.Error(moodErr), zap.String("artist", candidate.Track.Artist), zap.String("title", candidate.Track.Title))
+			msgCtx.TrackMood = unknownTrackMood
+		} else {
+			msgCtx.TrackMood = mood
+		}
+	} else {
+		msgCtx.TrackMood = unknownTrackMood
+	}
+}
+
 // Approval Management
 // This module handles all forms of approval workflows including user confirmation,
 // admin approval, community approval, and queue track approval
@@ -28,6 +56,9 @@ const (
 func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *MessageContext,
 	originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
+
+	// Generate track mood for this candidate
+	d.generateTrackMoodForCandidate(ctx, msgCtx, candidate)
 
 	// Build format components
 	albumPart := ""
@@ -46,7 +77,7 @@ func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *Message
 	}
 
 	prompt := d.localizer.T("prompt.enhanced_approval",
-		candidate.Track.Artist, candidate.Track.Title, albumPart, yearPart, urlPart)
+		candidate.Track.Artist, candidate.Track.Title, albumPart, yearPart, urlPart, msgCtx.TrackMood)
 	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
@@ -106,6 +137,9 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, candidate *LLMCandidate) {
 	msgCtx.State = StateConfirmationPrompt
 
+	// Generate track mood for this candidate
+	d.generateTrackMoodForCandidate(ctx, msgCtx, candidate)
+
 	// Build format components
 	yearPart := ""
 	if candidate.Track.Year > 0 {
@@ -118,7 +152,7 @@ func (d *Dispatcher) promptApproval(ctx context.Context, msgCtx *MessageContext,
 	}
 
 	prompt := d.localizer.T("prompt.basic_approval",
-		candidate.Track.Artist, candidate.Track.Title, yearPart, urlPart)
+		candidate.Track.Artist, candidate.Track.Title, yearPart, urlPart, msgCtx.TrackMood)
 	promptWithMention := d.formatMessageWithMention(originalMsg, prompt)
 
 	approved, err := d.frontend.AwaitApproval(ctx, originalMsg, promptWithMention, d.config.App.ConfirmTimeoutSecs)
@@ -214,19 +248,26 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	songInfo := fmt.Sprintf("%s - %s", track.Artist, track.Title)
 	songURL := track.URL
 
-	// Generate track mood for approval messages
+	// Use track mood from MessageContext if available, otherwise generate it
 	var trackMood string
-	if d.llm != nil {
-		mood, moodErr := d.llm.GenerateTrackMood(ctx, []Track{*track})
-		if moodErr != nil {
-			d.logger.Warn("Failed to generate track mood for approval, using fallback",
-				zap.Error(moodErr), zap.String("trackID", trackID))
-			trackMood = unknownTrackMood
-		} else {
-			trackMood = mood
-		}
+	if msgCtx.TrackMood != "" {
+		trackMood = msgCtx.TrackMood
+		d.logger.Debug("Reusing track mood from MessageContext",
+			zap.String("trackID", trackID), zap.String("trackMood", trackMood))
 	} else {
-		trackMood = unknownTrackMood
+		// Fallback: generate track mood if not available in MessageContext
+		if d.llm != nil {
+			mood, moodErr := d.llm.GenerateTrackMood(ctx, []Track{*track})
+			if moodErr != nil {
+				d.logger.Warn("Failed to generate track mood for approval, using fallback",
+					zap.Error(moodErr), zap.String("trackID", trackID))
+				trackMood = unknownTrackMood
+			} else {
+				trackMood = mood
+			}
+		} else {
+			trackMood = unknownTrackMood
+		}
 	}
 
 	// Send notification to channel that admin approval is required with song details
