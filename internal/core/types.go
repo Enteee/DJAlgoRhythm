@@ -107,6 +107,7 @@ type MessageContext struct {
 	RetryCount int
 	StartTime  time.Time
 	TimeoutAt  time.Time
+	IsPriority bool
 }
 
 type WhatsAppClient interface {

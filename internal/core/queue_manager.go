@@ -37,11 +37,8 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 			zap.String("text", originalMsg.Text))
 	}
 
-	// If it's a priority request from an admin, add to queue for priority playback
-	if isAdmin && isPriority {
-		d.executePriorityQueue(ctx, msgCtx, originalMsg, trackID)
-		return
-	}
+	// Store priority flag in message context for approval workflow
+	msgCtx.IsPriority = isPriority
 
 	// Check if admin approval is required
 	// If AdminNeedsApproval is enabled, even admins need approval
@@ -49,6 +46,12 @@ func (d *Dispatcher) addToPlaylist(ctx context.Context, msgCtx *MessageContext, 
 	needsApproval := d.isAdminApprovalRequired() && (!isAdmin || d.isAdminNeedsApproval())
 	if needsApproval {
 		d.awaitAdminApproval(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
+
+	// If it's a priority request from an admin and no approval needed, add to queue for priority playback
+	if isAdmin && isPriority {
+		d.executePriorityQueue(ctx, msgCtx, originalMsg, trackID)
 		return
 	}
 

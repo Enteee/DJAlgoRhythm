@@ -393,6 +393,12 @@ func (d *Dispatcher) executePlaylistAddAfterApproval(
 	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, approvalSource string) {
 	msgCtx.State = StateAddToPlaylist
 
+	// Check if this was a priority request that needs special handling
+	if msgCtx.IsPriority {
+		d.executePriorityQueue(ctx, msgCtx, originalMsg, trackID)
+		return
+	}
+
 	// Add track to playlist
 	for retry := 0; retry < d.config.App.MaxRetries; retry++ {
 		if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
