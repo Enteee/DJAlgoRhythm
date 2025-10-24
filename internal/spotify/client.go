@@ -579,8 +579,8 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 		return "", "", "", fmt.Errorf("client not authenticated")
 	}
 
-	// Get playlist tracks and build exclusion set in single pass
-	playlistTracks, exclusionSet, err := c.getPlaylistTracksWithExclusions(ctx)
+	// Get playlist tracks
+	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
@@ -606,7 +606,7 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 	}
 
 	// Find and return track along with search query
-	trackID, err = c.findTrackFromSearch(ctx, searchQuery, exclusionSet)
+	trackID, err = c.findTrackFromSearch(ctx, searchQuery, playlistTracks)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -632,24 +632,6 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 	}
 
 	return trackID, searchQuery, newTrackMood, nil
-}
-
-// getPlaylistTracksWithExclusions gets playlist tracks and builds exclusion set in single operation
-func (c *Client) getPlaylistTracksWithExclusions(ctx context.Context) (tracks []string, exclusions map[string]bool, err error) {
-	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Build exclusion set during the same iteration
-	exclusionSet := make(map[string]bool)
-	for _, trackID := range playlistTracks {
-		if trackID != "" {
-			exclusionSet[trackID] = true
-		}
-	}
-
-	return playlistTracks, exclusionSet, nil
 }
 
 // getRecentTracksForSearch extracts recent tracks for LLM context (simplified)
@@ -688,7 +670,7 @@ func (c *Client) getRecentTracksForSearch(ctx context.Context, playlistTracks []
 func (c *Client) collectCandidateTracksFromPlaylists(
 	ctx context.Context,
 	playlists []core.Playlist,
-	exclusionSet map[string]bool,
+	playlistTracks []string,
 	maxCandidates int,
 ) ([]core.Track, error) {
 	// Batch fetch all tracks from all playlists (deduplicated)
@@ -697,10 +679,18 @@ func (c *Client) collectCandidateTracksFromPlaylists(
 		return nil, fmt.Errorf("no tracks available from any of the %d playlists", len(playlists))
 	}
 
-	// Collect all non-excluded track IDs
+	// Collect all non-excluded track IDs (tracks not already in target playlist)
 	var availableTrackIDs []string
 	for _, trackID := range allTrackIDs {
-		if !exclusionSet[trackID] {
+		// Check if track is already in the target playlist
+		isInPlaylist := false
+		for _, playlistTrackID := range playlistTracks {
+			if playlistTrackID == trackID {
+				isInPlaylist = true
+				break
+			}
+		}
+		if !isInPlaylist {
 			availableTrackIDs = append(availableTrackIDs, trackID)
 		}
 	}
@@ -790,7 +780,7 @@ func (c *Client) selectRandomPlaylists(playlists []core.Playlist, maxCount int) 
 }
 
 // findTrackFromSearch searches for playlists and uses AI to select the best matching track
-func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, exclusionSet map[string]bool) (string, error) {
+func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, playlistTracks []string) (string, error) {
 	// Search for playlists
 	playlists, err := c.SearchPlaylist(ctx, searchQuery)
 	if err != nil {
@@ -805,7 +795,7 @@ func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, ex
 	selectedPlaylists := c.selectRandomPlaylists(playlists, MaxPlaylistsForCandidates)
 
 	// Collect candidate tracks from selected playlists
-	candidates, err := c.collectCandidateTracksFromPlaylists(ctx, selectedPlaylists, exclusionSet, MaxTotalCandidates)
+	candidates, err := c.collectCandidateTracksFromPlaylists(ctx, selectedPlaylists, playlistTracks, MaxTotalCandidates)
 	if err != nil {
 		return "", fmt.Errorf("failed to collect candidate tracks: %w", err)
 	}
