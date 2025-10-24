@@ -103,7 +103,7 @@ debug.test
 *.pprof
 
 # Build artifacts
-djalgorhythm
+./djalgorhythm
 
 # Cache directories
 .cache/

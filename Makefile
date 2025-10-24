@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build test clean lint fmt vet staticcheck check install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security
+.PHONY: help build test clean lint fmt vet staticcheck check check-env-example update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -104,7 +104,34 @@ staticcheck: ## Run staticcheck
 		echo "staticcheck not found. Install with: go install honnef.co/go/tools/cmd/staticcheck@latest"; \
 	fi
 
-check: fmt vet lint staticcheck test build ## Run all code quality checks and build
+check-env-example: ## Verify .env.example is up-to-date with current configuration
+	@echo "Checking if .env.example is up-to-date..."
+	@if [ ! -f .env.example ]; then \
+		echo "❌ .env.example not found"; \
+		exit 1; \
+	fi
+	@cp .env.example .env.example.backup
+	@go run $(MAIN_PATH) --generate-env-example > /dev/null 2>&1 || (echo "❌ Failed to generate .env.example"; mv .env.example.backup .env.example; exit 1)
+	@if ! diff -q .env.example.backup .env.example > /dev/null 2>&1; then \
+		echo "❌ .env.example is out of sync with current configuration"; \
+		echo ""; \
+		echo "Run 'make update-env-example' to fix this, or manually run:"; \
+		echo "  go run $(MAIN_PATH) --generate-env-example"; \
+		echo ""; \
+		echo "Differences found:"; \
+		diff .env.example.backup .env.example || true; \
+		mv .env.example.backup .env.example; \
+		exit 1; \
+	fi
+	@rm -f .env.example.backup
+	@echo "✅ .env.example is up-to-date"
+
+update-env-example: ## Update .env.example with current configuration
+	@echo "Updating .env.example..."
+	@go run $(MAIN_PATH) --generate-env-example
+	@echo "✅ .env.example updated"
+
+check: fmt vet lint staticcheck check-env-example test build ## Run all code quality checks and build
 
 # Security targets
 security: ## Run security checks
