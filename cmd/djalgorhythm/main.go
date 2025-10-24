@@ -82,7 +82,6 @@ func init() {
 	rootCmd.PersistentFlags().Int("queue-check-interval-secs", 45, "Queue check interval in seconds")
 	rootCmd.PersistentFlags().Int("shadow-queue-maintenance-interval-mins", 5, "Shadow queue maintenance interval in minutes")
 	rootCmd.PersistentFlags().Int("shadow-queue-max-age-hours", 2, "Maximum age of shadow queue items in hours")
-	rootCmd.PersistentFlags().Bool("shadow-queue-preference-enabled", true, "Prefer shadow queue over Spotify API for calculations")
 	supportedLangs := strings.Join(i18n.GetSupportedLanguages(), ", ")
 	rootCmd.PersistentFlags().String("language", i18n.DefaultLanguage, fmt.Sprintf("Bot language (%s)", supportedLangs))
 	rootCmd.PersistentFlags().Int("flood-limit-per-minute", 6, "Maximum messages per user per minute")
@@ -207,7 +206,6 @@ func configureApp(cfg *core.Config) {
 			cfg.App.ShadowQueueMaxAgeHours, core.DefaultShadowQueueMaxAgeHours)
 		cfg.App.ShadowQueueMaxAgeHours = core.DefaultShadowQueueMaxAgeHours
 	}
-	cfg.App.ShadowQueuePreferenceEnabled = viper.GetBool("shadow-queue-preference-enabled")
 
 	// Language configuration with validation
 	cfg.App.Language = viper.GetString("language")
@@ -762,8 +760,6 @@ func generateAppTimeoutsSection(content *strings.Builder, cmd *cobra.Command) {
 		flagToEnvVar("queue-track-approval-timeout-secs"), queueApprovalDefault, queueApprovalDefault)
 	fmt.Fprintf(content, "%s=%s                # Max replacement attempts before auto-accept (default: %s)\n",
 		flagToEnvVar("max-queue-track-replacements"), maxReplacementsDefault, maxReplacementsDefault)
-	fmt.Fprintf(content, "%s=5                            # Delay between retries (default: 5)\n",
-		flagToEnvVar("retry-delay-secs"))
 	content.WriteString("\n")
 }
 
@@ -789,18 +785,15 @@ func generateAppShadowQueueSection(content *strings.Builder, cmd *cobra.Command)
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# Shadow Queue - Maintains reliable queue state tracking\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
-	content.WriteString("# CLI: --shadow-queue-maintenance-interval-mins, --shadow-queue-max-age-hours, --shadow-queue-preference-enabled\n")
+	content.WriteString("# CLI: --shadow-queue-maintenance-interval-mins, --shadow-queue-max-age-hours\n")
 
 	shadowMaintenanceDefault := getDefaultValueString(cmd, "shadow-queue-maintenance-interval-mins")
 	shadowMaxAgeDefault := getDefaultValueString(cmd, "shadow-queue-max-age-hours")
-	shadowPreferenceDefault := getDefaultValueString(cmd, "shadow-queue-preference-enabled")
 
 	fmt.Fprintf(content, "%s=30     # Maintenance interval in seconds (CLI uses minutes!) (default: converted from %s mins)\n",
 		flagToEnvVar("shadow-queue-maintenance-interval-secs"), shadowMaintenanceDefault)
 	fmt.Fprintf(content, "%s=%s                  # Max age of shadow queue items (default: %s)\n",
 		flagToEnvVar("shadow-queue-max-age-hours"), shadowMaxAgeDefault, shadowMaxAgeDefault)
-	fmt.Fprintf(content, "%s=%s          # Prefer shadow queue over Spotify API (default: %s)\n",
-		flagToEnvVar("shadow-queue-preference-enabled"), shadowPreferenceDefault, shadowPreferenceDefault)
 	content.WriteString("\n")
 }
 

@@ -15,12 +15,10 @@ const (
 	DefaultConfirmAdminTimeoutSecs            = 3600
 	DefaultQueueTrackApprovalTimeoutSecs      = 30
 	DefaultMaxQueueTrackReplacements          = 3
-	DefaultRetryDelaySecs                     = 5
 	DefaultQueueAheadDurationSecs             = 90
 	DefaultQueueCheckIntervalSecs             = 45
 	DefaultShadowQueueMaintenanceIntervalSecs = 30
 	DefaultShadowQueueMaxAgeHours             = 2
-	DefaultShadowQueuePreferenceEnabled       = true
 	DefaultQueueSyncWarningTimeoutMinutes     = 30
 	DefaultFloodLimitPerMinute                = 6
 )
@@ -83,13 +81,11 @@ type AppConfig struct {
 	ConfirmAdminTimeoutSecs            int
 	QueueTrackApprovalTimeoutSecs      int
 	MaxQueueTrackReplacements          int
-	RetryDelaySecs                     int
 	Language                           string // Bot language for user-facing messages
 	QueueAheadDurationSecs             int    // Target queue duration in seconds
 	QueueCheckIntervalSecs             int    // Queue check interval in seconds
 	ShadowQueueMaintenanceIntervalSecs int    // Shadow queue maintenance interval in seconds
 	ShadowQueueMaxAgeHours             int    // Maximum age of shadow queue items in hours
-	ShadowQueuePreferenceEnabled       bool   // Prefer shadow queue over Spotify API for position/duration
 	QueueSyncWarningTimeoutMinutes     int    // Timeout for queue sync warning in minutes
 	FloodLimitPerMinute                int    // Maximum messages per user per minute (default: 6)
 }
@@ -127,13 +123,11 @@ func DefaultConfig() *Config {
 			ConfirmAdminTimeoutSecs:            DefaultConfirmAdminTimeoutSecs,
 			QueueTrackApprovalTimeoutSecs:      DefaultQueueTrackApprovalTimeoutSecs,
 			MaxQueueTrackReplacements:          DefaultMaxQueueTrackReplacements,
-			RetryDelaySecs:                     DefaultRetryDelaySecs,
 			Language:                           i18n.DefaultLanguage, // Default to English
 			QueueAheadDurationSecs:             DefaultQueueAheadDurationSecs,
 			QueueCheckIntervalSecs:             DefaultQueueCheckIntervalSecs,
 			ShadowQueueMaintenanceIntervalSecs: DefaultShadowQueueMaintenanceIntervalSecs,
 			ShadowQueueMaxAgeHours:             DefaultShadowQueueMaxAgeHours,
-			ShadowQueuePreferenceEnabled:       DefaultShadowQueuePreferenceEnabled,
 			QueueSyncWarningTimeoutMinutes:     DefaultQueueSyncWarningTimeoutMinutes,
 			FloodLimitPerMinute:                DefaultFloodLimitPerMinute,
 		},
