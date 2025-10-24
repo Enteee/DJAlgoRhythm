@@ -47,7 +47,6 @@ type TelegramConfig struct {
 	BotToken           string
 	GroupID            int64
 	Enabled            bool
-	ReactionSupport    bool
 	AdminApproval      bool
 	AdminNeedsApproval bool
 	CommunityApproval  int
@@ -105,8 +104,7 @@ func DefaultConfig() *Config {
 			Enabled:     false, // Disabled by default
 		},
 		Telegram: TelegramConfig{
-			Enabled:         true, // Enabled by default
-			ReactionSupport: true,
+			Enabled: true, // Enabled by default
 		},
 		Spotify: SpotifyConfig{
 			RedirectURL: "", // Will be dynamically generated based on server config

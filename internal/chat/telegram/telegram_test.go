@@ -16,7 +16,6 @@ func TestNewFrontend(t *testing.T) {
 		BotToken:            "test-token",
 		GroupID:             -123456789,
 		Enabled:             true,
-		ReactionSupport:     true,
 		FloodLimitPerMinute: 10,
 	}
 

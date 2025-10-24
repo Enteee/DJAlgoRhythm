@@ -38,7 +38,6 @@ type Config struct {
 	BotToken            string
 	GroupID             int64 // Chat ID of the group to monitor
 	Enabled             bool
-	ReactionSupport     bool   // Whether the group supports reactions
 	AdminApproval       bool   // Whether admin approval is required for songs
 	AdminNeedsApproval  bool   // Whether admins also need approval (for testing)
 	CommunityApproval   int    // Number of 👍 reactions needed to bypass admin approval (0 disables)
