@@ -29,9 +29,8 @@ type Dispatcher struct {
 	warningManager *AdminWarningManager
 
 	// Queue management approval tracking
-	pendingQueueTracks      map[string]string                // trackID -> track name for pending approvals
 	pendingApprovalMessages map[string]*queueApprovalContext // messageID -> approval context for timeout tracking
-	queueRejectionCount     int                              // Count of consecutive rejections for queue-fill tracks
+	queueManagementFlows    map[string]*QueueManagementFlow  // flowID -> flow state for per-flow rejection tracking
 	queueManagementMutex    sync.RWMutex
 	queueManagementActive   bool // tracks if queue management is currently running
 
@@ -67,8 +66,8 @@ func NewDispatcher(
 		localizer:               i18n.NewLocalizer(config.App.Language),
 		warningManager:          NewAdminWarningManager(frontend, logger),
 		messageContexts:         make(map[string]*MessageContext),
-		pendingQueueTracks:      make(map[string]string),
 		pendingApprovalMessages: make(map[string]*queueApprovalContext),
+		queueManagementFlows:    make(map[string]*QueueManagementFlow),
 		shadowQueue:             make([]ShadowQueueItem, 0),
 		lastShadowQueueModified: time.Now(),
 		lastSuccessfulSync:      time.Now(),

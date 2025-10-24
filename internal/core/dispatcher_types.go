@@ -47,3 +47,11 @@ type queueApprovalContext struct {
 	expiresAt  time.Time
 	cancelFunc context.CancelFunc
 }
+
+// QueueManagementFlow represents a single queue management flow with its own rejection tracking
+type QueueManagementFlow struct {
+	FlowID         string            // Unique identifier for this flow
+	RejectionCount int               // Number of rejections in this flow
+	PendingTracks  map[string]string // trackID -> track name for tracks pending in this flow
+	CreatedAt      time.Time         // When this flow was started
+}

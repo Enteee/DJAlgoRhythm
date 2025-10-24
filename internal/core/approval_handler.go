@@ -542,7 +542,13 @@ func (d *Dispatcher) handleQueueTrackApprovalTimeout(ctx context.Context, messag
 		chatID := approvalCtx.chatID
 
 		// Double-check that the track is still pending (race condition protection)
-		_, trackStillPending := d.pendingQueueTracks[trackID]
+		trackStillPending := false
+		for _, flow := range d.queueManagementFlows {
+			if _, exists := flow.PendingTracks[trackID]; exists {
+				trackStillPending = true
+				break
+			}
+		}
 		if !trackStillPending {
 			// Track was already processed by auto-approval, clean up and exit
 			delete(d.pendingApprovalMessages, messageID)
@@ -553,9 +559,8 @@ func (d *Dispatcher) handleQueueTrackApprovalTimeout(ctx context.Context, messag
 			return
 		}
 
-		// Clean up pending approval and queue tracks
+		// Clean up pending approval
 		delete(d.pendingApprovalMessages, messageID)
-		delete(d.pendingQueueTracks, trackID)
 		d.queueManagementMutex.Unlock()
 
 		d.logger.Info("Queue approval timed out, auto-accepting track",

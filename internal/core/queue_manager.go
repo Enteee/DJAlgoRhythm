@@ -350,12 +350,11 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 	d.logger.Info("Need to add tracks to fill queue duration",
 		zap.Duration("neededDuration", neededDuration))
 
-	// Check if we've exceeded the rejection limit for auto-approval
-	d.queueManagementMutex.RLock()
-	rejectionCount := d.queueRejectionCount
-	d.queueManagementMutex.RUnlock()
+	// Create a new flow for this queue filling operation
+	flow := d.createQueueManagementFlow("fill")
 
-	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
+	// Check if we've exceeded the rejection limit for auto-approval
+	autoApprove := flow.RejectionCount >= d.config.App.MaxQueueTrackReplacements
 
 	// Always use the unified approval workflow
 	trackID, searchQuery, newTrackMood, err := d.spotify.GetRecommendedTrack(ctx)
@@ -373,8 +372,10 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 
 	// Track this queue-filling track for approval (DO NOT add to queue/playlist yet in auto-approve case)
 	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+
+	// Add track to flow-specific registry
 	d.queueManagementMutex.Lock()
-	d.pendingQueueTracks[trackID] = trackName
+	flow.PendingTracks[trackID] = trackName
 	d.queueManagementMutex.Unlock()
 
 	// Send approval message to group (will auto-approve if rejection limit exceeded)
@@ -385,13 +386,15 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 		d.logger.Info("Auto-approving queue-filling track after rejection limit",
 			zap.String("trackID", trackID),
 			zap.String("trackName", trackName),
-			zap.Int("rejectionCount", rejectionCount),
+			zap.String("flowID", flow.FlowID),
+			zap.Int("rejectionCount", flow.RejectionCount),
 			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
 	} else {
 		d.logger.Info("Requesting approval for queue-filling track",
 			zap.String("trackID", trackID),
 			zap.String("trackName", trackName),
-			zap.Int("currentRejections", rejectionCount),
+			zap.String("flowID", flow.FlowID),
+			zap.Int("currentRejections", flow.RejectionCount),
 			zap.Duration("stillNeeded", targetDuration-currentDuration))
 	}
 }
@@ -423,10 +426,23 @@ func (d *Dispatcher) addApprovedQueueTrack(ctx context.Context, trackID string) 
 	// Add to dedup store
 	d.dedup.Add(trackID)
 
-	// Reset rejection counter on approval
+	// Find and remove the flow that handled this track
 	d.queueManagementMutex.Lock()
-	d.queueRejectionCount = 0
+	var flowToRemove *QueueManagementFlow
+	for _, flow := range d.queueManagementFlows {
+		if _, exists := flow.PendingTracks[trackID]; exists {
+			flowToRemove = flow
+			break
+		}
+	}
 	d.queueManagementMutex.Unlock()
+
+	if flowToRemove != nil {
+		d.removeQueueManagementFlow(flowToRemove.FlowID)
+		d.logger.Debug("Flow completed successfully - track approved",
+			zap.String("flowID", flowToRemove.FlowID),
+			zap.String("trackID", trackID))
+	}
 
 	// Queue workflow is complete, reset the flag
 	d.resetQueueManagementFlag()
@@ -441,9 +457,21 @@ func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 	ctx := context.Background()
 
 	d.queueManagementMutex.Lock()
-	trackName, exists := d.pendingQueueTracks[trackID]
-	if exists {
-		delete(d.pendingQueueTracks, trackID)
+
+	// Find and clean up the track from its flow
+	var flow *QueueManagementFlow
+	var trackName string
+	var exists bool
+	for _, f := range d.queueManagementFlows {
+		name, trackExists := f.PendingTracks[trackID]
+		if !trackExists {
+			continue
+		}
+		delete(f.PendingTracks, trackID)
+		flow = f
+		trackName = name
+		exists = true
+		break
 	}
 
 	// Cancel any pending timeout for this track
@@ -485,37 +513,41 @@ func (d *Dispatcher) handleQueueTrackDecision(trackID string, approved bool) {
 			zap.String("trackID", trackID),
 			zap.String("trackName", trackName))
 
-		// Increment rejection counter
-		d.queueManagementMutex.Lock()
-		d.queueRejectionCount++
-		currentCount := d.queueRejectionCount
-		d.queueManagementMutex.Unlock()
+		// Use the flow we found and increment its rejection counter
+		if flow != nil {
+			d.queueManagementMutex.Lock()
+			flow.RejectionCount++
+			currentCount := flow.RejectionCount
+			d.queueManagementMutex.Unlock()
 
-		d.logger.Info("Track rejected, incremented rejection counter",
-			zap.Int("rejectionCount", currentCount),
-			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
+			d.logger.Info("Track rejected, incremented flow rejection counter",
+				zap.String("flowID", flow.FlowID),
+				zap.Int("rejectionCount", currentCount),
+				zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
 
-		// Track was never added to anything, so nothing to remove
-		// Try to get a new queue-filling track to replace the denied one
-		go d.findAndSuggestReplacementTrack(ctx)
+			// Track was never added to anything, so nothing to remove
+			// Try to get a new queue-filling track to replace the denied one
+			go d.findAndSuggestReplacementTrack(ctx, flow)
+		} else {
+			d.logger.Warn("Could not find flow for rejected track", zap.String("trackID", trackID))
+		}
 	}
 }
 
-// resetQueueManagementFlag resets the queue management active flag and rejection counter
+// resetQueueManagementFlag resets the queue management active flag
 func (d *Dispatcher) resetQueueManagementFlag() {
 	d.queueManagementMutex.Lock()
 	d.queueManagementActive = false
-	d.queueRejectionCount = 0 // Reset rejection counter when queue management cycle completes
 	d.queueManagementMutex.Unlock()
 }
 
 // findAndSuggestReplacementTrack finds a suitable track and suggests it to admin for queue addition
-func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
-	d.logger.Debug("Finding replacement track for queue")
+func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context, flow *QueueManagementFlow) {
+	d.logger.Debug("Finding replacement track for queue", zap.String("flowID", flow.FlowID))
 
 	// Check if we've exceeded the rejection limit for auto-approval
 	d.queueManagementMutex.RLock()
-	rejectionCount := d.queueRejectionCount
+	rejectionCount := flow.RejectionCount
 	d.queueManagementMutex.RUnlock()
 
 	autoApprove := rejectionCount >= d.config.App.MaxQueueTrackReplacements
@@ -537,8 +569,10 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 
 	// Track this replacement for approval (DO NOT add to playlist yet)
 	trackName := fmt.Sprintf("%s - %s", track.Artist, track.Title)
+
+	// Add track to flow-specific registry
 	d.queueManagementMutex.Lock()
-	d.pendingQueueTracks[newTrackID] = trackName
+	flow.PendingTracks[newTrackID] = trackName
 	d.queueManagementMutex.Unlock()
 
 	// Send message to chat about the replacement track (will auto-approve if rejection limit exceeded)
@@ -549,12 +583,48 @@ func (d *Dispatcher) findAndSuggestReplacementTrack(ctx context.Context) {
 		d.logger.Info("Auto-approving replacement track after rejection limit",
 			zap.String("trackID", newTrackID),
 			zap.String("trackName", trackName),
+			zap.String("flowID", flow.FlowID),
 			zap.Int("rejectionCount", rejectionCount),
 			zap.Int("maxRejections", d.config.App.MaxQueueTrackReplacements))
 	} else {
 		d.logger.Info("Requesting approval for replacement track",
 			zap.String("trackID", newTrackID),
 			zap.String("trackName", trackName),
+			zap.String("flowID", flow.FlowID),
 			zap.Int("currentRejections", rejectionCount))
 	}
+}
+
+// Flow management helper functions
+
+// createQueueManagementFlow creates a new queue management flow with a unique ID
+func (d *Dispatcher) createQueueManagementFlow(flowType string) *QueueManagementFlow {
+	flowID := fmt.Sprintf("%s-%d", flowType, time.Now().UnixNano())
+	flow := &QueueManagementFlow{
+		FlowID:         flowID,
+		RejectionCount: 0,
+		PendingTracks:  make(map[string]string),
+		CreatedAt:      time.Now(),
+	}
+
+	d.queueManagementMutex.Lock()
+	d.queueManagementFlows[flowID] = flow
+	d.queueManagementMutex.Unlock()
+
+	d.logger.Debug("Created new queue management flow", zap.String("flowID", flowID))
+	return flow
+}
+
+// removeQueueManagementFlow removes a flow from the registry
+func (d *Dispatcher) removeQueueManagementFlow(flowID string) {
+	d.queueManagementMutex.Lock()
+	_, exists := d.queueManagementFlows[flowID]
+	if exists {
+		delete(d.queueManagementFlows, flowID)
+	}
+	d.queueManagementMutex.Unlock()
+
+	d.logger.Debug("Removed queue management flow",
+		zap.String("flowID", flowID),
+		zap.Bool("existed", exists))
 }
