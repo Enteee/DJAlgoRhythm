@@ -127,6 +127,11 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 
 // handleRejection processes user rejection
 func (d *Dispatcher) handleRejection(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
+	// React with thumbs down to provide visual feedback for rejection
+	if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsDownReaction); reactErr != nil {
+		d.logger.Error("Failed to react with thumbs down", zap.Error(reactErr))
+	}
+
 	d.askWhichSong(ctx, msgCtx, originalMsg)
 }
 
