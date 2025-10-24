@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build test clean lint fmt vet check install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security
+.PHONY: help build test clean lint fmt vet staticcheck check install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -96,7 +96,15 @@ lint: ## Run golangci-lint
 		echo "golangci-lint not found. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"; \
 	fi
 
-check: fmt vet lint test build ## Run all code quality checks and build
+staticcheck: ## Run staticcheck
+	@echo "Running staticcheck..."
+	@if command -v staticcheck > /dev/null; then \
+		staticcheck ./...; \
+	else \
+		echo "staticcheck not found. Install with: go install honnef.co/go/tools/cmd/staticcheck@latest"; \
+	fi
+
+check: fmt vet lint staticcheck test build ## Run all code quality checks and build
 
 # Security targets
 security: ## Run security checks
@@ -216,6 +224,7 @@ dev-setup: ## Set up development environment
 		echo "Installing development tools..."; \
 		go install github.com/cosmtrek/air@latest; \
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+		go install honnef.co/go/tools/cmd/staticcheck@latest; \
 		go install golang.org/x/vuln/cmd/govulncheck@latest; \
 		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
 		go install golang.org/x/tools/cmd/godoc@latest; \
@@ -227,6 +236,7 @@ dev-status: ## Show development environment status
 	@echo "Go version: $(shell go version 2>/dev/null || echo 'not found')"
 	@echo "Air: $(shell air -v 2>/dev/null || echo 'not found')"
 	@echo "golangci-lint: $(shell golangci-lint version 2>/dev/null || echo 'not found')"
+	@echo "staticcheck: $(shell staticcheck -version 2>/dev/null || echo 'not found')"
 	@echo "gosec: $(shell gosec -version 2>/dev/null || echo 'not found')"
 	@echo "govulncheck: $(shell govulncheck -version 2>/dev/null || echo 'not found')"
 	@echo "Docker: $(shell docker --version 2>/dev/null || echo 'not found')"
@@ -237,6 +247,7 @@ ci-deps: ## Install CI dependencies
 	@echo "Installing CI dependencies..."
 	go mod download
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 ci-test: ## Run CI tests
