@@ -593,7 +593,17 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 	recentTracks := c.getRecentTracksForSearch(ctx, playlistTracks, RecommendationSeedTracks)
 
 	// Generate search query with LLM or fallback
-	searchQuery = c.generateSearchQuery(ctx, recentTracks)
+	if c.llm != nil && len(recentTracks) > 0 {
+		if mood, moodErr := c.llm.GenerateTrackMood(ctx, recentTracks); moodErr != nil {
+			c.logger.Warn("Failed to generate track mood, using fallback", zap.Error(moodErr))
+			searchQuery = DefaultPlaylistSearchQuery
+		} else {
+			searchQuery = mood
+		}
+	} else {
+		c.logger.Debug("Using fallback search query (no LLM or no tracks)")
+		searchQuery = DefaultPlaylistSearchQuery
+	}
 
 	// Find and return track along with search query
 	trackID, err = c.findTrackFromSearch(ctx, searchQuery, exclusionSet)
@@ -609,7 +619,16 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 		newTrackMood = "unknown"
 	} else {
 		// Generate mood for the new track using just this track
-		newTrackMood = c.generateSearchQuery(ctx, []core.Track{*newTrack})
+		if c.llm != nil {
+			if mood, moodErr := c.llm.GenerateTrackMood(ctx, []core.Track{*newTrack}); moodErr != nil {
+				c.logger.Warn("Failed to generate new track mood, using fallback", zap.Error(moodErr))
+				newTrackMood = DefaultPlaylistSearchQuery
+			} else {
+				newTrackMood = mood
+			}
+		} else {
+			newTrackMood = DefaultPlaylistSearchQuery
+		}
 	}
 
 	return trackID, searchQuery, newTrackMood, nil
@@ -663,27 +682,6 @@ func (c *Client) getRecentTracksForSearch(ctx context.Context, playlistTracks []
 	}
 
 	return recentTracks
-}
-
-// generateSearchQuery creates search query using LLM or fallback
-func (c *Client) generateSearchQuery(ctx context.Context, recentTracks []core.Track) string {
-	if c.llm == nil || len(recentTracks) == 0 {
-		c.logger.Debug("Using fallback search query (no LLM or no recent tracks)")
-		return DefaultPlaylistSearchQuery
-	}
-
-	searchQuery, err := c.llm.GenerateSearchQuery(ctx, recentTracks)
-	if err != nil {
-		c.logger.Warn("Failed to generate LLM search query, using fallback",
-			zap.Error(err))
-		return DefaultPlaylistSearchQuery
-	}
-
-	c.logger.Info("Generated search query for queue management",
-		zap.String("searchQuery", searchQuery),
-		zap.Int("seedTrackCount", len(recentTracks)))
-
-	return searchQuery
 }
 
 // collectCandidateTracksFromPlaylists gathers random tracks from multiple playlists using batch optimization

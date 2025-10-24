@@ -112,8 +112,8 @@ func TestI18nMessageValues(t *testing.T) {
 	testsWithPlaceholders := map[string]int{
 		"prompt.enhanced_approval":          5, // %s - %s, album, year, url
 		"prompt.basic_approval":             4, // %s - %s, album, year
-		"admin.approval_prompt":             3, // user, song, link
-		"admin.approval_required_community": 6, // artist, title, album, year, url, threshold
+		"admin.approval_prompt":             4, // user, song, link, mood
+		"admin.approval_required_community": 7, // artist, title, album, year, url, mood, threshold
 		"success.track_added":               3, // artist, title, playlist
 		"success.admin_approved_and_added":  3, // artist, title, url
 		"success.track_priority_playing":    3, // artist, title, url

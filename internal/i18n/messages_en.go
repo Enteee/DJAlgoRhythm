@@ -26,11 +26,11 @@ var englishMessages = map[string]string{
 	"format.url":   "\n🔗 %s",
 
 	// Admin approval messages
-	"admin.approval_required_community": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\n" +
+	"admin.approval_required_community": "⏳ Admin Approval Required\n\n🎵 %s - %s%s%s%s\n\n🎯 Track mood: %s\n\n" +
 		"Waiting for admin approval or react with 👍 below if you like this as well (%d+ reactions needed for community approval).",
 	"admin.denied": "❌ Admin denied the song request.",
 	"admin.approval_prompt": "🎵 *Admin Approval Required*\n\n" +
-		"User: %s\nSong: %s\nLink: %s\n\n" +
+		"User: %s\nSong: %s\nLink: %s\n\n🎯 Track mood: %s\n\n" +
 		"Do you approve adding this song to the playlist?",
 	"admin.button_approve": "✅ Approve",
 	"admin.button_deny":    "❌ Deny",

@@ -84,6 +84,7 @@ type adminApprovalContext struct {
 	originUserName string
 	songInfo       string
 	songURL        string
+	trackMood      string
 	approved       chan bool
 	cancelCtx      context.Context
 	cancelFunc     context.CancelFunc
@@ -813,7 +814,8 @@ func (f *Frontend) GetGroupAdmins(ctx context.Context) ([]int64, error) {
 }
 
 // AwaitAdminApproval requests approval from group administrators
-func (f *Frontend) AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error) {
+func (f *Frontend) AwaitAdminApproval(
+	ctx context.Context, origin *chat.Message, songInfo, songURL, trackMood string, timeoutSec int) (bool, error) {
 	if !f.config.Enabled {
 		return false, fmt.Errorf("telegram frontend is disabled")
 	}
@@ -836,6 +838,7 @@ func (f *Frontend) AwaitAdminApproval(ctx context.Context, origin *chat.Message,
 		originUserName: origin.SenderName,
 		songInfo:       songInfo,
 		songURL:        songURL,
+		trackMood:      trackMood,
 		approved:       make(chan bool, 1),
 		cancelCtx:      approvalCtx,
 		cancelFunc:     cancel,
@@ -883,7 +886,8 @@ func (f *Frontend) sendAdminApprovalRequests(ctx context.Context, adminIDs []int
 	prompt := f.localizer.T("admin.approval_prompt",
 		approval.originUserName,
 		approval.songInfo,
-		approval.songURL)
+		approval.songURL,
+		approval.trackMood)
 
 	keyboard := [][]models.InlineKeyboardButton{
 		{

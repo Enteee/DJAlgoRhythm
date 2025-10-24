@@ -23,7 +23,7 @@ type Client interface {
 	RankTracks(ctx context.Context, searchQuery string, tracks []core.Track) []core.Track
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
-	GenerateSearchQuery(ctx context.Context, seedTracks []core.Track) (string, error)
+	GenerateTrackMood(ctx context.Context, tracks []core.Track) (string, error)
 }
 
 func NewProvider(config *core.LLMConfig, logger *zap.Logger) (*Provider, error) {
@@ -66,8 +66,8 @@ func (p *Provider) IsPriorityRequest(ctx context.Context, text string) (bool, er
 	return p.client.IsPriorityRequest(ctx, text)
 }
 
-func (p *Provider) GenerateSearchQuery(ctx context.Context, seedTracks []core.Track) (string, error) {
-	return p.client.GenerateSearchQuery(ctx, seedTracks)
+func (p *Provider) GenerateTrackMood(ctx context.Context, tracks []core.Track) (string, error) {
+	return p.client.GenerateTrackMood(ctx, tracks)
 }
 
 type NoOpClient struct{}
@@ -87,7 +87,7 @@ func (n *NoOpClient) IsPriorityRequest(_ context.Context, _ string) (bool, error
 	return false, nil
 }
 
-func (n *NoOpClient) GenerateSearchQuery(_ context.Context, _ []core.Track) (string, error) {
+func (n *NoOpClient) GenerateTrackMood(_ context.Context, _ []core.Track) (string, error) {
 	return "", fmt.Errorf("LLM provider not configured")
 }
 

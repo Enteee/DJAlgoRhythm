@@ -152,7 +152,7 @@ func (d *Dispatcher) formatMessageWithMention(msg *chat.Message, messageText str
 }
 
 // formatCommunityApprovalMessage formats the community approval message with track details (for channel)
-func (d *Dispatcher) formatCommunityApprovalMessage(track *Track) string {
+func (d *Dispatcher) formatCommunityApprovalMessage(track *Track, trackMood string) string {
 	// Format album and year information
 	var albumInfo, yearInfo string
 	if track.Album != "" {
@@ -169,7 +169,7 @@ func (d *Dispatcher) formatCommunityApprovalMessage(track *Track) string {
 	}
 
 	return d.localizer.T("admin.approval_required_community",
-		track.Artist, track.Title, albumInfo, yearInfo, urlPart, d.config.Telegram.CommunityApproval)
+		track.Artist, track.Title, albumInfo, yearInfo, urlPart, trackMood, d.config.Telegram.CommunityApproval)
 }
 
 // sendStartupMessage sends a startup notification to the group

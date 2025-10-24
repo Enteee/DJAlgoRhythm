@@ -145,7 +145,7 @@ type LLMProvider interface {
 	RankTracks(ctx context.Context, searchQuery string, tracks []Track) []Track
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
-	GenerateSearchQuery(ctx context.Context, seedTracks []Track) (string, error)
+	GenerateTrackMood(ctx context.Context, tracks []Track) (string, error)
 }
 
 type DedupStore interface {

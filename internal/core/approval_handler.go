@@ -15,6 +15,9 @@ const (
 	// Auto-approval timing constants
 	autoApprovalReactionDelay = 100 * time.Millisecond
 	autoApprovalProcessDelay  = 500 * time.Millisecond
+
+	// Track mood fallback
+	unknownTrackMood = "unknown style"
 )
 
 // Approval Management
@@ -211,8 +214,23 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	songInfo := fmt.Sprintf("%s - %s", track.Artist, track.Title)
 	songURL := track.URL
 
+	// Generate track mood for approval messages
+	var trackMood string
+	if d.llm != nil {
+		mood, moodErr := d.llm.GenerateTrackMood(ctx, []Track{*track})
+		if moodErr != nil {
+			d.logger.Warn("Failed to generate track mood for approval, using fallback",
+				zap.Error(moodErr), zap.String("trackID", trackID))
+			trackMood = unknownTrackMood
+		} else {
+			trackMood = mood
+		}
+	} else {
+		trackMood = unknownTrackMood
+	}
+
 	// Send notification to channel that admin approval is required with song details
-	approvalMessage := d.formatCommunityApprovalMessage(track)
+	approvalMessage := d.formatCommunityApprovalMessage(track, trackMood)
 	approvalMsgID, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, approvalMessage)
 	if err != nil {
 		d.logger.Error("Failed to notify user about admin approval", zap.Error(err))
@@ -225,7 +243,7 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 
 	// Check if frontend supports both admin approval and community approval
 	telegramFrontend, supportsAdminApproval := d.frontend.(interface {
-		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL, trackMood string, timeoutSec int) (bool, error)
 	})
 
 	communityApprovalFrontend, supportsCommunityApproval := d.frontend.(interface {
@@ -242,19 +260,19 @@ func (d *Dispatcher) awaitAdminApproval(ctx context.Context, msgCtx *MessageCont
 	communityApprovalThreshold := d.config.Telegram.CommunityApproval
 	if supportsCommunityApproval && communityApprovalThreshold > 0 && approvalMsgID != "" {
 		// Run both admin approval and community approval concurrently
-		d.awaitConcurrentApproval(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, approvalMsgID,
+		d.awaitConcurrentApproval(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, trackMood, approvalMsgID,
 			telegramFrontend, communityApprovalFrontend, communityApprovalThreshold)
 	} else {
 		// Only admin approval
-		d.awaitAdminApprovalOnly(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, approvalMsgID, telegramFrontend)
+		d.awaitAdminApprovalOnly(ctx, msgCtx, originalMsg, trackID, songInfo, songURL, trackMood, approvalMsgID, telegramFrontend)
 	}
 }
 
 // awaitConcurrentApproval runs both admin and community approval concurrently
 func (d *Dispatcher) awaitConcurrentApproval(
-	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, approvalMsgID string,
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, trackMood, approvalMsgID string,
 	adminFrontend interface {
-		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL, trackMood string, timeoutSec int) (bool, error)
 	},
 	communityFrontend interface {
 		AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions int, timeoutSec int, requesterUserID int64) (bool, error)
@@ -269,7 +287,7 @@ func (d *Dispatcher) awaitConcurrentApproval(
 
 	// Start admin approval in goroutine
 	go func() {
-		approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
+		approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, trackMood, d.config.App.ConfirmAdminTimeoutSecs)
 		if err != nil {
 			errorResult <- err
 			return
@@ -331,12 +349,12 @@ func (d *Dispatcher) awaitConcurrentApproval(
 
 // awaitAdminApprovalOnly handles only admin approval (legacy behavior)
 func (d *Dispatcher) awaitAdminApprovalOnly(
-	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, approvalMsgID string,
+	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID, songInfo, songURL, trackMood, approvalMsgID string,
 	adminFrontend interface {
-		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL string, timeoutSec int) (bool, error)
+		AwaitAdminApproval(ctx context.Context, origin *chat.Message, songInfo, songURL, trackMood string, timeoutSec int) (bool, error)
 	},
 ) {
-	approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, d.config.App.ConfirmAdminTimeoutSecs)
+	approved, err := adminFrontend.AwaitAdminApproval(ctx, originalMsg, songInfo, songURL, trackMood, d.config.App.ConfirmAdminTimeoutSecs)
 	if err != nil {
 		d.logger.Error("Admin approval failed", zap.Error(err))
 		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.admin.process_failed"))

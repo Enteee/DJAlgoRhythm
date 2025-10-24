@@ -164,14 +164,14 @@ func (o *OpenAIClient) IsPriorityRequest(ctx context.Context, text string) (bool
 	return response.IsPriorityRequest, nil
 }
 
-func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []core.Track) (string, error) {
-	if len(seedTracks) == 0 {
+func (o *OpenAIClient) GenerateTrackMood(ctx context.Context, tracks []core.Track) (string, error) {
+	if len(tracks) == 0 {
 		return fallbackSearchQuery, nil
 	}
 
-	// Create a prompt describing the seed tracks
-	prompt := "Based on all these songs in a playlist:\n"
-	for i, track := range seedTracks {
+	// Create a prompt describing the tracks
+	prompt := "Based on on all these songs:\n"
+	for i, track := range tracks {
 		if i >= maxSeedTracksInPrompt {
 			break
 		}
@@ -181,17 +181,17 @@ func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []cor
 		}
 		prompt += "\n"
 	}
-	prompt += "\nGenerate a short, specific search query (3-6 words) to find similar music on Spotify. "
-	prompt += "Focus on genre, mood, or artist style. Respond with just the search query, no other text."
+	prompt += "\nGenerate a short, descriptive mood/style phrase (3-6 words) describing the musical style. "
+	prompt += "Focus on genre, mood, or artist style. Respond with just the mood phrase, no other text."
 
-	o.logger.Debug("Calling OpenAI for search query generation",
-		zap.Int("seedTracks", len(seedTracks)),
+	o.logger.Debug("Calling OpenAI for track mood generation",
+		zap.Int("tracks", len(tracks)),
 		zap.String("model", o.config.Model))
 
-	// Use OpenAI to generate a search query
+	// Use OpenAI to generate a mood description
 	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You are a music expert helping to generate search queries for Spotify."),
+			openai.SystemMessage("You are a music expert helping to describe musical moods and styles."),
 			openai.UserMessage(prompt),
 		},
 		Model:       o.getModel(),
@@ -199,7 +199,7 @@ func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []cor
 		MaxTokens:   openai.Int(maxTokensSearchQuery),
 	})
 	if err != nil {
-		o.logger.Warn("Failed to generate search query with OpenAI, using fallback", zap.Error(err))
+		o.logger.Warn("Failed to generate track mood with OpenAI, using fallback", zap.Error(err))
 		return fallbackSearchQuery, nil
 	}
 
@@ -207,12 +207,12 @@ func (o *OpenAIClient) GenerateSearchQuery(ctx context.Context, seedTracks []cor
 		return fallbackSearchQuery, nil
 	}
 
-	searchQuery := strings.TrimSpace(resp.Choices[0].Message.Content)
-	o.logger.Debug("Generated search query with OpenAI",
-		zap.String("query", searchQuery),
-		zap.Int("seedTracks", len(seedTracks)))
+	trackMood := strings.TrimSpace(resp.Choices[0].Message.Content)
+	o.logger.Debug("Generated track mood with OpenAI",
+		zap.String("mood", trackMood),
+		zap.Int("tracks", len(tracks)))
 
-	return searchQuery, nil
+	return trackMood, nil
 }
 
 func (o *OpenAIClient) RankTracks(ctx context.Context, searchQuery string, tracks []core.Track) []core.Track {
