@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"whatdj/internal/chat"
+	"djalgorhythm/internal/chat"
 )
 
 func TestNewFrontend(t *testing.T) {

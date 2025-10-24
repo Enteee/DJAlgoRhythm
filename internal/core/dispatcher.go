@@ -8,8 +8,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"whatdj/internal/chat"
-	"whatdj/internal/i18n"
+	"djalgorhythm/internal/chat"
+	"djalgorhythm/internal/i18n"
 )
 
 // Dispatcher handles messages from any chat frontend using the unified interface

@@ -3,7 +3,7 @@ package core
 import (
 	"testing"
 
-	"whatdj/internal/i18n"
+	"djalgorhythm/internal/i18n"
 )
 
 func TestDefaultConfig(t *testing.T) {

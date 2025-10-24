@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"whatdj/internal/chat"
+	"djalgorhythm/internal/chat"
 
 	"go.uber.org/zap"
 )

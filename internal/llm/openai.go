@@ -12,7 +12,7 @@ import (
 	"github.com/openai/openai-go/shared"
 	"go.uber.org/zap"
 
-	"whatdj/internal/core"
+	"djalgorhythm/internal/core"
 )
 
 type OpenAIClient struct {

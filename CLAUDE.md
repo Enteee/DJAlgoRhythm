@@ -72,7 +72,7 @@ Pre-commit hooks are automatically configured and include:
    - Clear documentation comment explaining the option
    - Sensible default value or example
    - Required/optional status indication
-3. **Add CLI flags** - Add corresponding command-line flags in `cmd/whatdj/main.go`
+3. **Add CLI flags** - Add corresponding command-line flags in `cmd/djalgorhythm/main.go`
 4. **Update README.md** - Add the new option to the configuration table in README.md
 5. **Test the option** - Ensure the new configuration works with both environment variables and CLI flags
 

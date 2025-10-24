@@ -1,9 +1,8 @@
-module whatdj
+module djalgorhythm
 
 go 1.24.0
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.13.0
 	github.com/bits-and-blooms/bloom/v3 v3.6.0
 	github.com/go-telegram/bot v1.17.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7

@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"whatdj/internal/core"
+	"djalgorhythm/internal/core"
 )
 
 const fallbackSearchQuery = "popular music"

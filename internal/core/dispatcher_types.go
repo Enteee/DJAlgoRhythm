@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"whatdj/internal/chat"
+	"djalgorhythm/internal/chat"
 )
 
 const (

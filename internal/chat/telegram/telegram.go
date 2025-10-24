@@ -15,9 +15,9 @@ import (
 	"github.com/go-telegram/bot/models"
 	"go.uber.org/zap"
 
-	"whatdj/internal/chat"
-	"whatdj/internal/i18n"
-	"whatdj/pkg/text"
+	"djalgorhythm/internal/chat"
+	"djalgorhythm/internal/i18n"
+	"djalgorhythm/pkg/text"
 )
 
 const (

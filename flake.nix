@@ -29,7 +29,7 @@
         }:
         {
           devenv.shells.default = {
-            name = "whatdj";
+            name = "djalgorhythm";
 
             imports = [
               ./devenv.nix

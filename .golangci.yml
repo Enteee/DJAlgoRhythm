@@ -20,7 +20,7 @@ linters-settings:
     sections:
       - standard
       - default
-      - prefix(whatdj)
+      - prefix(djalgorhythm)
   goconst:
     min-len: 2
     min-occurrences: 2
@@ -40,7 +40,7 @@ linters-settings:
   gocyclo:
     min-complexity: 15
   goimports:
-    local-prefixes: whatdj
+    local-prefixes: djalgorhythm
   mnd:
     checks:
       - argument

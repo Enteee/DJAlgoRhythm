@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"whatdj/internal/chat"
+	"djalgorhythm/internal/chat"
 )
 
 // Queue Management and Track Addition

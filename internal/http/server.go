@@ -11,13 +11,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
-	"whatdj/internal/core"
+	"djalgorhythm/internal/core"
 )
 
 const homePageHTML = `<!DOCTYPE html>
 <html>
 <head>
-    <title>WhatDj v2</title>
+    <title>DJAlgoRhythm</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; }
         .header { color: #333; }
@@ -27,7 +27,7 @@ const homePageHTML = `<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <h1 class="header">🎵 WhatDj v2</h1>
+    <h1 class="header">🎵 DJAlgoRhythm</h1>
     <p>Live WhatsApp → Spotify DJ Service</p>
 
     <h2>Endpoints</h2>
@@ -73,7 +73,7 @@ func newMetrics() *Metrics {
 	metrics := &Metrics{
 		PlaylistSize: prometheus.NewGauge(
 			prometheus.GaugeOpts{
-				Name: "whatdj_playlist_size",
+				Name: "djalgorhythm_playlist_size",
 				Help: "Current number of tracks in playlist",
 			},
 		),
@@ -92,7 +92,7 @@ func setupRoutes(logger *zap.Logger) *http.ServeMux {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(`{"status":"ok","service":"whatdj"}`)); err != nil {
+		if _, err := w.Write([]byte(`{"status":"ok","service":"djalgorhythm"}`)); err != nil {
 			logger.Warn("Failed to write health response", zap.Error(err))
 		}
 	})
@@ -100,7 +100,7 @@ func setupRoutes(logger *zap.Logger) *http.ServeMux {
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(`{"status":"ready","service":"whatdj"}`)); err != nil {
+		if _, err := w.Write([]byte(`{"status":"ready","service":"djalgorhythm"}`)); err != nil {
 			logger.Warn("Failed to write ready response", zap.Error(err))
 		}
 	})

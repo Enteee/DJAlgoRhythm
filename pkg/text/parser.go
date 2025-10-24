@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"whatdj/internal/core"
+	"djalgorhythm/internal/core"
 
 	"golang.org/x/text/unicode/norm"
 )

@@ -1,12 +1,12 @@
-# WhatDj v2 Makefile
+# DJAlgoRhythm Makefile
 .PHONY: help build test clean lint fmt vet check install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security
 
 # Variables
-BINARY_NAME := whatdj
+BINARY_NAME := djalgorhythm
 BINARY_PATH := bin/$(BINARY_NAME)
-MAIN_PATH := ./cmd/whatdj
+MAIN_PATH := ./cmd/djalgorhythm
 GO_VERSION := 1.24
-DOCKER_IMAGE := whatdj:latest
+DOCKER_IMAGE := djalgorhythm:latest
 DOCKER_REGISTRY :=
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -18,7 +18,7 @@ BUILD_FLAGS := -ldflags "$(LDFLAGS)" -trimpath
 
 # Default target
 help: ## Show this help message
-	@echo "WhatDj v2 - Live WhatsApp → Spotify DJ"
+	@echo "DJAlgoRhythm - Live WhatsApp → Spotify DJ"
 	@echo ""
 	@echo "Usage: make <target>"
 	@echo ""
@@ -146,7 +146,7 @@ docker-run: docker-build ## Build and run Docker container
 	docker run --rm -it \
 		--env-file .env \
 		-p 8080:8080 \
-		--name whatdj \
+		--name djalgorhythm \
 		$(DOCKER_IMAGE)
 
 docker-compose-up: ## Start services with docker-compose
@@ -250,7 +250,7 @@ ci-build: ## Build for CI
 
 # Info targets
 version: ## Show version information
-	@echo "WhatDj v2"
+	@echo "DJAlgoRhythm"
 	@echo "Version: $(VERSION)"
 	@echo "Commit: $(COMMIT)"
 	@echo "Built: $(BUILD_TIME)"

@@ -35,7 +35,7 @@ go.work.sum
 # Air live reload
 tmp/
 
-# WhatDj specific files
+# DJAlgoRhythm specific files
 # Runtime data
 *.db
 *.sqlite
@@ -103,7 +103,7 @@ debug.test
 *.pprof
 
 # Build artifacts
-whatdj
+djalgorhythm
 
 # Cache directories
 .cache/

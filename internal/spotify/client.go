@@ -20,9 +20,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
-	"whatdj/internal/core"
-	"whatdj/pkg/fuzzy"
-	"whatdj/pkg/text"
+	"djalgorhythm/internal/core"
+	"djalgorhythm/pkg/fuzzy"
+	"djalgorhythm/pkg/text"
 )
 
 // Package-level random number generator for consistent random operations
@@ -1136,7 +1136,7 @@ func (c *Client) calculateRelevanceScore(track *core.Track, normalizedQuery stri
 }
 
 func (c *Client) startOAuthFlow(ctx context.Context) error {
-	state := "whatdj-auth-state"
+	state := "djalgorhythm-auth-state"
 	authURL := c.auth.AuthURL(state)
 
 	fmt.Printf("Please visit the following URL to authorize the application:\n%s\n", authURL)

@@ -1,10 +1,10 @@
-// Package core provides the main business logic and configuration for WhatDj.
+// Package core provides the main business logic and configuration for DJAlgoRhythm.
 package core
 
 import (
 	"time"
 
-	"whatdj/internal/i18n"
+	"djalgorhythm/internal/i18n"
 )
 
 // Default configuration values
@@ -100,7 +100,7 @@ type AppConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		WhatsApp: WhatsAppConfig{
-			DeviceName:  "WhatDj",
+			DeviceName:  "DJAlgoRhythm",
 			SessionPath: "./whatsapp_session.db",
 			Enabled:     false, // Disabled by default
 		},

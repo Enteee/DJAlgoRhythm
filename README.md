@@ -1,8 +1,8 @@
-# WhatDj v2 🎵
+# DJAlgoRhythm 🎵
 
 > **Live Chat → Spotify DJ with AI disambiguation**
 
-WhatDj v2 is a production-grade Go service that listens to chat messages (Telegram/WhatsApp) in real time and automatically adds requested tracks to a Spotify playlist. It features AI-powered song disambiguation, user reaction confirmations, and comprehensive duplicate detection.
+DJAlgoRhythm is a production-grade Go service that listens to chat messages (Telegram/WhatsApp) in real time and automatically adds requested tracks to a Spotify playlist. It features AI-powered song disambiguation, user reaction confirmations, and comprehensive duplicate detection.
 
 ## Features
 
@@ -32,7 +32,7 @@ WhatDj v2 is a production-grade Go service that listens to chat messages (Telegr
 ```bash
 # Clone and enter dev environment
 git clone <repo-url>
-cd whatdj
+cd djalgorhythm
 nix develop --impure
 
 # Or if you have direnv
@@ -43,7 +43,7 @@ direnv allow
 
 ```bash
 git clone <repo-url>
-cd whatdj
+cd djalgorhythm
 go mod download
 ```
 
@@ -67,35 +67,35 @@ go mod download
    - Update `.env`:
 
    ```bash
-   WHATDJ_TELEGRAM_ENABLED=true
-   WHATDJ_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-   WHATDJ_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
-   WHATDJ_WHATSAPP_ENABLED=false
+   DJALGORHYTHM_TELEGRAM_ENABLED=true
+   DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+   DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
+   DJALGORHYTHM_WHATSAPP_ENABLED=false
    ```
 
 4. **Configure WhatsApp (Optional):**
    ⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. Enable at your own risk.
 
    ```bash
-   WHATDJ_WHATSAPP_ENABLED=true
-   WHATDJ_WHATSAPP_GROUP_JID=120363123456789@g.us
-   WHATDJ_TELEGRAM_ENABLED=false
+   DJALGORHYTHM_WHATSAPP_ENABLED=true
+   DJALGORHYTHM_WHATSAPP_GROUP_JID=120363123456789@g.us
+   DJALGORHYTHM_TELEGRAM_ENABLED=false
    ```
 
 5. **Configure LLM (Optional):**
 
    ```bash
    # For OpenAI
-   WHATDJ_LLM_PROVIDER=openai
-   WHATDJ_LLM_API_KEY=sk-...
+   DJALGORHYTHM_LLM_PROVIDER=openai
+   DJALGORHYTHM_LLM_API_KEY=sk-...
 
    # For Anthropic
-   WHATDJ_LLM_PROVIDER=anthropic
-   WHATDJ_LLM_API_KEY=sk-ant-...
+   DJALGORHYTHM_LLM_PROVIDER=anthropic
+   DJALGORHYTHM_LLM_API_KEY=sk-ant-...
 
    # For local Ollama
-   WHATDJ_LLM_PROVIDER=ollama
-   WHATDJ_LLM_BASE_URL=http://localhost:11434
+   DJALGORHYTHM_LLM_PROVIDER=ollama
+   DJALGORHYTHM_LLM_BASE_URL=http://localhost:11434
    ```
 
 ### Running
@@ -103,13 +103,13 @@ go mod download
 ```bash
 # Build and run
 make build
-./bin/whatdj
+./bin/djalgorhythm
 
 # Or run directly
-go run ./cmd/whatdj
+go run ./cmd/djalgorhythm
 
 # With custom config
-./bin/whatdj --config myconfig.env --log-level debug
+./bin/djalgorhythm --config myconfig.env --log-level debug
 ```
 
 ## Chat Platform Setup
@@ -143,7 +143,7 @@ go run ./cmd/whatdj
 
    ```bash
    # Run with debug logging to see group JIDs
-   WHATDJ_WHATSAPP_ENABLED=true WHATDJ_LOG_LEVEL=debug ./bin/whatdj
+   DJALGORHYTHM_WHATSAPP_ENABLED=true DJALGORHYTHM_LOG_LEVEL=debug ./bin/djalgorhythm
    ```
 
 2. **QR Code Login:**
@@ -154,7 +154,7 @@ go run ./cmd/whatdj
 
 ### Message Types
 
-WhatDj recognizes three types of messages:
+DJAlgoRhythm recognizes three types of messages:
 
 #### 1. Spotify Links
 
@@ -212,33 +212,33 @@ never gonna give you up rick astley
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | **Chat Platforms** | | | |
-| `WHATDJ_TELEGRAM_ENABLED` | Enable Telegram integration | `true` | ❌ |
-| `WHATDJ_TELEGRAM_BOT_TOKEN` | Telegram bot token | - | ✅ (if enabled) |
-| `WHATDJ_TELEGRAM_GROUP_ID` | Telegram group ID | - | ✅ (if enabled) |
-| `WHATDJ_ADMIN_APPROVAL` | Require admin approval for songs | `false` | ❌ |
-| `WHATDJ_ADMIN_NEEDS_APPROVAL` | Require approval even for admins (testing) | `false` | ❌ |
-| `WHATDJ_WHATSAPP_ENABLED` | Enable WhatsApp integration | `false` | ❌ |
-| `WHATDJ_WHATSAPP_GROUP_JID` | WhatsApp group JID | - | ✅ (if enabled) |
+| `DJALGORHYTHM_TELEGRAM_ENABLED` | Enable Telegram integration | `true` | ❌ |
+| `DJALGORHYTHM_TELEGRAM_BOT_TOKEN` | Telegram bot token | - | ✅ (if enabled) |
+| `DJALGORHYTHM_TELEGRAM_GROUP_ID` | Telegram group ID | - | ✅ (if enabled) |
+| `DJALGORHYTHM_ADMIN_APPROVAL` | Require admin approval for songs | `false` | ❌ |
+| `DJALGORHYTHM_ADMIN_NEEDS_APPROVAL` | Require approval even for admins (testing) | `false` | ❌ |
+| `DJALGORHYTHM_WHATSAPP_ENABLED` | Enable WhatsApp integration | `false` | ❌ |
+| `DJALGORHYTHM_WHATSAPP_GROUP_JID` | WhatsApp group JID | - | ✅ (if enabled) |
 | **Spotify** | | | |
-| `WHATDJ_SPOTIFY_CLIENT_ID` | Spotify app client ID | - | ✅ |
-| `WHATDJ_SPOTIFY_CLIENT_SECRET` | Spotify app secret | - | ✅ |
-| `WHATDJ_SPOTIFY_PLAYLIST_ID` | Target playlist ID | - | ✅ |
+| `DJALGORHYTHM_SPOTIFY_CLIENT_ID` | Spotify app client ID | - | ✅ |
+| `DJALGORHYTHM_SPOTIFY_CLIENT_SECRET` | Spotify app secret | - | ✅ |
+| `DJALGORHYTHM_SPOTIFY_PLAYLIST_ID` | Target playlist ID | - | ✅ |
 | **LLM** | | | |
-| `WHATDJ_LLM_PROVIDER` | AI provider (openai/anthropic/ollama/none) | `none` | ❌ |
-| `WHATDJ_LLM_API_KEY` | LLM API key | - | ❌ |
-| `WHATDJ_LLM_MODEL` | Model name | Provider default | ❌ |
+| `DJALGORHYTHM_LLM_PROVIDER` | AI provider (openai/anthropic/ollama/none) | `none` | ❌ |
+| `DJALGORHYTHM_LLM_API_KEY` | LLM API key | - | ❌ |
+| `DJALGORHYTHM_LLM_MODEL` | Model name | Provider default | ❌ |
 | **General** | | | |
-| `WHATDJ_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
-| `WHATDJ_CONFIRM_ADMIN_TIMEOUT_SECS` | Reaction timeout for admins (seconds) | `3600` | ❌ |
-| `WHATDJ_QUEUE_AHEAD_DURATION_SECS` | Target queue duration (seconds) | `90` | ❌ |
-| `WHATDJ_QUEUE_CHECK_INTERVAL_SECS` | Queue check interval (seconds) | `45` | ❌ |
-| `WHATDJ_SERVER_PORT` | HTTP server port | `8080` | ❌ |
-| `WHATDJ_LOG_LEVEL` | Logging level | `info` | ❌ |
+| `DJALGORHYTHM_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
+| `DJALGORHYTHM_CONFIRM_ADMIN_TIMEOUT_SECS` | Reaction timeout for admins (seconds) | `3600` | ❌ |
+| `DJALGORHYTHM_QUEUE_AHEAD_DURATION_SECS` | Target queue duration (seconds) | `90` | ❌ |
+| `DJALGORHYTHM_QUEUE_CHECK_INTERVAL_SECS` | Queue check interval (seconds) | `45` | ❌ |
+| `DJALGORHYTHM_SERVER_PORT` | HTTP server port | `8080` | ❌ |
+| `DJALGORHYTHM_LOG_LEVEL` | Logging level | `info` | ❌ |
 
 ### CLI Flags
 
 ```bash
-whatdj --help
+djalgorhythm --help
 
 Flags:
       --config string                  config file (default is .env)
@@ -259,28 +259,28 @@ Flags:
 
 ```bash
 # Chat Platform (choose one)
-WHATDJ_TELEGRAM_ENABLED=true
-WHATDJ_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-WHATDJ_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
+DJALGORHYTHM_TELEGRAM_ENABLED=true
+DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
 
 # WhatsApp (disabled by default)
-WHATDJ_WHATSAPP_ENABLED=false
-WHATDJ_WHATSAPP_GROUP_JID=120363123456789@g.us
+DJALGORHYTHM_WHATSAPP_ENABLED=false
+DJALGORHYTHM_WHATSAPP_GROUP_JID=120363123456789@g.us
 
 # Spotify (required)
-WHATDJ_SPOTIFY_CLIENT_ID=your_spotify_client_id
-WHATDJ_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-WHATDJ_SPOTIFY_PLAYLIST_ID=37i9dQZF1DX0XUsuxWHRQd
+DJALGORHYTHM_SPOTIFY_CLIENT_ID=your_spotify_client_id
+DJALGORHYTHM_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+DJALGORHYTHM_SPOTIFY_PLAYLIST_ID=37i9dQZF1DX0XUsuxWHRQd
 
 # LLM (optional)
-WHATDJ_LLM_PROVIDER=openai
-WHATDJ_LLM_API_KEY=sk-...
-WHATDJ_LLM_MODEL=gpt-4o-mini
+DJALGORHYTHM_LLM_PROVIDER=openai
+DJALGORHYTHM_LLM_API_KEY=sk-...
+DJALGORHYTHM_LLM_MODEL=gpt-4o-mini
 
 # General
-WHATDJ_CONFIRM_TIMEOUT_SECS=120
-WHATDJ_SERVER_PORT=8080
-WHATDJ_LOG_LEVEL=info
+DJALGORHYTHM_CONFIRM_TIMEOUT_SECS=120
+DJALGORHYTHM_SERVER_PORT=8080
+DJALGORHYTHM_LOG_LEVEL=info
 ```
 
 ## Development
@@ -288,7 +288,7 @@ WHATDJ_LOG_LEVEL=info
 ### Project Structure
 
 ```
-cmd/whatdj/           # Main application
+cmd/djalgorhythm/           # Main application
 internal/
   ├── chat/           # Unified chat frontend interface
   │   ├── telegram/   # Telegram Bot API client
@@ -370,14 +370,14 @@ go test ./internal/chat/telegram/
 
 Key metrics exposed at `/metrics`:
 
-- `whatdj_messages_total` - Messages processed by type/status
-- `whatdj_adds_total` - Tracks added by source
-- `whatdj_duplicates_total` - Duplicate tracks rejected
-- `whatdj_llm_calls_total` - LLM API calls by provider/status
-- `whatdj_errors_total` - Errors by component/type
-- `whatdj_processing_duration_seconds` - Processing time histogram
-- `whatdj_playlist_size` - Current playlist track count
-- `whatdj_active_sessions` - Active message processing sessions
+- `djalgorhythm_messages_total` - Messages processed by type/status
+- `djalgorhythm_adds_total` - Tracks added by source
+- `djalgorhythm_duplicates_total` - Duplicate tracks rejected
+- `djalgorhythm_llm_calls_total` - LLM API calls by provider/status
+- `djalgorhythm_errors_total` - Errors by component/type
+- `djalgorhythm_processing_duration_seconds` - Processing time histogram
+- `djalgorhythm_playlist_size` - Current playlist track count
+- `djalgorhythm_active_sessions` - Active message processing sessions
 
 ## Deployment
 
@@ -385,10 +385,10 @@ Key metrics exposed at `/metrics`:
 
 ```bash
 # Build image
-docker build -t whatdj:latest .
+docker build -t djalgorhythm:latest .
 
 # Run with environment file
-docker run --env-file .env -p 8080:8080 whatdj:latest
+docker run --env-file .env -p 8080:8080 djalgorhythm:latest
 
 # Or with docker-compose
 docker-compose up -d
@@ -421,7 +421,7 @@ curl "https://api.telegram.org/bot<TOKEN>/getMe"
 
 ```bash
 # Check logs for QR code output
-./bin/whatdj --log-level debug
+./bin/djalgorhythm --log-level debug
 
 # Ensure phone is connected to internet
 # Scan QR code within 30 seconds
@@ -447,10 +447,10 @@ curl "https://api.telegram.org/bot<TOKEN>/getMe"
 
 ```bash
 # Enable debug logging
-WHATDJ_LOG_LEVEL=debug ./bin/whatdj
+DJALGORHYTHM_LOG_LEVEL=debug ./bin/djalgorhythm
 
 # Or with flag
-./bin/whatdj --log-level debug
+./bin/djalgorhythm --log-level debug
 ```
 
 ## Contributing
@@ -483,4 +483,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Made with ❤️ and 🎵 by the WhatDj team
+Made with ❤️ and 🎵 by the DJAlgoRhythm team

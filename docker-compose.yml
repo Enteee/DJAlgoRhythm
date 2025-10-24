@@ -1,33 +1,33 @@
 version: '3.8'
 
 services:
-  whatdj:
+  djalgorhythm:
     build: .
-    container_name: whatdj
+    container_name: djalgorhythm
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
       # Load from .env file
-      - WHATDJ_WHATSAPP_GROUP_JID=${WHATDJ_WHATSAPP_GROUP_JID}
-      - WHATDJ_WHATSAPP_DEVICE_NAME=${WHATDJ_WHATSAPP_DEVICE_NAME:-WhatDj}
-      - WHATDJ_SPOTIFY_CLIENT_ID=${WHATDJ_SPOTIFY_CLIENT_ID}
-      - WHATDJ_SPOTIFY_CLIENT_SECRET=${WHATDJ_SPOTIFY_CLIENT_SECRET}
-      - WHATDJ_SPOTIFY_PLAYLIST_ID=${WHATDJ_SPOTIFY_PLAYLIST_ID}
-      - WHATDJ_SPOTIFY_REDIRECT_URL=${WHATDJ_SPOTIFY_REDIRECT_URL:-http://127.0.0.1:8080/callback}
-      - WHATDJ_LLM_PROVIDER=${WHATDJ_LLM_PROVIDER:-none}
-      - WHATDJ_LLM_API_KEY=${WHATDJ_LLM_API_KEY}
-      - WHATDJ_LLM_MODEL=${WHATDJ_LLM_MODEL}
-      - WHATDJ_LLM_BASE_URL=${WHATDJ_LLM_BASE_URL}
-      - WHATDJ_SERVER_HOST=0.0.0.0
-      - WHATDJ_SERVER_PORT=8080
-      - WHATDJ_LOG_LEVEL=${WHATDJ_LOG_LEVEL:-info}
-      - WHATDJ_CONFIRM_TIMEOUT=${WHATDJ_CONFIRM_TIMEOUT:-120}
-      - WHATDJ_WHATSAPP_SESSION_PATH=/app/data/whatsapp_session.db
-      - WHATDJ_SPOTIFY_TOKEN_PATH=/app/data/spotify_token.json
+      - DJALGORHYTHM_WHATSAPP_GROUP_JID=${DJALGORHYTHM_WHATSAPP_GROUP_JID}
+      - DJALGORHYTHM_WHATSAPP_DEVICE_NAME=${DJALGORHYTHM_WHATSAPP_DEVICE_NAME:-DJAlgoRhythm}
+      - DJALGORHYTHM_SPOTIFY_CLIENT_ID=${DJALGORHYTHM_SPOTIFY_CLIENT_ID}
+      - DJALGORHYTHM_SPOTIFY_CLIENT_SECRET=${DJALGORHYTHM_SPOTIFY_CLIENT_SECRET}
+      - DJALGORHYTHM_SPOTIFY_PLAYLIST_ID=${DJALGORHYTHM_SPOTIFY_PLAYLIST_ID}
+      - DJALGORHYTHM_SPOTIFY_REDIRECT_URL=${DJALGORHYTHM_SPOTIFY_REDIRECT_URL:-http://127.0.0.1:8080/callback}
+      - DJALGORHYTHM_LLM_PROVIDER=${DJALGORHYTHM_LLM_PROVIDER:-none}
+      - DJALGORHYTHM_LLM_API_KEY=${DJALGORHYTHM_LLM_API_KEY}
+      - DJALGORHYTHM_LLM_MODEL=${DJALGORHYTHM_LLM_MODEL}
+      - DJALGORHYTHM_LLM_BASE_URL=${DJALGORHYTHM_LLM_BASE_URL}
+      - DJALGORHYTHM_SERVER_HOST=0.0.0.0
+      - DJALGORHYTHM_SERVER_PORT=8080
+      - DJALGORHYTHM_LOG_LEVEL=${DJALGORHYTHM_LOG_LEVEL:-info}
+      - DJALGORHYTHM_CONFIRM_TIMEOUT=${DJALGORHYTHM_CONFIRM_TIMEOUT:-120}
+      - DJALGORHYTHM_WHATSAPP_SESSION_PATH=/app/data/whatsapp_session.db
+      - DJALGORHYTHM_SPOTIFY_TOKEN_PATH=/app/data/spotify_token.json
     volumes:
       # Persist WhatsApp session and Spotify tokens
-      - whatdj_data:/app/data
+      - djalgorhythm_data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -35,13 +35,13 @@ services:
       retries: 3
       start_period: 40s
     labels:
-      - "com.whatdj.service=main"
-      - "com.whatdj.version=v2"
+      - "com.djalgorhythm.service=main"
+      - "com.djalgorhythm.version=v2"
 
   # Optional: Prometheus for metrics collection
   prometheus:
     image: prom/prometheus:latest
-    container_name: whatdj-prometheus
+    container_name: djalgorhythm-prometheus
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -61,7 +61,7 @@ services:
   # Optional: Grafana for metrics visualization
   grafana:
     image: grafana/grafana:latest
-    container_name: whatdj-grafana
+    container_name: djalgorhythm-grafana
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -80,7 +80,7 @@ services:
   # Optional: Ollama for local LLM
   ollama:
     image: ollama/ollama:latest
-    container_name: whatdj-ollama
+    container_name: djalgorhythm-ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -100,7 +100,7 @@ services:
     #           capabilities: [gpu]
 
 volumes:
-  whatdj_data:
+  djalgorhythm_data:
     driver: local
   prometheus_data:
     driver: local
@@ -111,4 +111,4 @@ volumes:
 
 networks:
   default:
-    name: whatdj-network
+    name: djalgorhythm-network

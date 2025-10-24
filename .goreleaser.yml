@@ -1,6 +1,6 @@
 version: 2
 
-project_name: whatdj
+project_name: djalgorhythm
 
 before:
   hooks:
@@ -8,9 +8,9 @@ before:
     - go generate ./...
 
 builds:
-  - id: whatdj
-    main: ./cmd/whatdj
-    binary: whatdj
+  - id: djalgorhythm
+    main: ./cmd/djalgorhythm
+    binary: djalgorhythm
     env:
       - CGO_ENABLED=1
     goos:
@@ -32,7 +32,7 @@ builds:
       - -trimpath
 
 archives:
-  - id: whatdj
+  - id: djalgorhythm
     format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
@@ -83,14 +83,14 @@ changelog:
 
 dockers:
   - image_templates:
-      - "whatdj/whatdj:{{ .Tag }}"
-      - "whatdj/whatdj:v{{ .Major }}"
-      - "whatdj/whatdj:v{{ .Major }}.{{ .Minor }}"
-      - "whatdj/whatdj:latest"
-      - "ghcr.io/whatdj/whatdj:{{ .Tag }}"
-      - "ghcr.io/whatdj/whatdj:v{{ .Major }}"
-      - "ghcr.io/whatdj/whatdj:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/whatdj/whatdj:latest"
+      - "djalgorhythm/djalgorhythm:{{ .Tag }}"
+      - "djalgorhythm/djalgorhythm:v{{ .Major }}"
+      - "djalgorhythm/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
+      - "djalgorhythm/djalgorhythm:latest"
+      - "ghcr.io/djalgorhythm/djalgorhythm:{{ .Tag }}"
+      - "ghcr.io/djalgorhythm/djalgorhythm:v{{ .Major }}"
+      - "ghcr.io/djalgorhythm/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/djalgorhythm/djalgorhythm:latest"
     dockerfile: Dockerfile
     use: buildx
     build_flag_templates:
@@ -104,13 +104,13 @@ dockers:
 
 release:
   github:
-    owner: whatdj
-    name: whatdj
+    owner: djalgorhythm
+    name: djalgorhythm
   draft: false
   prerelease: auto
   mode: replace
   header: |
-    ## WhatDj {{ .Tag }} Release 🎵
+    ## DJAlgoRhythm {{ .Tag }} Release 🎵
 
     This release includes the following changes:
 
@@ -122,16 +122,16 @@ release:
 
     ### Docker
     ```bash
-    docker pull whatdj/whatdj:{{ .Tag }}
+    docker pull djalgorhythm/djalgorhythm:{{ .Tag }}
     ```
 
     ### Go Install
     ```bash
-    go install github.com/whatdj/whatdj/cmd/whatdj@{{ .Tag }}
+    go install github.com/djalgorhythm/djalgorhythm/cmd/djalgorhythm@{{ .Tag }}
     ```
 
     ## Checksums
     All binary checksums are available in `checksums.txt`.
 
     ---
-    **Full Changelog**: https://github.com/whatdj/whatdj/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/djalgorhythm/djalgorhythm/compare/{{ .PreviousTag }}...{{ .Tag }}

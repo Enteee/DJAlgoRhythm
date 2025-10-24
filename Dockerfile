@@ -20,8 +20,8 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-w -s -extldflags '-static'" \
     -a -installsuffix cgo \
-    -o whatdj \
-    ./cmd/whatdj
+    -o djalgorhythm \
+    ./cmd/djalgorhythm
 
 # Final stage
 FROM alpine:latest
@@ -35,19 +35,19 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user
-RUN adduser -D -s /bin/sh whatdj
+RUN adduser -D -s /bin/sh djalgorhythm
 
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /build/whatdj .
+COPY --from=builder /build/djalgorhythm .
 
 # Create directories for data
-RUN mkdir -p /app/data && chown -R whatdj:whatdj /app
+RUN mkdir -p /app/data && chown -R djalgorhythm:djalgorhythm /app
 
 # Switch to non-root user
-USER whatdj
+USER djalgorhythm
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
@@ -57,11 +57,11 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 EXPOSE 8080
 
 # Set default environment
-ENV WHATDJ_SERVER_HOST=0.0.0.0 \
-    WHATDJ_SERVER_PORT=8080 \
-    WHATDJ_LOG_LEVEL=info \
-    WHATDJ_WHATSAPP_SESSION_PATH=/app/data/whatsapp_session.db \
-    WHATDJ_SPOTIFY_TOKEN_PATH=/app/data/spotify_token.json
+ENV DJALGORHYTHM_SERVER_HOST=0.0.0.0 \
+    DJALGORHYTHM_SERVER_PORT=8080 \
+    DJALGORHYTHM_LOG_LEVEL=info \
+    DJALGORHYTHM_WHATSAPP_SESSION_PATH=/app/data/whatsapp_session.db \
+    DJALGORHYTHM_SPOTIFY_TOKEN_PATH=/app/data/spotify_token.json
 
 # Run the application
-ENTRYPOINT ["./whatdj"]
+ENTRYPOINT ["./djalgorhythm"]

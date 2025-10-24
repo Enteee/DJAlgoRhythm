@@ -20,9 +20,9 @@ import (
 
 	"github.com/mdp/qrterminal/v3"
 
-	"whatdj/internal/chat"
-	"whatdj/internal/i18n"
-	"whatdj/pkg/text"
+	"djalgorhythm/internal/chat"
+	"djalgorhythm/internal/i18n"
+	"djalgorhythm/pkg/text"
 )
 
 // Config holds WhatsApp-specific configuration

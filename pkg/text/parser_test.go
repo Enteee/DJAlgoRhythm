@@ -3,7 +3,7 @@ package text
 import (
 	"testing"
 
-	"whatdj/internal/core"
+	"djalgorhythm/internal/core"
 )
 
 func TestParser_ParseMessage(t *testing.T) {
