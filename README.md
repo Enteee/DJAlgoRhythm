@@ -57,21 +57,22 @@ go mod download
 
 2. **Configure Spotify:**
    - Create app at [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-   - Add `https://localhost:8080/callback` to redirect URIs
+   - Add `http://127.0.0.1:8080/callback` to redirect URIs
    - Update `.env` with your credentials
 
 3. **Configure Telegram (Default):**
    - Create bot with [@BotFather](https://t.me/botfather)
    - Add bot to your group and make it admin
-   - Get group chat ID (use [@userinfobot](https://t.me/userinfobot))
-   - Update `.env`:
+   - Update `.env` with your bot token (group will be selected automatically):
 
    ```bash
    DJALGORHYTHM_TELEGRAM_ENABLED=true
    DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-   DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
+   # DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx  # Auto-detected on first run
    DJALGORHYTHM_WHATSAPP_ENABLED=false
    ```
+
+   **Note**: If no group ID is configured, the application will automatically scan for available groups and let you select one interactively on first startup.
 
 4. **Configure WhatsApp (Optional):**
    ⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. Enable at your own risk.
@@ -127,9 +128,9 @@ go run ./cmd/djalgorhythm
    - Make the bot an admin (required for message access)
 
 3. **Get Group ID:**
-   - Add [@userinfobot](https://t.me/userinfobot) to your group
-   - It will show the group ID (negative number like -100xxxxxxxxxx)
-   - Remove the info bot after getting the ID
+   - **Automatic Detection** (Recommended): Leave `DJALGORHYTHM_TELEGRAM_GROUP_ID` unset in your `.env` file
+   - The application will scan for available groups and let you select one interactively on first startup
+   - **Manual Setup**: If you know your group ID, set it directly in `.env`
 
 4. **Configure Bot:**
    - Enable inline mode (optional): `/setinline` with @BotFather
@@ -214,7 +215,7 @@ never gonna give you up rick astley
 | **Chat Platforms** | | | |
 | `DJALGORHYTHM_TELEGRAM_ENABLED` | Enable Telegram integration | `true` | ❌ |
 | `DJALGORHYTHM_TELEGRAM_BOT_TOKEN` | Telegram bot token | - | ✅ (if enabled) |
-| `DJALGORHYTHM_TELEGRAM_GROUP_ID` | Telegram group ID | - | ✅ (if enabled) |
+| `DJALGORHYTHM_TELEGRAM_GROUP_ID` | Telegram group ID (auto-detected if unset) | - | ❌ |
 | `DJALGORHYTHM_ADMIN_APPROVAL` | Require admin approval for songs | `false` | ❌ |
 | `DJALGORHYTHM_ADMIN_NEEDS_APPROVAL` | Require approval even for admins (testing) | `false` | ❌ |
 | `DJALGORHYTHM_WHATSAPP_ENABLED` | Enable WhatsApp integration | `false` | ❌ |
@@ -261,7 +262,7 @@ Flags:
 # Chat Platform (choose one)
 DJALGORHYTHM_TELEGRAM_ENABLED=true
 DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx
+# DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx  # Auto-detected on first run
 
 # WhatsApp (disabled by default)
 DJALGORHYTHM_WHATSAPP_ENABLED=false
