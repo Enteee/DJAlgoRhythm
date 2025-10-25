@@ -350,17 +350,17 @@ Bot: 🤔 I found a YouTube link! Which track do you want from it?
 
 ```mermaid
 graph TD
-    A[💬 User sends message] --> B{🤔 What type?}
-    B -->|🔗 Spotify Link| C[⚡ Instant add to playlist]
-    B -->|🎥 YouTube/Apple| D[🤖 AI: "Which song?"]
-    B -->|💭 Free text| E[🤖 AI finds best match]
+    A["💬 User sends message"] --> B{"🤔 What type?"}
+    B -->|"🔗 Spotify Link"| C["⚡ Instant add to playlist"]
+    B -->|"🎥 YouTube/Apple"| D["🤖 AI: Which song?"]
+    B -->|"💭 Free text"| E["🤖 AI finds best match"]
 
-    D --> F[👍 User confirms] --> C
-    E --> G{🎯 AI confidence}
-    G -->|High| H[👍 Auto-confirm] --> C
-    G -->|Low| I[❓ Ask for confirmation] --> F
+    D --> F["👍 User confirms"] --> C
+    E --> G{"🎯 AI confidence"}
+    G -->|"High"| H["👍 Auto-confirm"] --> C
+    G -->|"Low"| I["❓ Ask for confirmation"] --> F
 
-    C --> J[🎵 Added to Spotify!]
+    C --> J["🎵 Added to Spotify!"]
 
     style C fill:#1DB954
     style J fill:#1DB954
