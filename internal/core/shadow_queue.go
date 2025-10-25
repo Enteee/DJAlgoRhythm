@@ -244,7 +244,7 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, erro
 	d.priorityTracksMutex.RUnlock()
 
 	// Get all playlist tracks to find positions
-	playlistTrackIDs, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	playlistTracks, err := d.spotify.GetPlaylistTracksWithDetails(ctx, d.config.Spotify.PlaylistID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
@@ -254,8 +254,8 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, erro
 		resumeSongID := priorityInfo.ResumeSongID
 		if resumeSongID == "" {
 			// No resume song recorded, default to position after current priority track
-			for i, trackID := range playlistTrackIDs {
-				if trackID == currentTrackID {
+			for i, track := range playlistTracks {
+				if track.ID == currentTrackID {
 					resumePosition := i + 1
 					d.logger.Debug("Priority track playing, no resume song, using next position",
 						zap.String("currentTrackID", currentTrackID),
@@ -271,8 +271,8 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, erro
 		}
 
 		// Find where the resume song currently is in the playlist
-		for i, trackID := range playlistTrackIDs {
-			if trackID == resumeSongID {
+		for i, track := range playlistTracks {
+			if track.ID == resumeSongID {
 				d.logger.Debug("Priority track playing, found resume song position",
 					zap.String("currentTrackID", currentTrackID),
 					zap.String("resumeSongID", resumeSongID),
@@ -287,8 +287,8 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, erro
 	}
 
 	// Normal track or fallback case - find current track position
-	for i, trackID := range playlistTrackIDs {
-		if trackID == currentTrackID {
+	for i, track := range playlistTracks {
+		if track.ID == currentTrackID {
 			d.logger.Debug("Normal track playing, using current position",
 				zap.String("currentTrackID", currentTrackID),
 				zap.Int("position", i))

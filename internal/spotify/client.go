@@ -579,8 +579,8 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 		return "", "", "", fmt.Errorf("client not authenticated")
 	}
 
-	// Get playlist tracks
-	playlistTracks, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	// Get playlist tracks with full details
+	playlistTracks, err := c.GetPlaylistTracksWithDetails(ctx, c.targetPlaylist)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
@@ -590,7 +590,7 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 	}
 
 	// Get recent tracks for search context (simple approach)
-	recentTracks := c.getRecentTracksForSearch(ctx, playlistTracks, RecommendationSeedTracks)
+	recentTracks := c.getRecentTracksForSearch(playlistTracks, RecommendationSeedTracks)
 
 	// Generate search query with LLM or fallback
 	if c.llm != nil && len(recentTracks) > 0 {
@@ -635,7 +635,7 @@ func (c *Client) GetRecommendedTrack(ctx context.Context) (trackID, searchQuery,
 }
 
 // getRecentTracksForSearch extracts recent tracks for LLM context (simplified)
-func (c *Client) getRecentTracksForSearch(ctx context.Context, playlistTracks []string, count int) []core.Track {
+func (c *Client) getRecentTracksForSearch(playlistTracks []core.Track, count int) []core.Track {
 	if len(playlistTracks) == 0 {
 		return nil
 	}
@@ -646,85 +646,51 @@ func (c *Client) getRecentTracksForSearch(ctx context.Context, playlistTracks []
 		start = 0
 	}
 
-	var recentTracks []core.Track
-	for i := start; i < len(playlistTracks); i++ {
-		trackID := playlistTracks[i]
-
-		// Simple validation - just check length
-		if len(trackID) == SpotifyIDLength {
-			track, err := c.GetTrack(ctx, trackID)
-			if err != nil {
-				c.logger.Warn("Failed to get recent track for search context",
-					zap.String("trackID", trackID),
-					zap.Error(err))
-				continue
-			}
-			recentTracks = append(recentTracks, *track)
-		}
-	}
-
-	return recentTracks
+	return playlistTracks[start:]
 }
 
 // collectCandidateTracksFromPlaylists gathers random tracks from multiple playlists using batch optimization
 func (c *Client) collectCandidateTracksFromPlaylists(
 	ctx context.Context,
 	playlists []core.Playlist,
-	playlistTracks []string,
+	playlistTracks []core.Track,
 	maxCandidates int,
 ) ([]core.Track, error) {
-	// Batch fetch all tracks from all playlists (deduplicated)
-	allTrackIDs := c.getAllTracksFromPlaylists(ctx, playlists)
-	if len(allTrackIDs) == 0 {
+	// Batch fetch all tracks from all playlists (deduplicated) - now returns track objects
+	allTracks := c.getAllTracksFromPlaylists(ctx, playlists)
+	if len(allTracks) == 0 {
 		return nil, fmt.Errorf("no tracks available from any of the %d playlists", len(playlists))
 	}
 
-	// Collect all non-excluded track IDs (tracks not already in target playlist)
-	var availableTrackIDs []string
-	for _, trackID := range allTrackIDs {
-		// Check if track is already in the target playlist
-		isInPlaylist := false
-		for _, playlistTrackID := range playlistTracks {
-			if playlistTrackID == trackID {
-				isInPlaylist = true
-				break
-			}
-		}
-		if !isInPlaylist {
-			availableTrackIDs = append(availableTrackIDs, trackID)
+	// Create a set of track IDs already in target playlist for fast lookup
+	playlistTrackIDs := make(map[string]bool)
+	for _, track := range playlistTracks {
+		playlistTrackIDs[track.ID] = true
+	}
+
+	// Collect all non-excluded tracks (tracks not already in target playlist)
+	var availableTracks []core.Track
+	for _, track := range allTracks {
+		if !playlistTrackIDs[track.ID] {
+			availableTracks = append(availableTracks, track)
 		}
 	}
 
-	if len(availableTrackIDs) == 0 {
+	if len(availableTracks) == 0 {
 		return nil, fmt.Errorf("no non-excluded tracks available from any playlist")
 	}
 
-	// Randomly select track IDs
+	// Randomly select tracks
 	numToSelect := maxCandidates
-	if numToSelect > len(availableTrackIDs) {
-		numToSelect = len(availableTrackIDs)
+	if numToSelect > len(availableTracks) {
+		numToSelect = len(availableTracks)
 	}
 
-	// Randomly select track IDs using Go's built-in rand
-	selectedIndices := rng.Perm(len(availableTrackIDs))[:numToSelect]
-	var selectedTrackIDs []string
-	for _, idx := range selectedIndices {
-		selectedTrackIDs = append(selectedTrackIDs, availableTrackIDs[idx])
-	}
-
-	// Fetch track details for selected tracks
+	// Randomly select tracks using Go's built-in rand - work directly with track objects
+	selectedIndices := rng.Perm(len(availableTracks))[:numToSelect]
 	var candidates []core.Track
-	for _, trackID := range selectedTrackIDs {
-		track, err := c.GetTrack(ctx, trackID)
-		if err != nil {
-			c.logger.Debug("Failed to get track details, skipping", zap.String("trackID", trackID), zap.Error(err))
-			continue
-		}
-		candidates = append(candidates, *track)
-	}
-
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no candidate tracks collected from %d playlists", len(playlists))
+	for _, idx := range selectedIndices {
+		candidates = append(candidates, availableTracks[idx])
 	}
 
 	c.logger.Info("Candidate track collection completed",
@@ -780,7 +746,7 @@ func (c *Client) selectRandomPlaylists(playlists []core.Playlist, maxCount int) 
 }
 
 // findTrackFromSearch searches for playlists and uses AI to select the best matching track
-func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, playlistTracks []string) (string, error) {
+func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, playlistTracks []core.Track) (string, error) {
 	// Search for playlists
 	playlists, err := c.SearchPlaylist(ctx, searchQuery)
 	if err != nil {
@@ -826,9 +792,9 @@ func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, pl
 }
 
 // getAllTracksFromPlaylists fetches all tracks from multiple playlists and returns a deduplicated flat list
-func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core.Playlist) []string {
+func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core.Playlist) []core.Track {
 	seenTracks := make(map[string]bool)
-	var allTrackIDs []string
+	var allTracks []core.Track
 	playlistsProcessed := 0
 
 	c.logger.Debug("Batch fetching tracks from all playlists",
@@ -842,7 +808,7 @@ func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core
 			continue
 		}
 
-		trackIDs, err := c.GetPlaylistTracks(ctx, playlist.ID)
+		tracks, err := c.GetPlaylistTracksWithDetails(ctx, playlist.ID)
 		if err != nil {
 			c.logger.Warn("Failed to fetch tracks from playlist",
 				zap.String("playlistID", playlist.ID),
@@ -853,10 +819,10 @@ func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core
 
 		// Add unique tracks to the result
 		uniqueTracksAdded := 0
-		for _, trackID := range trackIDs {
-			if !seenTracks[trackID] {
-				seenTracks[trackID] = true
-				allTrackIDs = append(allTrackIDs, trackID)
+		for _, track := range tracks {
+			if !seenTracks[track.ID] {
+				seenTracks[track.ID] = true
+				allTracks = append(allTracks, track)
 				uniqueTracksAdded++
 			}
 		}
@@ -865,25 +831,26 @@ func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core
 		c.logger.Debug("Fetched tracks from playlist",
 			zap.String("playlistID", playlist.ID),
 			zap.String("playlistName", playlist.Name),
-			zap.Int("totalTracks", len(trackIDs)),
+			zap.Int("totalTracks", len(tracks)),
 			zap.Int("uniqueTracksAdded", uniqueTracksAdded))
 	}
 
 	c.logger.Info("Batch playlist fetch completed",
 		zap.Int("playlistsRequested", len(playlists)),
 		zap.Int("playlistsProcessed", playlistsProcessed),
-		zap.Int("totalUniqueTrackIDs", len(allTrackIDs)))
+		zap.Int("totalUniqueTracks", len(allTracks)))
 
-	return allTrackIDs
+	return allTracks
 }
 
-func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]string, error) {
+// GetPlaylistTracksWithDetails gets full track objects from a playlist (avoids N+1 API calls)
+func (c *Client) GetPlaylistTracksWithDetails(ctx context.Context, playlistID string) ([]core.Track, error) {
 	if c.client == nil {
 		return nil, fmt.Errorf("client not authenticated")
 	}
 
 	spotifyPlaylistID := spotify.ID(playlistID)
-	var allTrackIDs []string
+	var allTracks []core.Track
 	limit := 100
 	offset := 0
 
@@ -897,7 +864,8 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]st
 		for i := range items.Items {
 			// Only process tracks (not episodes or null items)
 			if items.Items[i].Track.Track != nil {
-				allTrackIDs = append(allTrackIDs, string(items.Items[i].Track.Track.ID))
+				track := c.convertSpotifyTrack(items.Items[i].Track.Track)
+				allTracks = append(allTracks, track)
 			}
 		}
 
@@ -908,11 +876,11 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, playlistID string) ([]st
 		offset += limit
 	}
 
-	c.logger.Info("Retrieved playlist tracks",
+	c.logger.Info("Retrieved playlist tracks with details",
 		zap.String("playlistID", playlistID),
-		zap.Int("count", len(allTrackIDs)))
+		zap.Int("count", len(allTracks)))
 
-	return allTrackIDs, nil
+	return allTracks, nil
 }
 
 // resolveShortURL resolves shortened Spotify URLs to their final destination
@@ -1242,20 +1210,17 @@ func (c *Client) GetNextPlaylistTracks(ctx context.Context, count int) ([]core.T
 		return nil, fmt.Errorf("no target playlist set")
 	}
 
-	// Get all playlist tracks
-	playlistTrackIDs, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	// Get all playlist tracks with full details
+	playlistTracks, err := c.GetPlaylistTracksWithDetails(ctx, c.targetPlaylist)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
 
 	// Determine starting position based on current track
-	startPos := c.determineStartPosition(ctx, playlistTrackIDs)
+	startPos := c.determineStartPositionFromTracks(ctx, playlistTracks)
 
-	// Get track IDs to fetch
-	trackIDsToFetch := c.selectTrackIDsFromPosition(playlistTrackIDs, startPos, count)
-
-	// Convert track IDs to Track objects
-	return c.convertTrackIDsToTracks(ctx, trackIDsToFetch)
+	// Get tracks to return
+	return c.selectTracksFromPosition(playlistTracks, startPos, count), nil
 }
 
 // GetNextPlaylistTracksFromPosition gets the next N tracks starting from a specific position
@@ -1268,8 +1233,8 @@ func (c *Client) GetNextPlaylistTracksFromPosition(ctx context.Context, startPos
 		return nil, fmt.Errorf("no target playlist set")
 	}
 
-	// Get all playlist tracks
-	playlistTrackIDs, err := c.GetPlaylistTracks(ctx, c.targetPlaylist)
+	// Get all playlist tracks with full details
+	playlistTracks, err := c.GetPlaylistTracksWithDetails(ctx, c.targetPlaylist)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get playlist tracks: %w", err)
 	}
@@ -1281,17 +1246,14 @@ func (c *Client) GetNextPlaylistTracksFromPosition(ctx context.Context, startPos
 		zap.Int("requestedStartPosition", startPosition),
 		zap.Int("actualStartPosition", startPos),
 		zap.Int("count", count),
-		zap.Int("totalPlaylistTracks", len(playlistTrackIDs)))
+		zap.Int("totalPlaylistTracks", len(playlistTracks)))
 
-	// Get track IDs to fetch
-	trackIDsToFetch := c.selectTrackIDsFromPosition(playlistTrackIDs, startPos, count)
-
-	// Convert track IDs to Track objects
-	return c.convertTrackIDsToTracks(ctx, trackIDsToFetch)
+	// Get tracks to return
+	return c.selectTracksFromPosition(playlistTracks, startPos, count), nil
 }
 
-// determineStartPosition finds the position to start fetching tracks from
-func (c *Client) determineStartPosition(ctx context.Context, playlistTrackIDs []string) int {
+// determineStartPositionFromTracks finds the position to start fetching tracks from using track objects
+func (c *Client) determineStartPositionFromTracks(ctx context.Context, playlistTracks []core.Track) int {
 	currentTrackID, err := c.GetCurrentTrackID(ctx)
 	if err != nil {
 		c.logger.Debug("No current track playing, starting from beginning of playlist")
@@ -1299,50 +1261,29 @@ func (c *Client) determineStartPosition(ctx context.Context, playlistTrackIDs []
 	}
 
 	// Find current track position
-	for i, trackID := range playlistTrackIDs {
-		if trackID == currentTrackID {
+	for i, track := range playlistTracks {
+		if track.ID == currentTrackID {
 			return i + 1 // Start from next track
 		}
 	}
 
+	// Current track not found in playlist, start from beginning
 	c.logger.Debug("Current track not found in playlist, starting from beginning")
 	return 0
 }
 
-// selectTrackIDsFromPosition selects track IDs starting from the given position
-func (c *Client) selectTrackIDsFromPosition(playlistTrackIDs []string, startPos, count int) []string {
-	if startPos >= len(playlistTrackIDs) {
-		return []string{}
+// selectTracksFromPosition selects tracks from a starting position with given count
+func (c *Client) selectTracksFromPosition(playlistTracks []core.Track, startPos, count int) []core.Track {
+	if startPos >= len(playlistTracks) || count <= 0 {
+		return []core.Track{}
 	}
 
 	endPos := startPos + count
-	if endPos > len(playlistTrackIDs) {
-		endPos = len(playlistTrackIDs)
+	if endPos > len(playlistTracks) {
+		endPos = len(playlistTracks)
 	}
 
-	return playlistTrackIDs[startPos:endPos]
-}
-
-// convertTrackIDsToTracks converts track IDs to Track objects
-func (c *Client) convertTrackIDsToTracks(ctx context.Context, trackIDs []string) ([]core.Track, error) {
-	var tracks []core.Track
-
-	for _, trackID := range trackIDs {
-		track, err := c.GetTrack(ctx, trackID)
-		if err != nil {
-			c.logger.Warn("Failed to get track details",
-				zap.String("trackID", trackID),
-				zap.Error(err))
-			continue
-		}
-		tracks = append(tracks, *track)
-	}
-
-	c.logger.Debug("Converted track IDs to Track objects",
-		zap.Int("requestedCount", len(trackIDs)),
-		zap.Int("convertedCount", len(tracks)))
-
-	return tracks, nil
+	return playlistTracks[startPos:endPos]
 }
 
 // GetCurrentTrackRemainingTime gets the remaining duration of the currently playing track

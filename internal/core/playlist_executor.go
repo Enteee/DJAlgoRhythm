@@ -11,9 +11,15 @@ import (
 
 // loadPlaylistSnapshot loads existing tracks from the playlist
 func (d *Dispatcher) loadPlaylistSnapshot(ctx context.Context) error {
-	trackIDs, err := d.spotify.GetPlaylistTracks(ctx, d.config.Spotify.PlaylistID)
+	tracks, err := d.spotify.GetPlaylistTracksWithDetails(ctx, d.config.Spotify.PlaylistID)
 	if err != nil {
 		return err
+	}
+
+	// Extract track IDs for dedup store
+	trackIDs := make([]string, len(tracks))
+	for i, track := range tracks {
+		trackIDs[i] = track.ID
 	}
 
 	d.dedup.Load(trackIDs)
