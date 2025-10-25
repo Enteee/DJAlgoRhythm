@@ -649,53 +649,61 @@ func (c *Client) getRecentTracksForSearch(playlistTracks []core.Track, count int
 	return playlistTracks[start:]
 }
 
-// collectCandidateTracksFromPlaylists gathers random tracks from multiple playlists using batch optimization
+// collectCandidateTracksFromPlaylists gathers random tracks from multiple playlists using sequential sampling
 func (c *Client) collectCandidateTracksFromPlaylists(
 	ctx context.Context,
 	playlists []core.Playlist,
 	playlistTracks []core.Track,
 	maxCandidates int,
 ) ([]core.Track, error) {
-	// Batch fetch all tracks from all playlists (deduplicated) - now returns track objects
-	allTracks := c.getAllTracksFromPlaylists(ctx, playlists)
-	if len(allTracks) == 0 {
-		return nil, fmt.Errorf("no tracks available from any of the %d playlists", len(playlists))
-	}
-
-	// Create a set of track IDs already in target playlist for fast lookup
-	playlistTrackIDs := make(map[string]bool)
+	// Build exclusion set from target playlist tracks
+	exclude := make(map[string]struct{}, len(playlistTracks))
 	for _, track := range playlistTracks {
-		playlistTrackIDs[track.ID] = true
+		exclude[track.ID] = struct{}{}
 	}
 
-	// Collect all non-excluded tracks (tracks not already in target playlist)
-	var availableTracks []core.Track
-	for _, track := range allTracks {
-		if !playlistTrackIDs[track.ID] {
-			availableTracks = append(availableTracks, track)
+	// Track seen tracks to avoid duplicates across playlists
+	const seenCapacityMultiplier = 2
+	seen := make(map[string]struct{}, maxCandidates*seenCapacityMultiplier)
+	candidates := make([]core.Track, 0, maxCandidates)
+
+	// Sequential iteration with early stopping
+	for _, playlist := range playlists {
+		if len(candidates) >= maxCandidates {
+			break // Early stop when we have enough candidates
+		}
+
+		// Sample tracks from this playlist
+		sample, err := c.GetRandomPlaylistTracks(ctx, playlist, MaxCandidateTracksPerPlaylist, exclude)
+		if err != nil {
+			c.logger.Debug("Sampling failed",
+				zap.String("playlistID", playlist.ID),
+				zap.String("playlistName", playlist.Name),
+				zap.Error(err))
+			continue
+		}
+
+		// Add unique tracks from this sample
+		for _, track := range sample {
+			if _, duplicate := seen[track.ID]; duplicate {
+				continue
+			}
+			seen[track.ID] = struct{}{}
+			candidates = append(candidates, track)
+
+			if len(candidates) >= maxCandidates {
+				break // Early stop when we have enough candidates
+			}
 		}
 	}
 
-	if len(availableTracks) == 0 {
-		return nil, fmt.Errorf("no non-excluded tracks available from any playlist")
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no candidate tracks collected from %d playlists", len(playlists))
 	}
 
-	// Randomly select tracks
-	numToSelect := maxCandidates
-	if numToSelect > len(availableTracks) {
-		numToSelect = len(availableTracks)
-	}
-
-	// Randomly select tracks using Go's built-in rand - work directly with track objects
-	selectedIndices := rng.Perm(len(availableTracks))[:numToSelect]
-	var candidates []core.Track
-	for _, idx := range selectedIndices {
-		candidates = append(candidates, availableTracks[idx])
-	}
-
-	c.logger.Info("Candidate track collection completed",
-		zap.Int("totalCandidates", len(candidates)),
-		zap.Int("fromPlaylists", len(playlists)))
+	c.logger.Info("Candidate collection (sampled)",
+		zap.Int("fromPlaylists", len(playlists)),
+		zap.Int("totalCandidates", len(candidates)))
 
 	return candidates, nil
 }
@@ -791,58 +799,6 @@ func (c *Client) findTrackFromSearch(ctx context.Context, searchQuery string, pl
 	return selectedTrack.ID, nil
 }
 
-// getAllTracksFromPlaylists fetches all tracks from multiple playlists and returns a deduplicated flat list
-func (c *Client) getAllTracksFromPlaylists(ctx context.Context, playlists []core.Playlist) []core.Track {
-	seenTracks := make(map[string]bool)
-	var allTracks []core.Track
-	playlistsProcessed := 0
-
-	c.logger.Debug("Batch fetching tracks from all playlists",
-		zap.Int("playlistCount", len(playlists)))
-
-	for _, playlist := range playlists {
-		if playlist.TrackCount < 1 {
-			c.logger.Debug("Skipping empty playlist",
-				zap.String("playlistID", playlist.ID),
-				zap.String("playlistName", playlist.Name))
-			continue
-		}
-
-		tracks, err := c.GetPlaylistTracksWithDetails(ctx, playlist.ID)
-		if err != nil {
-			c.logger.Warn("Failed to fetch tracks from playlist",
-				zap.String("playlistID", playlist.ID),
-				zap.String("playlistName", playlist.Name),
-				zap.Error(err))
-			continue // Skip this playlist but continue with others
-		}
-
-		// Add unique tracks to the result
-		uniqueTracksAdded := 0
-		for _, track := range tracks {
-			if !seenTracks[track.ID] {
-				seenTracks[track.ID] = true
-				allTracks = append(allTracks, track)
-				uniqueTracksAdded++
-			}
-		}
-
-		playlistsProcessed++
-		c.logger.Debug("Fetched tracks from playlist",
-			zap.String("playlistID", playlist.ID),
-			zap.String("playlistName", playlist.Name),
-			zap.Int("totalTracks", len(tracks)),
-			zap.Int("uniqueTracksAdded", uniqueTracksAdded))
-	}
-
-	c.logger.Info("Batch playlist fetch completed",
-		zap.Int("playlistsRequested", len(playlists)),
-		zap.Int("playlistsProcessed", playlistsProcessed),
-		zap.Int("totalUniqueTracks", len(allTracks)))
-
-	return allTracks
-}
-
 // GetPlaylistTracksWithDetails gets full track objects from a playlist (avoids N+1 API calls)
 func (c *Client) GetPlaylistTracksWithDetails(ctx context.Context, playlistID string) ([]core.Track, error) {
 	if c.client == nil {
@@ -881,6 +837,109 @@ func (c *Client) GetPlaylistTracksWithDetails(ctx context.Context, playlistID st
 		zap.Int("count", len(allTracks)))
 
 	return allTracks, nil
+}
+
+// GetRandomPlaylistTracks efficiently samples up to n tracks from a playlist.
+func (c *Client) GetRandomPlaylistTracks(
+	ctx context.Context,
+	playlist core.Playlist,
+	n int,
+	excludeIDs map[string]struct{},
+) ([]core.Track, error) {
+	if playlist.TrackCount <= 0 || n <= 0 {
+		return nil, nil
+	}
+
+	want := n
+	if want > playlist.TrackCount {
+		want = playlist.TrackCount
+	}
+
+	// Generate random indices with page grouping
+	pages := c.generateSamplingPages(playlist.TrackCount, want)
+	if len(pages) == 0 {
+		return nil, nil
+	}
+
+	// Fetch tracks from pages
+	return c.fetchTracksFromPages(ctx, playlist.ID, pages, want, excludeIDs)
+}
+
+// generateSamplingPages creates a map of page numbers to in-page offsets for sampling
+func (c *Client) generateSamplingPages(total, want int) map[int][]int {
+	// Build unique random indices with small oversample to survive exclusions
+	const oversampleMultiplier = 2
+	budget := want * oversampleMultiplier
+	if budget > total {
+		budget = total
+	}
+
+	idxSet := make(map[int]struct{}, budget)
+	for len(idxSet) < budget {
+		idxSet[rng.Intn(total)] = struct{}{}
+	}
+
+	// Page coalescing: group indices by page
+	const pageSize = 100
+	pages := make(map[int][]int)
+	for idx := range idxSet {
+		page := idx / pageSize
+		inPage := idx % pageSize
+		pages[page] = append(pages[page], inPage)
+	}
+
+	return pages
+}
+
+// fetchTracksFromPages retrieves tracks from the specified pages and offsets
+func (c *Client) fetchTracksFromPages(
+	ctx context.Context,
+	playlistID string,
+	pages map[int][]int,
+	want int,
+	excludeIDs map[string]struct{},
+) ([]core.Track, error) {
+	tracks := make([]core.Track, 0, want)
+	spotifyPlaylistID := spotify.ID(playlistID)
+	const pageSize = 100
+
+	for page, offsets := range pages {
+		if ctx.Err() != nil {
+			return tracks, ctx.Err()
+		}
+
+		items, err := c.client.GetPlaylistItems(ctx, spotifyPlaylistID,
+			spotify.Limit(pageSize), spotify.Offset(page*pageSize))
+		if err != nil {
+			c.logger.Debug("Sampler page fetch failed",
+				zap.String("playlistID", playlistID),
+				zap.Int("page", page),
+				zap.Error(err))
+			continue
+		}
+
+		for _, offset := range offsets {
+			if offset < 0 || offset >= len(items.Items) {
+				continue
+			}
+			item := items.Items[offset]
+			if item.Track.Track == nil {
+				continue
+			}
+
+			track := c.convertSpotifyTrack(item.Track.Track)
+			if _, excluded := excludeIDs[track.ID]; excluded {
+				continue
+			}
+
+			tracks = append(tracks, track)
+			if len(tracks) >= want {
+				return tracks, nil // Early stop
+			}
+		}
+	}
+
+	return tracks, nil
 }
 
 // resolveShortURL resolves shortened Spotify URLs to their final destination
