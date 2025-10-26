@@ -19,7 +19,6 @@ import (
 
 	"djalgorhythm/internal/chat"
 	"djalgorhythm/internal/chat/telegram"
-	"djalgorhythm/internal/chat/whatsapp"
 	"djalgorhythm/internal/core"
 	httpserver "djalgorhythm/internal/http"
 	"djalgorhythm/internal/i18n"
@@ -41,7 +40,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "djalgorhythm",
 	Short: "DJAlgoRhythm - Live Chat → Spotify DJ",
-	Long: `DJAlgoRhythm is a production-grade service that listens to chat messages (Telegram/WhatsApp)
+	Long: `DJAlgoRhythm is a production-grade service that listens to chat messages (Telegram)
 and automatically adds requested tracks to a Spotify playlist with AI disambiguation.`,
 	RunE: runDJAlgoRhythm,
 }
@@ -59,9 +58,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .env)")
 	rootCmd.PersistentFlags().String("log-level", "info", "log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().String("log-format", "text", "log format (json, text)")
-	rootCmd.PersistentFlags().Bool("whatsapp-enabled", false, "Enable WhatsApp integration")
-	rootCmd.PersistentFlags().String("whatsapp-group-jid", "", "WhatsApp group JID")
-	rootCmd.PersistentFlags().String("whatsapp-device-name", "DJAlgoRhythm", "WhatsApp device name")
 	rootCmd.PersistentFlags().Bool("telegram-enabled", true, "Enable Telegram integration")
 	rootCmd.PersistentFlags().String("telegram-bot-token", "", "Telegram bot token")
 	rootCmd.PersistentFlags().Int64("telegram-group-id", 0, "Telegram group ID")
@@ -119,7 +115,6 @@ func initConfig() {
 func buildConfig() *core.Config {
 	cfg := core.DefaultConfig()
 
-	configureWhatsApp(cfg)
 	configureTelegram(cfg)
 	configureSpotify(cfg)
 	configureLLM(cfg)
@@ -127,16 +122,6 @@ func buildConfig() *core.Config {
 	configureApp(cfg)
 
 	return cfg
-}
-
-func configureWhatsApp(cfg *core.Config) {
-	cfg.WhatsApp.Enabled = viper.GetBool("whatsapp-enabled")
-	cfg.WhatsApp.GroupJID = viper.GetString("whatsapp-group-jid")
-	cfg.WhatsApp.DeviceName = viper.GetString("whatsapp-device-name")
-	cfg.WhatsApp.SessionPath = viper.GetString("whatsapp-session-path")
-	if cfg.WhatsApp.SessionPath == "" {
-		cfg.WhatsApp.SessionPath = "./whatsapp_session.db"
-	}
 }
 
 func configureTelegram(cfg *core.Config) {
@@ -286,8 +271,7 @@ func runDJAlgoRhythm(cmd *cobra.Command, _ []string) error {
 		zap.String("version", "2.0.0"),
 		zap.String("llm_provider", config.LLM.Provider),
 		zap.String("spotify_playlist", config.Spotify.PlaylistID),
-		zap.Bool("telegram_enabled", config.Telegram.Enabled),
-		zap.Bool("whatsapp_enabled", config.WhatsApp.Enabled))
+		zap.Bool("telegram_enabled", config.Telegram.Enabled))
 
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
@@ -361,21 +345,7 @@ func createChatFrontend() (chat.Frontend, error) {
 		return frontend, nil
 	}
 
-	if config.WhatsApp.Enabled {
-		whatsappConfig := &whatsapp.Config{
-			GroupJID:    config.WhatsApp.GroupJID,
-			DeviceName:  config.WhatsApp.DeviceName,
-			SessionPath: config.WhatsApp.SessionPath,
-			Enabled:     config.WhatsApp.Enabled,
-			Language:    config.App.Language,
-		}
-		frontend := whatsapp.NewFrontend(whatsappConfig, logger.Named("whatsapp"))
-		logger.Info("Using WhatsApp as chat frontend",
-			zap.String("language", config.App.Language))
-		return frontend, nil
-	}
-
-	return nil, fmt.Errorf("no chat frontend enabled - enable either Telegram or WhatsApp")
+	return nil, fmt.Errorf("no chat frontend enabled - enable Telegram")
 }
 
 func createLLMProvider() (core.LLMProvider, error) {
@@ -498,9 +468,9 @@ func validateConfig() error {
 }
 
 func validateChatFrontends() error {
-	// Ensure at least one chat frontend is enabled
-	if !config.Telegram.Enabled && !config.WhatsApp.Enabled {
-		return fmt.Errorf("at least one chat frontend must be enabled (Telegram or WhatsApp)")
+	// Ensure Telegram frontend is enabled
+	if !config.Telegram.Enabled {
+		return fmt.Errorf("telegram frontend must be enabled")
 	}
 
 	// Validate Telegram configuration if enabled
@@ -516,13 +486,6 @@ func validateChatFrontends() error {
 			}
 			config.Telegram.GroupID = groupID
 			logger.Info("Selected Telegram group interactively", zap.Int64("groupID", groupID))
-		}
-	}
-
-	// Validate WhatsApp configuration if enabled
-	if config.WhatsApp.Enabled {
-		if config.WhatsApp.GroupJID == "" {
-			return fmt.Errorf("WhatsApp group JID is required when WhatsApp is enabled")
 		}
 	}
 
@@ -587,7 +550,6 @@ func generateEnvExampleContent(cmd *cobra.Command) string {
 
 	// Generate sections
 	generateTelegramSection(&content, cmd)
-	generateWhatsAppSection(&content, cmd)
 	generateSpotifySection(&content, cmd)
 	generateLLMSection(&content, cmd)
 	generateAppSection(&content, cmd)
@@ -637,26 +599,6 @@ func generateTelegramSection(content *strings.Builder, cmd *cobra.Command) {
 		flagToEnvVar("admin-needs-approval"), adminDefault, adminDefault)
 	fmt.Fprintf(content, "%s=%s                           # Number of 👍 reactions to bypass admin approval, 0=disabled (default: %s)\n",
 		flagToEnvVar("community-approval"), communityDefault, communityDefault)
-	content.WriteString("\n")
-}
-
-func generateWhatsAppSection(content *strings.Builder, cmd *cobra.Command) {
-	content.WriteString("# -----------------------------------------------------------------------------\n")
-	content.WriteString("# WhatsApp Configuration (Optional - Disabled by default due to ToS concerns)\n")
-	content.WriteString("# -----------------------------------------------------------------------------\n")
-	content.WriteString("# CLI: --whatsapp-enabled, --whatsapp-group-jid, --whatsapp-device-name\n")
-
-	enabledDefault := getDefaultValueString(cmd, "whatsapp-enabled")
-	deviceDefault := getDefaultValueString(cmd, "whatsapp-device-name")
-
-	fmt.Fprintf(content, "%s=%s                         # Enable WhatsApp integration (default: %s)\n",
-		flagToEnvVar("whatsapp-enabled"), enabledDefault, enabledDefault)
-	fmt.Fprintf(content, "%s=120363123456789@g.us        # WhatsApp group JID (use debug logging to find)\n",
-		flagToEnvVar("whatsapp-group-jid"))
-	fmt.Fprintf(content, "%s=\"%s\"           # Device name shown in WhatsApp (default: \"%s\")\n",
-		flagToEnvVar("whatsapp-device-name"), deviceDefault, deviceDefault)
-	fmt.Fprintf(content, "%s=\"./whatsapp_session.db\"  # Session file path (default: \"./whatsapp_session.db\")\n",
-		flagToEnvVar("whatsapp-session-path"))
 	content.WriteString("\n")
 }
 

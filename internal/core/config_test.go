@@ -25,10 +25,6 @@ func TestDefaultConfig(t *testing.T) {
 	if config.Telegram.Enabled != true {
 		t.Errorf("Expected Telegram to be enabled by default")
 	}
-
-	if config.WhatsApp.Enabled != false {
-		t.Errorf("Expected WhatsApp to be disabled by default")
-	}
 }
 
 func TestLanguageConfiguration(t *testing.T) {

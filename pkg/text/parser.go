@@ -1,4 +1,4 @@
-// Package text provides text parsing and URL classification for WhatsApp messages.
+// Package text provides text parsing and URL classification for chat messages.
 package text
 
 import (

@@ -1,4 +1,4 @@
-// Package chat provides a unified interface for chat frontends (WhatsApp, Telegram, etc.)
+// Package chat provides a unified interface for chat frontends (Telegram, etc.)
 package chat
 
 import (

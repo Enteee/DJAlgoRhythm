@@ -200,9 +200,6 @@ func (d *Dispatcher) getGroupID() string {
 	if d.config.Telegram.Enabled && d.config.Telegram.GroupID != 0 {
 		return fmt.Sprintf("%d", d.config.Telegram.GroupID)
 	}
-	if d.config.WhatsApp.Enabled && d.config.WhatsApp.GroupJID != "" {
-		return d.config.WhatsApp.GroupJID
-	}
 	return ""
 }
 

@@ -28,7 +28,7 @@ const homePageHTML = `<!DOCTYPE html>
 </head>
 <body>
     <h1 class="header">🎵 DJAlgoRhythm</h1>
-    <p>Live WhatsApp → Spotify DJ Service</p>
+    <p>Live Chat → Spotify DJ Service</p>
 
     <h2>Endpoints</h2>
     <div class="endpoint">📊 <a href="/metrics">Metrics</a> - Prometheus metrics</div>
@@ -36,7 +36,7 @@ const homePageHTML = `<!DOCTYPE html>
     <div class="endpoint">✅ <a href="/readyz">Ready</a> - Readiness check</div>
 
     <h2>Status</h2>
-    <p>Service is running and ready to process WhatsApp messages.</p>
+    <p>Service is running and ready to process chat messages.</p>
 </body>
 </html>`
 

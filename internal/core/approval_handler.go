@@ -582,19 +582,19 @@ func (d *Dispatcher) handleQueueTrackApprovalTimeout(ctx context.Context, messag
 // removeQueueTrackApprovalButtons removes approval buttons from an queue message
 func (d *Dispatcher) removeQueueTrackApprovalButtons(ctx context.Context, chatID, messageID string) {
 	// For Telegram, we can edit the message to remove the inline keyboard
-	// For WhatsApp, this is a no-op since it doesn't support inline buttons
+	// This is a no-op for platforms that don't support inline buttons
 
 	// Try to edit the message to remove buttons without changing the text (Telegram-specific)
-	// This will gracefully fail for WhatsApp and other platforms that don't support message editing
+	// This will gracefully fail for platforms that don't support message editing
 	if err := d.editMessageToRemoveButtons(ctx, chatID, messageID, ""); err != nil {
-		d.logger.Debug("Could not edit message to remove buttons (expected for WhatsApp)",
+		d.logger.Debug("Could not edit message to remove buttons (platform may not support editing)",
 			zap.String("messageID", messageID),
 			zap.Error(err))
 	}
 
 	// React with thumbs up to indicate auto-acceptance
 	if err := d.frontend.React(ctx, chatID, messageID, thumbsUpReaction); err != nil {
-		d.logger.Debug("Could not react to queue message (expected for WhatsApp)",
+		d.logger.Debug("Could not react to queue message (platform may not support reactions)",
 			zap.String("messageID", messageID),
 			zap.Error(err))
 	}

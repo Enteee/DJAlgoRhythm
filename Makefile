@@ -18,7 +18,7 @@ BUILD_FLAGS := -ldflags "$(LDFLAGS)" -trimpath
 
 # Default target
 help: ## Show this help message
-	@echo "DJAlgoRhythm - Live WhatsApp → Spotify DJ"
+	@echo "DJAlgoRhythm - Live Chat → Spotify DJ"
 	@echo ""
 	@echo "Usage: make <target>"
 	@echo ""

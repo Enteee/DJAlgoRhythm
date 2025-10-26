@@ -26,7 +26,7 @@ While DJAlgoRhythm works great for personal use and small groups, it was built w
 
 ## 🎯 **What is DJAlgoRhythm?**
 
-DJAlgoRhythm transforms your group chat into an intelligent music curator. Simply drop a song name, artist, or Spotify link into your Telegram/WhatsApp group, and watch as the bot automatically adds it to your shared Spotify playlist.
+DJAlgoRhythm transforms your group chat into an intelligent music curator. Simply drop a song name, artist, or Spotify link into your Telegram group, and watch as the bot automatically adds it to your shared Spotify playlist.
 
 **✨ The magic happens when someone says:** *"Play some Arctic Monkeys"* and the AI figures out exactly which song they meant!
 
@@ -52,7 +52,6 @@ DJAlgoRhythm transforms your group chat into an intelligent music curator. Simpl
 
 ### 💬 **Multi-Platform Chat Support**
 - **Telegram** → Primary platform with rich features
-- **WhatsApp** → Optional integration (use with caution)
 - **Interactive Group Selection** → No more manual setup headaches
 
 ### 🛡️ **Smart Safeguards**
@@ -83,7 +82,6 @@ DJAlgoRhythm transforms your group chat into an intelligent music curator. Simpl
 | 📱 **Telegram Bot** | ✅ Recommended | Create with [@BotFather](https://t.me/botfather) |
 | 💚 **Spotify Premium** | ✅ Required | Free accounts can't control playback |
 | 🤖 **AI Provider** | 🟡 Optional | OpenAI, Anthropic, or local Ollama |
-| 📞 **WhatsApp** | 🟡 Optional | ⚠️ Use with caution (ToS risks) |
 
 ### ⚡ **Installation**
 
@@ -199,16 +197,7 @@ DJALGORHYTHM_LLM_MODEL=llama3.2  # Install with: ollama pull llama3.2
 
 </details>
 
-4. **Configure WhatsApp (Optional):**
-   ⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. Enable at your own risk.
-
-   ```bash
-   DJALGORHYTHM_WHATSAPP_ENABLED=true
-   DJALGORHYTHM_WHATSAPP_GROUP_JID=120363123456789@g.us
-   DJALGORHYTHM_TELEGRAM_ENABLED=false
-   ```
-
-5. **Configure LLM (Optional):**
+4. **Configure LLM (Optional):**
 
    ```bash
    # For OpenAI
@@ -272,20 +261,6 @@ go run ./cmd/djalgorhythm
    - Enable inline mode (optional): `/setinline` with @BotFather
    - Set commands (optional): `/setcommands` with @BotFather
 
-### WhatsApp Setup (Optional)
-
-⚠️ **Warning**: WhatsApp bot usage may violate their Terms of Service. This feature is disabled by default and should only be used for personal/testing purposes.
-
-1. **Get Group JID:**
-
-   ```bash
-   # Run with debug logging to see group JIDs
-   DJALGORHYTHM_WHATSAPP_ENABLED=true DJALGORHYTHM_LOG_LEVEL=debug ./bin/djalgorhythm
-   ```
-
-2. **QR Code Login:**
-   - Scan QR code with WhatsApp on your phone
-   - Session will be saved for future use
 
 ## 🎼 **How to Use DJAlgoRhythm**
 
@@ -338,9 +313,6 @@ Bot: 🤔 I found a YouTube link! Which track do you want from it?
 </td>
 <td width="50%">
 
-**📞 WhatsApp Features**
-- 😊 **Emoji Reactions** → React with 👍/👎 on messages
-- 🔒 **Privacy Mode** → Works with individual WhatsApp accounts
 
 </td>
 </tr>
@@ -379,8 +351,6 @@ graph TD
 | `DJALGORHYTHM_TELEGRAM_GROUP_ID` | Telegram group ID (auto-detected if unset) | - | ❌ |
 | `DJALGORHYTHM_ADMIN_APPROVAL` | Require admin approval for songs | `false` | ❌ |
 | `DJALGORHYTHM_ADMIN_NEEDS_APPROVAL` | Require approval even for admins (testing) | `false` | ❌ |
-| `DJALGORHYTHM_WHATSAPP_ENABLED` | Enable WhatsApp integration | `false` | ❌ |
-| `DJALGORHYTHM_WHATSAPP_GROUP_JID` | WhatsApp group JID | - | ✅ (if enabled) |
 | **Spotify** | | | |
 | `DJALGORHYTHM_SPOTIFY_CLIENT_ID` | Spotify app client ID | - | ✅ |
 | `DJALGORHYTHM_SPOTIFY_CLIENT_SECRET` | Spotify app secret | - | ✅ |
@@ -408,8 +378,6 @@ Flags:
       --telegram-enabled              enable Telegram integration (default true)
       --telegram-bot-token string     Telegram bot token
       --telegram-group-id int         Telegram group ID
-      --whatsapp-enabled              enable WhatsApp integration
-      --whatsapp-group-jid string     WhatsApp group JID
       --spotify-client-id string      Spotify client ID
       --spotify-playlist-id string    Spotify playlist ID
       --llm-provider string           LLM provider (openai, anthropic, ollama, none) (default "none")
@@ -425,9 +393,6 @@ DJALGORHYTHM_TELEGRAM_ENABLED=true
 DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 # DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx  # Auto-detected on first run
 
-# WhatsApp (disabled by default)
-DJALGORHYTHM_WHATSAPP_ENABLED=false
-DJALGORHYTHM_WHATSAPP_GROUP_JID=120363123456789@g.us
 
 # Spotify (required)
 DJALGORHYTHM_SPOTIFY_CLIENT_ID=your_spotify_client_id
@@ -454,7 +419,6 @@ cmd/djalgorhythm/           # Main application
 internal/
   ├── chat/           # Unified chat frontend interface
   │   ├── telegram/   # Telegram Bot API client
-  │   └── whatsapp/   # WhatsApp client (whatsmeow)
   ├── core/           # Domain types and message dispatcher
   ├── spotify/        # Spotify client (zmb3/spotify)
   ├── llm/            # LLM providers (OpenAI, Anthropic, Ollama)
@@ -563,7 +527,7 @@ docker-compose up -d
 - **Logs**: Forward structured logs to your logging system
 - **Backup**: Chat frontend sessions and Spotify tokens
 - **Scaling**: Single instance recommended (chat sessions are stateful)
-- **Compliance**: Be aware of chat platform ToS, especially for WhatsApp
+- **Compliance**: Be aware of chat platform ToS
 
 ## Troubleshooting
 
@@ -579,15 +543,6 @@ curl "https://api.telegram.org/bot<TOKEN>/getMe"
 # Check group ID is correct (negative number)
 ```
 
-**WhatsApp QR Code Login:**
-
-```bash
-# Check logs for QR code output
-./bin/djalgorhythm --log-level debug
-
-# Ensure phone is connected to internet
-# Scan QR code within 30 seconds
-```
 
 **Spotify Authentication:**
 
@@ -640,7 +595,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 DJAlgoRhythm stands on the shoulders of giants:
 
 - 🤖 **[go-telegram/bot](https://github.com/go-telegram/bot)** - Telegram Bot API client
-- 📱 **[whatsmeow](https://github.com/tulir/whatsmeow)** - WhatsApp Web multi-device client
 - 🎵 **[zmb3/spotify](https://github.com/zmb3/spotify)** - Spotify Web API wrapper
 - 🧠 **[OpenAI](https://openai.com/) / [Anthropic](https://anthropic.com/)** - AI disambiguation power
 - 📊 **[Prometheus](https://prometheus.io/)** - Monitoring and alerting

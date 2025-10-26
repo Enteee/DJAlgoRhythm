@@ -60,7 +60,6 @@ EXPOSE 8080
 ENV DJALGORHYTHM_SERVER_HOST=0.0.0.0 \
     DJALGORHYTHM_SERVER_PORT=8080 \
     DJALGORHYTHM_LOG_LEVEL=info \
-    DJALGORHYTHM_WHATSAPP_SESSION_PATH=/app/data/whatsapp_session.db \
     DJALGORHYTHM_SPOTIFY_TOKEN_PATH=/app/data/spotify_token.json
 
 # Run the application

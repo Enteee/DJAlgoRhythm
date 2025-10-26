@@ -78,11 +78,10 @@ var englishMessages = map[string]string{
 		"Track repeat prevents playlist progression.",
 
 	// Queue track approval messages
-	"button.queue_approve":            "✅ Approve",
-	"button.queue_deny":               "❌ Deny",
-	"callback.queue_approved":         "✅ Queue track approved",
-	"callback.queue_denied":           "❌ Queue track denied",
-	"bot.queue_whatsapp_instructions": "💡 Reply with 'approve' or 'deny' to respond.",
+	"button.queue_approve":    "✅ Approve",
+	"button.queue_deny":       "❌ Deny",
+	"callback.queue_approved": "✅ Queue track approved",
+	"callback.queue_denied":   "❌ Queue track denied",
 
 	// Device notifications
 	"admin.no_active_device": "🔇 No active Spotify device found!\n\n" +

@@ -77,11 +77,10 @@ var berneseGermanMessages = map[string]string{
 		"Track-Repeat verhinderet Playlist-Fortschritt.",
 
 	// Queue track approval messages
-	"button.queue_approve":            "✅ Isch ok",
-	"button.queue_deny":               "❌ Ou nei",
-	"callback.queue_approved":         "✅ Queue-Track isch guetgeheisse worde",
-	"callback.queue_denied":           "❌ Queue-Track isch abglehnt worde",
-	"bot.queue_whatsapp_instructions": "💡 Antworte mit 'approve' oder 'deny' zum reagierä.",
+	"button.queue_approve":    "✅ Isch ok",
+	"button.queue_deny":       "❌ Ou nei",
+	"callback.queue_approved": "✅ Queue-Track isch guetgeheisse worde",
+	"callback.queue_denied":   "❌ Queue-Track isch abglehnt worde",
 
 	// Device notifications
 	"admin.no_active_device": "🔇 Kei aktivi Spotify-Grät gfunde!\n\n" +

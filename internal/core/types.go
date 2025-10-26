@@ -105,16 +105,6 @@ type MessageContext struct {
 	TrackMood  string
 }
 
-type WhatsAppClient interface {
-	SendMessage(ctx context.Context, groupJID, text string) error
-	ReplyToMessage(ctx context.Context, groupJID, messageID, text string) error
-	ReactToMessage(ctx context.Context, groupJID, senderJID, messageID, reaction string) error
-	Start(ctx context.Context) error
-	Stop(ctx context.Context) error
-	SetMessageHandler(handler func(*InputMessage))
-	SetReactionHandler(handler func(groupJID, senderJID, messageID, reaction string))
-}
-
 type SpotifyClient interface {
 	SearchTrack(ctx context.Context, query string) ([]Track, error)
 	GetTrack(ctx context.Context, trackID string) (*Track, error)

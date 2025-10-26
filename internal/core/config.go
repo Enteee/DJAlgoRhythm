@@ -24,20 +24,12 @@ const (
 )
 
 type Config struct {
-	WhatsApp WhatsAppConfig
 	Telegram TelegramConfig
 	Spotify  SpotifyConfig
 	LLM      LLMConfig
 	Server   ServerConfig
 	Log      LogConfig
 	App      AppConfig
-}
-
-type WhatsAppConfig struct {
-	GroupJID    string
-	DeviceName  string
-	SessionPath string
-	Enabled     bool
 }
 
 type TelegramConfig struct {
@@ -92,11 +84,6 @@ type AppConfig struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		WhatsApp: WhatsAppConfig{
-			DeviceName:  "DJAlgoRhythm",
-			SessionPath: "./whatsapp_session.db",
-			Enabled:     false, // Disabled by default
-		},
 		Telegram: TelegramConfig{
 			Enabled: true, // Enabled by default
 		},

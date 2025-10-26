@@ -44,7 +44,6 @@ tmp/
 # Tokens and credentials
 *token*.json
 spotify_token.json
-whatsapp_session.db
 
 # Configuration files with secrets
 .env
