@@ -40,7 +40,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "djalgorhythm",
 	Short: "DJAlgoRhythm - Live Chat → Spotify DJ",
-	Long: `DJAlgoRhythm is a production-grade service that listens to chat messages (Telegram)
+	Long: `DJAlgoRhythm is an AI-powered music bot service that listens to chat messages (Telegram)
 and automatically adds requested tracks to a Spotify playlist with AI disambiguation.`,
 	RunE: runDJAlgoRhythm,
 }
