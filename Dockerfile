@@ -1,8 +1,8 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata gcc musl-dev sqlite-dev
+RUN apk add --no-cache git ca-certificates tzdata
 
 # Set working directory
 WORKDIR /build
@@ -17,8 +17,8 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build \
-    -ldflags="-w -s -extldflags '-static'" \
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s" \
     -a -installsuffix cgo \
     -o djalgorhythm \
     ./cmd/djalgorhythm
@@ -31,7 +31,6 @@ RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     curl \
-    sqlite \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user

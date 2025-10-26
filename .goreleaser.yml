@@ -12,7 +12,7 @@ builds:
     main: ./cmd/djalgorhythm
     binary: djalgorhythm
     env:
-      - CGO_ENABLED=1
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -100,12 +100,12 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/amd64"
+      - "--platform=linux/amd64,linux/arm64"
 
 release:
   github:
-    owner: djalgorhythm
-    name: djalgorhythm
+    owner: Enteee
+    name: DJAlgoRhythm
   draft: false
   prerelease: auto
   mode: replace
@@ -127,11 +127,11 @@ release:
 
     ### Go Install
     ```bash
-    go install github.com/djalgorhythm/djalgorhythm/cmd/djalgorhythm@{{ .Tag }}
+    go install github.com/Enteee/DJAlgoRhythm/cmd/djalgorhythm@{{ .Tag }}
     ```
 
     ## Checksums
     All binary checksums are available in `checksums.txt`.
 
     ---
-    **Full Changelog**: https://github.com/djalgorhythm/djalgorhythm/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/Enteee/DJAlgoRhythm/compare/{{ .PreviousTag }}...{{ .Tag }}

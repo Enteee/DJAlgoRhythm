@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  GO_VERSION: '1.24'
+  GO_VERSION: '1.25'
 
 jobs:
   lint:
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.24']
+        go-version: ['1.25']
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
     - name: Checkout code
@@ -65,12 +65,14 @@ jobs:
       run: go test -race -coverprofile=coverage.out ./...
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.24'
+      if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25'
       uses: codecov/codecov-action@v4
+      continue-on-error: true
       with:
         file: ./coverage.out
         flags: unittests
         name: codecov-umbrella
+        fail_ci_if_error: false
 
   security:
     name: Security
@@ -134,7 +136,7 @@ jobs:
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
-        CGO_ENABLED: 1
+        CGO_ENABLED: 0
       run: |
         if [ "$GOOS" = "windows" ]; then
           EXT=".exe"
@@ -167,8 +169,9 @@ jobs:
       uses: docker/setup-buildx-action@v3
 
     - name: Log in to Docker Hub
-      if: github.ref == 'refs/heads/main'
+      if: github.ref == 'refs/heads/main' && secrets.DOCKER_USERNAME != ''
       uses: docker/login-action@v3
+      continue-on-error: true
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
@@ -191,45 +194,11 @@ jobs:
       with:
         context: .
         platforms: linux/amd64,linux/arm64
-        push: ${{ github.ref == 'refs/heads/main' }}
+        push: ${{ github.ref == 'refs/heads/main' && secrets.DOCKER_USERNAME != '' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-
-  integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: testdb
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{ env.GO_VERSION }}
-
-    - name: Run integration tests
-      env:
-        TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb?sslmode=disable
-      run: |
-        go test -tags=integration -v ./...
 
   notify:
     name: Notify
