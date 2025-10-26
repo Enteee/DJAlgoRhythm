@@ -92,7 +92,7 @@ func DefaultConfig() *Config {
 			TokenPath:   "./spotify_token.json",
 		},
 		LLM: LLMConfig{
-			Provider: "none",
+			Provider: "", // Must be explicitly configured - no default
 			Model:    "",
 		},
 		Server: ServerConfig{

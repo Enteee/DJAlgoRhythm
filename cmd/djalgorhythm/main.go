@@ -64,7 +64,7 @@ func init() {
 	rootCmd.PersistentFlags().String("spotify-client-id", "", "Spotify client ID")
 	rootCmd.PersistentFlags().String("spotify-client-secret", "", "Spotify client secret")
 	rootCmd.PersistentFlags().String("spotify-playlist-id", "", "Spotify playlist ID")
-	rootCmd.PersistentFlags().String("llm-provider", "none", "LLM provider (openai, anthropic, ollama, none)")
+	rootCmd.PersistentFlags().String("llm-provider", "", "LLM provider (openai, anthropic, ollama) - REQUIRED")
 	rootCmd.PersistentFlags().String("llm-model", "", "LLM model name")
 	rootCmd.PersistentFlags().String("llm-api-key", "", "LLM API key")
 	rootCmd.PersistentFlags().String("server-host", defaultServerHost, "HTTP server host")
@@ -509,11 +509,29 @@ func validateSpotifyConfig() error {
 }
 
 func validateLLMConfig() error {
-	if config.LLM.Provider != noneProvider && config.LLM.Provider != "" {
-		if config.LLM.APIKey == "" && config.LLM.Provider != "ollama" {
-			return fmt.Errorf("LLM API key is required for provider: %s", config.LLM.Provider)
+	// AI provider is now required
+	if config.LLM.Provider == "" || config.LLM.Provider == noneProvider {
+		return fmt.Errorf("AI provider is required - please configure one of: openai, anthropic, ollama")
+	}
+
+	// Validate supported providers
+	validProviders := []string{"openai", "anthropic", "ollama"}
+	isValid := false
+	for _, provider := range validProviders {
+		if config.LLM.Provider == provider {
+			isValid = true
+			break
 		}
 	}
+	if !isValid {
+		return fmt.Errorf("unsupported AI provider '%s' - supported providers: %s", config.LLM.Provider, strings.Join(validProviders, ", "))
+	}
+
+	// API key required for cloud providers
+	if config.LLM.APIKey == "" && config.LLM.Provider != "ollama" {
+		return fmt.Errorf("API key is required for %s provider", config.LLM.Provider)
+	}
+
 	return nil
 }
 
@@ -623,20 +641,17 @@ func generateSpotifySection(content *strings.Builder, _ *cobra.Command) {
 	content.WriteString("\n")
 }
 
-func generateLLMSection(content *strings.Builder, cmd *cobra.Command) {
+func generateLLMSection(content *strings.Builder, _ *cobra.Command) {
 	content.WriteString("# =============================================================================\n")
-	content.WriteString("# AI/LLM CONFIGURATION - Optional but recommended for better song matching\n")
+	content.WriteString("# AI/LLM CONFIGURATION - Required for song disambiguation\n")
 	content.WriteString("# =============================================================================\n")
 	content.WriteString("\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# LLM Provider Selection\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# CLI: --llm-provider, --llm-api-key, --llm-model\n")
-
-	providerDefault := getDefaultValueString(cmd, "llm-provider")
-
-	fmt.Fprintf(content, "%s=%s                              # Provider: none, openai, anthropic, ollama (default: %s)\n",
-		flagToEnvVar("llm-provider"), providerDefault, providerDefault)
+	fmt.Fprintf(content, "%s=openai                              # Provider: openai, anthropic, ollama (REQUIRED)\n",
+		flagToEnvVar("llm-provider"))
 	content.WriteString("\n")
 	content.WriteString("# -----------------------------------------------------------------------------\n")
 	content.WriteString("# OpenAI Configuration (Recommended for best results)\n")
@@ -823,7 +838,7 @@ func generateSetupSteps(content *strings.Builder) {
 	content.WriteString("#    - Get target playlist ID from Spotify URL (the part after /playlist/)\n")
 	content.WriteString("#    - Make sure playlist is public or owned by the authenticating user\n")
 	content.WriteString("\n")
-	content.WriteString("# 3. LLM SETUP (Optional but recommended):\n")
+	content.WriteString("# 3. AI SETUP (Required):\n")
 	content.WriteString("#    - For OpenAI: Get API key from https://platform.openai.com/api-keys\n")
 	content.WriteString("#    - For Anthropic: Get API key from https://console.anthropic.com/\n")
 	content.WriteString("#    - For Ollama: Install locally and run `ollama pull llama3.2`\n")

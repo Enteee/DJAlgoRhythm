@@ -34,14 +34,14 @@ func NewProvider(config *core.LLMConfig, logger *zap.Logger) (*Provider, error) 
 	switch config.Provider {
 	case "openai":
 		client, err = NewOpenAIClient(config, logger)
+	case "anthropic":
+		return nil, fmt.Errorf("anthropic provider not yet implemented - please use openai or ollama")
+	case "ollama":
+		return nil, fmt.Errorf("ollama provider not yet implemented - please use openai for now")
 	case "none", "":
-		return &Provider{
-			config: config,
-			logger: logger,
-			client: &NoOpClient{},
-		}, nil
+		return nil, fmt.Errorf("AI provider is required - please configure one of: openai, anthropic, ollama")
 	default:
-		return nil, fmt.Errorf("unsupported LLM provider: %s", config.Provider)
+		return nil, fmt.Errorf("unsupported AI provider '%s' - supported providers: openai, anthropic, ollama", config.Provider)
 	}
 
 	if err != nil {
@@ -73,32 +73,6 @@ func (p *Provider) GenerateTrackMood(ctx context.Context, tracks []core.Track) (
 
 func (p *Provider) ExtractSongQuery(ctx context.Context, userText string) (string, error) {
 	return p.client.ExtractSongQuery(ctx, userText)
-}
-
-type NoOpClient struct{}
-
-func (n *NoOpClient) RankTracks(_ context.Context, _ string, tracks []core.Track) []core.Track {
-	// When no LLM provider is configured, return tracks in original order
-	return tracks
-}
-
-func (n *NoOpClient) IsNotMusicRequest(_ context.Context, _ string) (bool, error) {
-	// When no LLM provider is configured, don't filter anything (return false)
-	return false, nil
-}
-
-func (n *NoOpClient) IsPriorityRequest(_ context.Context, _ string) (bool, error) {
-	// When no LLM provider is configured, assume no priority (return false)
-	return false, nil
-}
-
-func (n *NoOpClient) GenerateTrackMood(_ context.Context, _ []core.Track) (string, error) {
-	return "", fmt.Errorf("LLM provider not configured")
-}
-
-func (n *NoOpClient) ExtractSongQuery(_ context.Context, userText string) (string, error) {
-	// Safe default for testing - return passthrough
-	return userText, nil
 }
 
 // parseTrackRanking parses LLM ranking response and returns tracks in ranked order

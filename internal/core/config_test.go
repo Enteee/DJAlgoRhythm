@@ -18,8 +18,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected default timeout %d, got %d", DefaultConfirmTimeoutSecs, config.App.ConfirmTimeoutSecs)
 	}
 
-	if config.LLM.Provider != "none" {
-		t.Errorf("Expected default LLM provider to be 'none', got %s", config.LLM.Provider)
+	if config.LLM.Provider != "" {
+		t.Errorf("Expected default LLM provider to be empty (requiring explicit configuration), got %s", config.LLM.Provider)
 	}
 
 	if config.Telegram.Enabled != true {
