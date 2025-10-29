@@ -18,11 +18,25 @@ let
     locales = [ "${use-locale}/UTF-8" ];
   };
 
+  # Core packages used in minimal profile and as base for full profile
+  corePackages = with pkgs; [
+    # git
+    git
+    git-lfs
+
+    # Go development tools
+    go-tools
+    gotools
+
+    golangci-lint
+    gosec
+    govulncheck
+    air
+  ];
+
 in
 {
   env = {
-    # toggle CI/CD mode
-    cicd = lib.mkDefault false;
     # set do not track
     # see:
     # - https://consoledonottrack.com/
@@ -43,42 +57,28 @@ in
     LC_TELEPHONE = use-locale;
     LC_TIME = use-locale;
     LC_COLLATE = use-locale;
+  };
 
-    # poetry might fallback to query a keyring backend which might or might not exist.
-    # this is bad. We don't want that. We don't need any keys.
-    # https://www.reddit.com/r/learnpython/comments/zcb95y/comment/kdh0aka
-    PYTHON_KEYRING_BACKEND = "keyring.backends.fail.Keyring";
-
+  # https://devenv.sh/profiles/
+  # Define profiles for different environments
+  profiles = {
+    # Minimal profile - excludes heavy interactive packages (for CI/CD)
+    minimal.module = {
+      packages = lib.mkForce corePackages;
+    };
   };
 
   # https://devenv.sh/packages/
+  # All packages including interactive ones (full environment by default)
+  # Use --profile minimal for CI/CD to get only core packages
   packages =
-    with pkgs;
-    [
-      # git
-      git
-      git-lfs
+    corePackages
+    ++ (with pkgs; [
+      # Github
+      gh
 
       # AI
       claude-code
-
-      # Go development tools
-      go-tools
-      gotools
-
-      golangci-lint
-      gosec
-      govulncheck
-      air
-    ]
-    #
-    # The following dependencies are made available
-    # for interactive devenv's only. Which means they
-    # won't be available in the cicd pipeline
-    #
-    ++ (pkgs.lib.optionals (!config.env.cicd) [
-      # Github
-      gh
 
       # Telegram
       telegram-desktop
@@ -192,8 +192,6 @@ in
           # print help
           devenv-help
         fi
-
-        echo "CI/CD mode: ${builtins.toJSON config.env.cicd}"
       )
     }
     if ! init; then

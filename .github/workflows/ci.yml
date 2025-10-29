@@ -13,47 +13,17 @@ jobs:
   check:
     name: Make Check (Unified Quality Checks)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Needed for git-based version info
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
-            ${{ runner.os }}-go-
-
-      - name: Install development tools
-        run: |
-          # Install golangci-lint
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-          # Install staticcheck
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-
-          # Install gosec
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-
-          # Install pre-commit
-          pip install pre-commit
-
-          # Setup pre-commit hooks
-          pre-commit install-hooks
-
-      - name: Download dependencies
-        run: go mod download
+      - name: Setup devenv
+        uses: ./.github/actions/setup-devenv
 
       - name: Run make check
         run: make check
@@ -70,50 +40,34 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
+      - name: Setup devenv
+        uses: ./.github/actions/setup-devenv
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: v2.5.0
-          args: --timeout=5m
+      - name: Run golangci-lint
+        run: golangci-lint run --timeout=5m
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: ['1.25']
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.go-version }}-
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: go mod download
+      - name: Setup devenv
+        uses: ./.github/actions/setup-devenv
 
       - name: Verify dependencies
         run: go mod verify
@@ -122,7 +76,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.go-version == '1.25'
+        if: matrix.os == 'ubuntu-latest'
         uses: codecov/codecov-action@v4
         continue-on-error: true
         with:
@@ -138,19 +92,18 @@ jobs:
       actions: read
       contents: read
       security-events: write
+    defaults:
+      run:
+        shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
+      - name: Setup devenv
+        uses: ./.github/actions/setup-devenv
 
       - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: '-fmt sarif -out gosec.sarif ./...'
+        run: gosec -fmt sarif -out gosec.sarif ./...
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
@@ -159,9 +112,7 @@ jobs:
           sarif_file: gosec.sarif
 
       - name: Run govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+        run: govulncheck ./...
 
   build:
     name: Build
@@ -174,24 +125,17 @@ jobs:
         exclude:
           - goos: windows
             goarch: arm64
+    defaults:
+      run:
+        shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+      - name: Setup devenv
+        uses: ./.github/actions/setup-devenv
 
       - name: Build binary
         env:
