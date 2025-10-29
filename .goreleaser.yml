@@ -1,0 +1,137 @@
+version: 2
+
+project_name: djalgorhythm
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: djalgorhythm
+    main: ./cmd/djalgorhythm
+    binary: djalgorhythm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.buildTime={{.Date}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: djalgorhythm
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - .env.example
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - '^style:'
+      - Merge pull request
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance improvements'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: Others
+      order: 999
+
+dockers:
+  - image_templates:
+      - "djalgorhythm/djalgorhythm:{{ .Tag }}"
+      - "djalgorhythm/djalgorhythm:v{{ .Major }}"
+      - "djalgorhythm/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
+      - "djalgorhythm/djalgorhythm:latest"
+      - "ghcr.io/djalgorhythm/djalgorhythm:{{ .Tag }}"
+      - "ghcr.io/djalgorhythm/djalgorhythm:v{{ .Major }}"
+      - "ghcr.io/djalgorhythm/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/djalgorhythm/djalgorhythm:latest"
+    dockerfile: Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64,linux/arm64"
+
+release:
+  github:
+    owner: Enteee
+    name: DJAlgoRhythm
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    ## DJAlgoRhythm {{ .Tag }} Release 🎵
+
+    This release includes the following changes:
+
+  footer: |
+    ## Installation
+
+    ### Binary Download
+    Download the appropriate binary for your platform from the assets below.
+
+    ### Docker
+    ```bash
+    docker pull djalgorhythm/djalgorhythm:{{ .Tag }}
+    ```
+
+    ### Go Install
+    ```bash
+    go install github.com/Enteee/DJAlgoRhythm/cmd/djalgorhythm@{{ .Tag }}
+    ```
+
+    ## Checksums
+    All binary checksums are available in `checksums.txt`.
+
+    ---
+    **Full Changelog**: https://github.com/Enteee/DJAlgoRhythm/compare/{{ .PreviousTag }}...{{ .Tag }}
