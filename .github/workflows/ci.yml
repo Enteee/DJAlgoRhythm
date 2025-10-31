@@ -47,6 +47,17 @@ jobs:
       - name: Setup devenv
         uses: ./.github/actions/setup-devenv
 
+      - name: Debug Go version
+        run: |
+          echo "Go version from devenv:"
+          go version
+          echo ""
+          echo "Go path:"
+          which go
+          echo ""
+          echo "Go GOROOT:"
+          go env GOROOT
+
       - name: Run golangci-lint
         run: golangci-lint run --timeout=5m
 
