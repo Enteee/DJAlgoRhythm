@@ -15,7 +15,7 @@ jobs:
         shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Needed for git-based version info
 
@@ -42,7 +42,7 @@ jobs:
         shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup devenv
         uses: ./.github/actions/setup-devenv
@@ -61,7 +61,7 @@ jobs:
         shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup devenv
         uses: ./.github/actions/setup-devenv
@@ -94,7 +94,7 @@ jobs:
         shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup devenv
         uses: ./.github/actions/setup-devenv
@@ -127,7 +127,7 @@ jobs:
         shell: devenv --profile minimal shell bash -- -e {0}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -165,7 +165,7 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
