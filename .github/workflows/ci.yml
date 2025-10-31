@@ -55,8 +55,14 @@ jobs:
           echo "Go path:"
           which go
           echo ""
+          echo "All go binaries in PATH:"
+          which -a go || true
+          echo ""
           echo "Go GOROOT:"
           go env GOROOT
+          echo ""
+          echo "PATH:"
+          echo "$PATH" | tr ':' '\n' | head -20
 
       - name: Run golangci-lint
         run: golangci-lint run --timeout=5m
