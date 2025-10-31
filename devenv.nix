@@ -18,8 +18,9 @@ let
     locales = [ "${use-locale}/UTF-8" ];
   };
 
-  # Core packages used in minimal profile and as base for full profile
-  corePackages = with pkgs; [
+  # Minimal packages for CI/CD (essential tools only)
+  # Go compiler comes from languages.go.enable, not from this list
+  minimalPackages = with pkgs; [
     # git
     git
     git-lfs
@@ -27,7 +28,6 @@ let
     # Go development tools
     go-tools
     gotools
-
     golangci-lint
     gosec
     govulncheck
@@ -62,17 +62,18 @@ in
   # https://devenv.sh/profiles/
   # Define profiles for different environments
   profiles = {
-    # Minimal profile - excludes heavy interactive packages (for CI/CD)
+    # Minimal profile - only essential tools for CI/CD
+    # Languages (like Go) are configured separately and work in all profiles
     minimal.module = {
-      packages = lib.mkForce corePackages;
+      packages = minimalPackages;
     };
   };
 
   # https://devenv.sh/packages/
-  # All packages including interactive ones (full environment by default)
-  # Use --profile minimal for CI/CD to get only core packages
+  # Default packages (full development environment)
+  # Use --profile minimal for CI/CD to get only essential tools
   packages =
-    corePackages
+    minimalPackages
     ++ (with pkgs; [
       # Github
       gh
