@@ -45,6 +45,9 @@ type Dispatcher struct {
 	// Priority track registry for resume logic
 	priorityTracks      map[string]PriorityTrackInfo // track IDs of priority tracks with resume info
 	priorityTracksMutex sync.RWMutex                 // protects priority tracks map
+
+	// Queue management wake-up channel for event-driven queue filling
+	queueManagementWakeup chan struct{} // buffered channel to wake up queue manager when playlist changes
 }
 
 // NewDispatcher creates a new dispatcher with the provided chat frontend.
@@ -72,6 +75,7 @@ func NewDispatcher(
 		lastShadowQueueModified: time.Now(),
 		lastSuccessfulSync:      time.Now(),
 		priorityTracks:          make(map[string]PriorityTrackInfo),
+		queueManagementWakeup:   make(chan struct{}, 1), // Buffer size 1 to coalesce multiple events
 	}
 
 	return d

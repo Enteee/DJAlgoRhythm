@@ -124,8 +124,8 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 	ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message, trackID string) {
 	msgCtx.State = StateAddToPlaylist
 
-	// Add track to playlist
-	if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+	// Add track to playlist and wake up queue manager.
+	if err := d.addToPlaylistAndWakeQueueManager(ctx, trackID); err != nil {
 		d.logger.Error("Failed to add to playlist",
 			zap.String("trackID", trackID),
 			zap.Error(err))
@@ -133,8 +133,33 @@ func (d *Dispatcher) executePlaylistAddWithReaction(
 		return
 	}
 
-	d.dedup.Add(trackID)
 	d.reactAdded(ctx, msgCtx, originalMsg, trackID)
+}
+
+// addToPlaylistAndWakeQueueManager adds a track to the playlist, marks it as seen in dedup,
+// and wakes up the queue manager to fill the queue from the updated playlist.
+// This should be used for all regular playlist additions (not priority tracks).
+func (d *Dispatcher) addToPlaylistAndWakeQueueManager(ctx context.Context, trackID string) error {
+	// Add track to playlist.
+	if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+		return err
+	}
+
+	// Mark as seen to prevent duplicates.
+	d.dedup.Add(trackID)
+
+	// Wake up queue manager to fill queue from updated playlist.
+	select {
+	case d.queueManagementWakeup <- struct{}{}:
+		d.logger.Debug("Sent wake-up signal to queue manager after playlist addition",
+			zap.String("trackID", trackID))
+	default:
+		// Channel full means queue manager will wake up soon anyway.
+		d.logger.Debug("Queue manager wake-up channel full, skipping signal",
+			zap.String("trackID", trackID))
+	}
+
+	return nil
 }
 
 // runQueueAndPlaylistManagement manages queue duration and automatic track filling.
@@ -156,6 +181,12 @@ func (d *Dispatcher) runQueueAndPlaylistManagement(ctx context.Context) {
 			d.logger.Info("Queue and playlist management stopped")
 			return
 		case <-ticker.C:
+			d.checkAndManageQueue(ctx)
+		case <-d.queueManagementWakeup:
+			d.logger.Info("Queue manager woken up by playlist update")
+
+			// Check and manage queue with updated playlist.
+			// Natural queue fullness checks will prevent adding autodj tracks if queue is already full.
 			d.checkAndManageQueue(ctx)
 		}
 	}
@@ -316,6 +347,24 @@ func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDurati
 			break
 		}
 
+		// Skip if track is already in dedup store (already played or queued)
+		if d.dedup.Has(track.ID) {
+			d.logger.Debug("Skipping track already in dedup store",
+				zap.String("trackID", track.ID),
+				zap.String("artist", track.Artist),
+				zap.String("title", track.Title))
+			continue
+		}
+
+		// Skip if track is already in shadow queue (already queued but not yet played)
+		if d.GetShadowQueuePosition(track.ID) >= 0 {
+			d.logger.Debug("Skipping track already in shadow queue",
+				zap.String("trackID", track.ID),
+				zap.String("artist", track.Artist),
+				zap.String("title", track.Title))
+			continue
+		}
+
 		if err := d.AddToQueueWithShadowTracking(ctx, &track, sourcePlaylist); err != nil {
 			d.logger.Warn("Failed to add track to queue",
 				zap.String("trackID", track.ID), zap.Error(err))
@@ -440,9 +489,10 @@ func (d *Dispatcher) fillQueueToTargetDuration(ctx context.Context, targetDurati
 	}
 }
 
-// addApprovedQueueTrack adds an approved queue track to both queue and playlist.
+// addApprovedQueueTrack adds an approved queue track to the playlist.
+// The track will be queued by the queue manager when it detects the playlist update.
 func (d *Dispatcher) addApprovedQueueTrack(ctx context.Context, trackID string) error {
-	// Get track details before adding to queue
+	// Get track details for logging.
 	track, err := d.spotify.GetTrack(ctx, trackID)
 	if err != nil {
 		d.logger.Error("Failed to get track details for approved queue track",
@@ -451,21 +501,19 @@ func (d *Dispatcher) addApprovedQueueTrack(ctx context.Context, trackID string) 
 		return err
 	}
 
-	// Add the approved track to queue and playlist
-	if queueErr := d.AddToQueueWithShadowTracking(ctx, track, sourceQueueFill); queueErr != nil {
-		d.logger.Warn("Failed to add approved queue track to queue",
+	// Add the approved track to playlist and wake up queue manager.
+	// The queue manager will pick it up and add it to the queue via tryFillFromPlaylistTracks.
+	if err := d.addToPlaylistAndWakeQueueManager(ctx, trackID); err != nil {
+		d.logger.Error("Failed to add approved queue track to playlist",
 			zap.String("trackID", trackID),
-			zap.Error(queueErr))
+			zap.Error(err))
+		return err
 	}
 
-	if playlistErr := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); playlistErr != nil {
-		d.logger.Warn("Failed to add approved queue track to playlist",
-			zap.String("trackID", trackID),
-			zap.Error(playlistErr))
-	}
-
-	// Add to dedup store
-	d.dedup.Add(trackID)
+	d.logger.Info("Approved queue track added to playlist",
+		zap.String("trackID", trackID),
+		zap.String("artist", track.Artist),
+		zap.String("title", track.Title))
 
 	// Find and remove the flow that handled this track
 	d.queueManagementMutex.Lock()

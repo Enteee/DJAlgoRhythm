@@ -518,16 +518,14 @@ func (d *Dispatcher) executePlaylistAddAfterApproval(
 		return
 	}
 
-	// Add track to playlist
-	if err := d.spotify.AddToPlaylist(ctx, d.config.Spotify.PlaylistID, trackID); err != nil {
+	// Add track to playlist and wake up queue manager.
+	if err := d.addToPlaylistAndWakeQueueManager(ctx, trackID); err != nil {
 		d.logger.Error("Failed to add to playlist",
 			zap.String("trackID", trackID),
 			zap.Error(err))
 		d.reactError(ctx, msgCtx, originalMsg, d.localizer.T("error.playlist.add_failed"))
 		return
 	}
-
-	d.dedup.Add(trackID)
 
 	// React with thumbs up
 	if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsUpReaction); reactErr != nil {
