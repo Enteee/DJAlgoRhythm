@@ -6,9 +6,6 @@ name: CI
   pull_request:
     branches: [main]
 
-env:
-  GO_VERSION: '1.25'
-
 jobs:
   check:
     name: Make Check (Unified Quality Checks)

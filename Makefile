@@ -5,7 +5,6 @@
 BINARY_NAME := djalgorhythm
 BINARY_PATH := bin/$(BINARY_NAME)
 MAIN_PATH := ./cmd/djalgorhythm
-GO_VERSION := 1.24
 DOCKER_IMAGE := djalgorhythm:latest
 DOCKER_REGISTRY :=
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")

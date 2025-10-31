@@ -5,9 +5,6 @@ name: Release
     tags:
       - 'v*'
 
-env:
-  GO_VERSION: '1.25'
-
 jobs:
   release:
     name: Release
