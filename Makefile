@@ -155,7 +155,7 @@ pre-commit: ## Run all pre-commit hooks (devenv git-hooks)
 		exit 1; \
 	fi
 
-check: fmt vet lint-config lint staticcheck security check-env-example check-help-sync pre-commit test build ## Run all code quality checks, security scans, and build
+check: fmt vet lint-config lint staticcheck security check-env-example check-help-sync pre-commit test build goreleaser-check ## Run all code quality checks, security scans, and build
 
 # Security targets
 security: ## Run security checks
@@ -195,9 +195,12 @@ deps-graph: ## Show dependency graph
 	fi
 
 # Docker targets
-docker-build: ## Build Docker image (auto-detects buildx and CI cache)
+docker-build: build ## Build Docker image (auto-detects buildx and CI cache)
 	@echo "Building Docker image..."
 	@if command -v docker > /dev/null 2>&1; then \
+		echo "Setting up platform-specific binary directory..."; \
+		mkdir -p bin/linux/amd64; \
+		cp $(BINARY_PATH) bin/linux/amd64/djalgorhythm; \
 		if docker buildx version > /dev/null 2>&1; then \
 			echo "Using buildx with caching..."; \
 			CACHE_FROM=""; \
@@ -217,11 +220,13 @@ docker-build: ## Build Docker image (auto-detects buildx and CI cache)
 				--label=org.opencontainers.image.revision=$$(git rev-parse HEAD 2>/dev/null || echo "unknown") \
 				--label=org.opencontainers.image.version=$(VERSION) \
 				--label=org.opencontainers.image.source=https://github.com/Enteee/DJAlgoRhythm \
+				--build-context . \
 				.; \
 		else \
 			echo "Using standard docker build..."; \
 			docker build -t $(DOCKER_IMAGE) .; \
 		fi; \
+		rm -rf bin/linux; \
 		echo "Built: $(DOCKER_IMAGE)"; \
 	else \
 		echo "Docker not found. Skipping build."; \

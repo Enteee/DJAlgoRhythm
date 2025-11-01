@@ -1,30 +1,4 @@
-# Build stage
-FROM golang:1.25-alpine AS builder
-
-# Install build dependencies
-# hadolint ignore=DL3018
-RUN apk add --no-cache git ca-certificates tzdata
-
-# Set working directory
-WORKDIR /build
-
-# Copy go mod files
-COPY go.mod go.sum ./
-
-# Download dependencies
-RUN go mod download && go mod verify
-
-# Copy source code
-COPY . .
-
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags="-w -s" \
-    -a -installsuffix cgo \
-    -o djalgorhythm \
-    ./cmd/djalgorhythm
-
-# Final stage
+# Dockerfile for DJAlgoRhythm - uses pre-built binaries
 FROM alpine:3.20
 
 # Install runtime dependencies
@@ -41,8 +15,9 @@ RUN adduser -D -s /bin/sh djalgorhythm
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /build/djalgorhythm .
+# Copy pre-built binary
+# $TARGETPLATFORM is automatically set by Docker buildx (e.g., linux/amd64, linux/arm64)
+COPY $TARGETPLATFORM/djalgorhythm .
 
 # Create directories for data
 RUN mkdir -p /app/data && chown -R djalgorhythm:djalgorhythm /app

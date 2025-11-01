@@ -84,77 +84,31 @@ changelog:
     - title: Others
       order: 999
 
-docker_manifests:
-  - name_template: "enteee/djalgorhythm:{{ .Tag }}"
-    image_templates:
-      - "enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "enteee/djalgorhythm:v{{ .Major }}"
-    image_templates:
-      - "enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "enteee/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
-    image_templates:
-      - "enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "enteee/djalgorhythm:latest"
-    image_templates:
-      - "enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "ghcr.io/enteee/djalgorhythm:{{ .Tag }}"
-    image_templates:
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "ghcr.io/enteee/djalgorhythm:v{{ .Major }}"
-    image_templates:
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "ghcr.io/enteee/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
-    image_templates:
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-arm64"
-  - name_template: "ghcr.io/enteee/djalgorhythm:latest"
-    image_templates:
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-arm64"
-
-dockers:
-  # Multi-platform images for releases and main branch (always pushed)
-  - image_templates:
-      - "enteee/djalgorhythm:{{ .Tag }}-amd64"
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-amd64"
+dockers_v2:
+  - id: djalgorhythm-images
+    images:
+      - enteee/djalgorhythm
+      - ghcr.io/enteee/djalgorhythm
     dockerfile: Dockerfile
-    use: buildx
     ids:
       - djalgorhythm
-    goarch: amd64
-    build_flag_templates:
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}"
+      - "v{{ .Major }}"
+      - "v{{ .Major }}.{{ .Minor }}"
+      - "{{ if not .IsSnapshot }}latest{{ end }}"
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.title": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+      "org.opencontainers.image.description": "DJAlgoRhythm - Live Chat → Spotify DJ"
+    flags:
       - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/amd64"
-      - "--cache-from=type=gha"
-      - "--cache-to=type=gha,mode=max"
-      - "--provenance=false"
-  - image_templates:
-      - "enteee/djalgorhythm:{{ .Tag }}-arm64"
-      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}-arm64"
-    dockerfile: Dockerfile
-    use: buildx
-    ids:
-      - djalgorhythm
-    goarch: arm64
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/arm64"
       - "--cache-from=type=gha"
       - "--cache-to=type=gha,mode=max"
       - "--provenance=false"
