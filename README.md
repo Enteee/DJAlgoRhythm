@@ -336,18 +336,17 @@ graph TD
     B -->|"🎥 Cross-Platform Link"| C3["🔍 Resolve & match to Spotify"]
     B -->|"💭 Free text"| E["🤖 4-stage LLM disambiguation"]
 
-    C3 -->|"Success"| C4["👍 User confirms match?"]
+    C3 -->|"Success"| CONFIRM["👍 User confirms track?"]
     C3 -->|"Failed"| D["💬 Ask: Which song?"]
-    C4 -->|"Yes"| C1
-    C4 -->|"No"| D
 
     C1 -->|"New track"| C2{"🛡️ Admin approval required?"}
     C1 -->|"Duplicate"| REJECT["❌ Already in playlist"]
 
     E --> F["📋 LLM provides ranked candidates"]
-    F --> G["👍 User confirms track?"]
-    G -->|"Yes"| C2
-    G -->|"No"| D
+    F --> CONFIRM
+
+    CONFIRM -->|"Yes"| C1
+    CONFIRM -->|"No"| D
 
     C2 -->|"Yes"| ADMIN["⏳ Await admin/community approval"]
     C2 -->|"No (or approved)"| PRIORITY{"👑 Admin priority request?"}
@@ -366,8 +365,7 @@ graph TD
     style J fill:#1DB954
     style A fill:#26A5E4
     style REJECT fill:#FF4444
-    style C3 fill:#9B59B6
-    style C4 fill:#E67E22
+    style CONFIRM fill:#E67E22
 ```
 
 ## Configuration
