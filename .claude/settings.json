@@ -30,7 +30,8 @@
       "Bash(devenv shell:*)",
       "Bash(yamllint:*)",
       "Bash(git add:*)",
-      "Bash(git push:*)",
+      "Bash(git push origin:*)",
+      "Bash(git push --set-upstream:*)",
       "Bash(git diff:*)",
       "Bash(git status:*)",
       "Bash(git log:*)",
@@ -45,6 +46,7 @@
       "Bash(rm -f /tmp/readme-flags.txt)",
       "Bash(rm -f coverage.out)",
       "Bash(rm -f coverage.html)",
+      "Bash(rm -f *.log)",
       "Bash(rm -rf bin/)",
       "Bash(diff:*)",
       "Bash(sed:*)",
@@ -63,7 +65,10 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:goreleaser.com)"
     ],
-    "deny": [],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ],
     "ask": []
   }
 }

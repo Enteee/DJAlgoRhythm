@@ -86,8 +86,9 @@ Override allows from lower precedence files:
 
 ```json
 "deny": [
-  "Bash(rm -rf /)",            // Prevent root deletion
-  "Bash(git push --force:*)"   // Prevent force push
+  "Bash(rm -rf /:*)",          // Prevent root deletion
+  "Bash(git push --force:*)",  // Prevent force push
+  "Bash(git push -f:*)"        // Prevent force push (short form)
 ]
 ```
 
