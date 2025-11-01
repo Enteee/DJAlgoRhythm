@@ -97,27 +97,6 @@ jobs:
       - name: Run govulncheck with SARIF output
         run: make audit-sarif
 
-      - name: Check for vulnerabilities and create summary
-        if: always()
-        run: |
-          # Check if SARIF file has vulnerabilities
-          if [ -f govulncheck.sarif ]; then
-            VULN_COUNT=$(jq '.runs[0].results | length' govulncheck.sarif 2>/dev/null || echo "0")
-            if [ "$VULN_COUNT" -gt 0 ]; then
-              echo "::warning::Vulnerabilities detected by govulncheck. Check the Security tab for details."
-              echo "## ⚠️ Security Vulnerabilities Detected" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "govulncheck found $VULN_COUNT potential vulnerabilities in dependencies." >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "📋 **Next Steps:**" >> $GITHUB_STEP_SUMMARY
-              echo "- Review findings in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
-              echo "- Update vulnerable dependencies if fixes are available" >> $GITHUB_STEP_SUMMARY
-              echo "- Assess whether vulnerabilities affect your deployment" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "No vulnerabilities found."
-            fi
-          fi
-
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
         if: always()

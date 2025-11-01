@@ -25,6 +25,9 @@ dist/
 *.out
 coverage.html
 
+# Security audit reports
+govulncheck.sarif
+
 # Dependency directories
 vendor/
 

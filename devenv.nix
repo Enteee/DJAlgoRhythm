@@ -29,6 +29,9 @@ let
     git
     git-lfs
 
+    # Make
+    gnumake
+
     # Go development tools
     go-tools
     gotools
@@ -207,6 +210,12 @@ in
 
         # is interactive shell?
         if tty -s; then
+          # run security audit
+          echo ""
+          echo "🔒 Running security audit..."
+          make audit-sarif || true
+          echo ""
+
           # print help
           devenv-help
         fi

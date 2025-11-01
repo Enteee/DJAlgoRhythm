@@ -334,7 +334,7 @@ test-ci: ## Run tests with coverage for CI (includes go mod verify)
 	go test -race -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
 
-audit-sarif: ## Run govulncheck with SARIF output for CI
+audit-sarif: ## Run govulncheck with SARIF output and check for vulnerabilities
 	@echo "Running govulncheck with SARIF output..."
 	@if command -v govulncheck > /dev/null; then \
 		govulncheck -format sarif ./... > govulncheck.sarif || true; \
@@ -343,6 +343,33 @@ audit-sarif: ## Run govulncheck with SARIF output for CI
 			mv govulncheck-clean.sarif govulncheck.sarif; \
 		else \
 			echo "jq not found. Skipping SARIF cleanup."; \
+		fi; \
+		if [ -f govulncheck.sarif ]; then \
+			VULN_COUNT=$$(jq '.runs[0].results | length' govulncheck.sarif 2>/dev/null || echo "0"); \
+			if [ "$$VULN_COUNT" -gt 0 ]; then \
+				echo ""; \
+				echo "⚠️  Security Vulnerabilities Detected"; \
+				echo ""; \
+				echo "govulncheck found $$VULN_COUNT potential vulnerabilities in dependencies."; \
+				echo ""; \
+				echo "📋 Next Steps:"; \
+				echo "  - Review findings in govulncheck.sarif"; \
+				echo "  - Update vulnerable dependencies if fixes are available"; \
+				echo "  - Assess whether vulnerabilities affect your deployment"; \
+				echo ""; \
+				if [ -n "$$GITHUB_STEP_SUMMARY" ]; then \
+					echo "## ⚠️ Security Vulnerabilities Detected" >> $$GITHUB_STEP_SUMMARY; \
+					echo "" >> $$GITHUB_STEP_SUMMARY; \
+					echo "govulncheck found $$VULN_COUNT potential vulnerabilities in dependencies." >> $$GITHUB_STEP_SUMMARY; \
+					echo "" >> $$GITHUB_STEP_SUMMARY; \
+					echo "📋 **Next Steps:**" >> $$GITHUB_STEP_SUMMARY; \
+					echo "- Review findings in the [Security tab](https://github.com/$$GITHUB_REPOSITORY/security/code-scanning)" >> $$GITHUB_STEP_SUMMARY; \
+					echo "- Update vulnerable dependencies if fixes are available" >> $$GITHUB_STEP_SUMMARY; \
+					echo "- Assess whether vulnerabilities affect your deployment" >> $$GITHUB_STEP_SUMMARY; \
+				fi; \
+			else \
+				echo "✅ No vulnerabilities found."; \
+			fi; \
 		fi; \
 	else \
 		echo "govulncheck not found. Install with: go install golang.org/x/vuln/cmd/govulncheck@latest"; \
