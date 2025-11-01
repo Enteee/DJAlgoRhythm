@@ -96,10 +96,9 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
     tags:
-      - "{{ if not .IsSnapshot }}{{ .Tag }}{{ end }}"
-      - "{{ if not .IsSnapshot }}v{{ .Major }}{{ end }}"
-      - "{{ if not .IsSnapshot }}v{{ .Major }}.{{ .Minor }}{{ end }}"
-      - "{{ if .IsSnapshot }}main{{ end }}"
+      - "{{ if .Tag }}{{ .Tag }}{{ end }}"
+      - "{{ if .Tag }}v{{ .Major }}{{ end }}"
+      - "{{ if .Tag }}v{{ .Major }}.{{ .Minor }}{{ end }}"
       - "latest"
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
@@ -119,6 +118,7 @@ release:
   github:
     owner: Enteee
     name: DJAlgoRhythm
+  disable: '{{ not .Tag }}'
   draft: false
   prerelease: auto
   mode: replace
