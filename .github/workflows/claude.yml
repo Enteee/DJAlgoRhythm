@@ -12,7 +12,15 @@ name: Claude Code
 
 jobs:
   claude:
-    # The claude-code-action handles trigger phrase filtering internally
+    # Filter at GitHub Actions level to avoid wasteful job runs
+    # Only start the job if:
+    # - Event is an issue being opened/assigned (always allow)
+    # - Event is a comment/review containing @claude trigger phrase
+    if: |
+      github.event_name == 'issues' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for Claude to run bash commands (make, go test, etc.)
@@ -41,6 +49,5 @@ jobs:
 
           # Explicitly use the repository's Claude Code settings file
           # This ensures Claude has the correct permissions for make check and other dev tools
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
-          claude_args: '--settings .claude/settings.json'
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/configuration.md
+          settings: '.claude/settings.json'
