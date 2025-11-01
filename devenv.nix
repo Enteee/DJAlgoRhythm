@@ -81,9 +81,6 @@ in
       # AI
       claude-code
 
-      # Telegram
-      telegram-desktop
-
       # IDE
       (vscode-with-extensions.override {
         vscodeExtensions =
@@ -104,7 +101,14 @@ in
             }
           ];
       })
-    ]);
+    ])
+    # Linux-only packages (Telegram depends on Wayland which is Linux-only)
+    ++ (lib.optionals pkgs.stdenv.isLinux (
+      with pkgs;
+      [
+        telegram-desktop
+      ]
+    ));
 
   # https://devenv.sh/languages/
   languages.nix.enable = true;
