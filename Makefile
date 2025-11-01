@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security lint-config
+.PHONY: help build test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-snapshot goreleaser-check
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -25,21 +25,11 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # Development targets
-build: ## Build the binary
+build: ## Build the binary for local development
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p bin
 	go build $(BUILD_FLAGS) -o $(BINARY_PATH) $(MAIN_PATH)
 	@echo "Built: $(BINARY_PATH)"
-
-build-all: ## Build for all platforms
-	@echo "Building for all platforms..."
-	@mkdir -p bin
-	GOOS=linux GOARCH=amd64 go build $(BUILD_FLAGS) -o bin/$(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
-	GOOS=linux GOARCH=arm64 go build $(BUILD_FLAGS) -o bin/$(BINARY_NAME)-linux-arm64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=amd64 go build $(BUILD_FLAGS) -o bin/$(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=arm64 go build $(BUILD_FLAGS) -o bin/$(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
-	GOOS=windows GOARCH=amd64 go build $(BUILD_FLAGS) -o bin/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
-	@echo "Built binaries for all platforms in bin/"
 
 run: build ## Build and run the application
 	@echo "Running $(BINARY_NAME)..."
@@ -226,14 +216,6 @@ docker-compose-down: ## Stop services with docker-compose
 	@echo "Stopping services with docker-compose..."
 	docker-compose down
 
-docker-push: docker-build ## Build and push Docker image
-	@if [ -z "$(DOCKER_REGISTRY)" ]; then \
-		echo "DOCKER_REGISTRY not set. Use: make docker-push DOCKER_REGISTRY=your-registry.com"; \
-		exit 1; \
-	fi
-	docker tag $(DOCKER_IMAGE) $(DOCKER_REGISTRY)/$(DOCKER_IMAGE)
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE)
-
 # Cleanup targets
 clean: ## Clean build artifacts
 	@echo "Cleaning build artifacts..."
@@ -259,19 +241,19 @@ docs: ## Generate documentation
 		echo "godoc not found. Install with: go install golang.org/x/tools/cmd/godoc@latest"; \
 	fi
 
-# Release targets
-release-dry: ## Dry run release (requires goreleaser)
-	@echo "Dry run release..."
+# GoReleaser targets (for local testing only - CI handles actual releases)
+goreleaser-snapshot: ## Build snapshot release locally without publishing
+	@echo "Building snapshot release..."
 	@if command -v goreleaser > /dev/null; then \
-		goreleaser release --snapshot --rm-dist; \
+		goreleaser build --snapshot --clean; \
 	else \
 		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
 	fi
 
-release: ## Create release (requires goreleaser)
-	@echo "Creating release..."
+goreleaser-check: ## Validate GoReleaser configuration
+	@echo "Checking GoReleaser configuration..."
 	@if command -v goreleaser > /dev/null; then \
-		goreleaser release --rm-dist; \
+		goreleaser check; \
 	else \
 		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
 	fi
