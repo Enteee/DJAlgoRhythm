@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -327,7 +328,7 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 
 	// Fall back to title/artist search.
 	if trackInfo.Title == "" {
-		return "", fmt.Errorf("no title available for search")
+		return "", errors.New("no title available for search")
 	}
 
 	// Check if the Spotify client supports title/artist search.
@@ -339,7 +340,7 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 			return "", fmt.Errorf("title/artist search failed: %w", err)
 		}
 		if track == nil {
-			return "", fmt.Errorf("no track found for title/artist")
+			return "", errors.New("no track found for title/artist")
 		}
 
 		d.logger.Info("Found track on Spotify using title/artist",
@@ -352,7 +353,7 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 		return track.ID, nil
 	}
 
-	return "", fmt.Errorf("Spotify client does not support enhanced search methods")
+	return "", errors.New("spotify client does not support enhanced search methods")
 }
 
 // cleanupContext removes message context from memory.

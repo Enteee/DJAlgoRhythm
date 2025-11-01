@@ -19,6 +19,8 @@ const (
 	YouTubeRequestTimeout = 10 * time.Second
 	// youtubeExpectedSplitParts is the expected number of parts when splitting title/artist strings.
 	youtubeExpectedSplitParts = 2
+	// youtubeShortDomain is the shortened YouTube domain.
+	youtubeShortDomain = "youtu.be"
 )
 
 // YouTubeOEmbedResponse represents the response from YouTube's oEmbed API.
@@ -51,7 +53,7 @@ func (r *YouTubeResolver) CanResolve(rawURL string) bool {
 	hostname := strings.ToLower(u.Hostname())
 	// Normalize various YouTube domains.
 	switch hostname {
-	case "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be":
+	case "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", youtubeShortDomain:
 		return true
 	}
 	return false
@@ -60,7 +62,7 @@ func (r *YouTubeResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from a YouTube URL using the oEmbed API.
 func (r *YouTubeResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not a YouTube URL.")
+		return nil, errors.New("not a YouTube URL")
 	}
 
 	// Extract video ID.
@@ -70,7 +72,7 @@ func (r *YouTubeResolver) Resolve(ctx context.Context, rawURL string) (*TrackInf
 	}
 
 	// Build canonical YouTube URL for oEmbed.
-	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+	videoURL := "https://www.youtube.com/watch?v=" + videoID
 
 	// Fetch metadata from oEmbed API.
 	oembedResp, err := r.fetchOEmbed(ctx, videoURL)
@@ -97,11 +99,11 @@ func (r *YouTubeResolver) extractVideoID(rawURL string) (string, error) {
 	hostname := strings.ToLower(u.Hostname())
 
 	// Handle youtu.be short links.
-	if hostname == "youtu.be" {
+	if hostname == youtubeShortDomain {
 		// Video ID is in the path.
 		path := strings.Trim(u.Path, "/")
 		if path == "" {
-			return "", errors.New("no video ID in youtu.be URL.")
+			return "", errors.New("no video ID in youtu.be URL")
 		}
 		return path, nil
 	}
@@ -109,7 +111,7 @@ func (r *YouTubeResolver) extractVideoID(rawURL string) (string, error) {
 	// Handle standard YouTube URLs (youtube.com, www.youtube.com, m.youtube.com, music.youtube.com).
 	videoID := u.Query().Get("v")
 	if videoID == "" {
-		return "", errors.New("no video ID in YouTube URL.")
+		return "", errors.New("no video ID in YouTube URL")
 	}
 	return videoID, nil
 }

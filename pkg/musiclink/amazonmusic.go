@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,8 +16,6 @@ const (
 	AmazonMusicRequestTimeout = 10 * time.Second
 	// AmazonMusicMaxReadSize limits the amount of HTML we read.
 	AmazonMusicMaxReadSize = 102400 // 100 KB should be enough for metadata.
-	// amazonMusicExpectedSplitParts is the expected number of parts when splitting title/artist strings.
-	amazonMusicExpectedSplitParts = 2
 )
 
 // AmazonMusicResolver resolves Amazon Music links to track information via HTML scraping.
@@ -50,7 +47,7 @@ func (r *AmazonMusicResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from an Amazon Music URL by scraping the HTML.
 func (r *AmazonMusicResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not an Amazon Music URL.")
+		return nil, errors.New("not an Amazon Music URL")
 	}
 
 	// Fetch the HTML page.
@@ -73,37 +70,7 @@ func (r *AmazonMusicResolver) Resolve(ctx context.Context, rawURL string) (*Trac
 
 // fetchHTML fetches the HTML content of an Amazon Music page.
 func (r *AmazonMusicResolver) fetchHTML(ctx context.Context, pageURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
-	if err != nil {
-		return "", err
-	}
-
-	// Set realistic browser headers.
-	req.Header.Set("User-Agent",
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "+
-			"(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Amazon Music returned status %d", resp.StatusCode)
-	}
-
-	// Read response body (limited to avoid excessive memory use).
-	limitedReader := io.LimitReader(resp.Body, AmazonMusicMaxReadSize)
-	bodyBytes, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return string(bodyBytes), nil
+	return fetchHTMLFromURL(ctx, r.client, pageURL, "Amazon Music", AmazonMusicMaxReadSize)
 }
 
 // extractTrackInfo extracts track title and artist from Amazon Music HTML.
@@ -120,7 +87,7 @@ func (r *AmazonMusicResolver) extractTrackInfo(html string) (title, artist strin
 		return title, artist, nil
 	}
 
-	return "", "", errors.New("could not extract track information from Amazon Music page.")
+	return "", "", errors.New("could not extract track information from Amazon Music page")
 }
 
 // extractFromMetaTags extracts track info from OpenGraph or Twitter meta tags.
@@ -135,49 +102,35 @@ func (r *AmazonMusicResolver) extractFromMetaTags(html string) (title, artist st
 	descRegex := regexp.MustCompile(`<meta\s+property="og:description"\s+content="([^"]+)"`)
 	if matches := descRegex.FindStringSubmatch(html); len(matches) > 1 {
 		desc := matches[1]
-		// Description often contains artist info (e.g., "Song by Artist on Amazon Music").
-		if strings.Contains(strings.ToLower(desc), " by ") {
-			parts := strings.SplitN(desc, " by ", amazonMusicExpectedSplitParts)
-			if len(parts) == amazonMusicExpectedSplitParts {
-				// Further split on " on Amazon Music" if present.
-				artistPart := parts[1]
-				if strings.Contains(artistPart, " on Amazon Music") {
-					artistPart = strings.SplitN(artistPart, " on Amazon Music", amazonMusicExpectedSplitParts)[0]
-				}
-				artist = strings.TrimSpace(artistPart)
-			}
-		}
+		artist = r.extractArtistFromDescription(desc)
 	}
 
 	return title, artist
 }
 
+// extractArtistFromDescription extracts artist name from og:description meta tag content.
+func (r *AmazonMusicResolver) extractArtistFromDescription(desc string) string {
+	// Description often contains artist info (e.g., "Song by Artist on Amazon Music").
+	if !strings.Contains(strings.ToLower(desc), " by ") {
+		return ""
+	}
+
+	parts := strings.SplitN(desc, " by ", expectedSplitParts)
+	if len(parts) != expectedSplitParts {
+		return ""
+	}
+
+	// Further split on " on Amazon Music" if present.
+	artistPart := parts[1]
+	if strings.Contains(artistPart, " on Amazon Music") {
+		artistPart = strings.SplitN(artistPart, " on Amazon Music", expectedSplitParts)[0]
+	}
+
+	return strings.TrimSpace(artistPart)
+}
+
 // extractFromTitleTag extracts track info from the HTML <title> tag.
 func (r *AmazonMusicResolver) extractFromTitleTag(html string) (title, artist string) {
-	// Amazon Music title format might be: "Song Title by Artist Name on Amazon Music" or similar.
-	titleTagRegex := regexp.MustCompile(`<title>([^<]+)</title>`)
-	matches := titleTagRegex.FindStringSubmatch(html)
-	if len(matches) < 2 {
-		return "", ""
-	}
-
-	titleText := matches[1]
-
-	// Remove " on Amazon Music" suffix if present.
-	titleText = strings.TrimSuffix(titleText, " on Amazon Music")
-	titleText = strings.TrimSpace(titleText)
-
-	// Split by " by " to separate song title from artist.
-	if strings.Contains(titleText, " by ") {
-		parts := strings.SplitN(titleText, " by ", amazonMusicExpectedSplitParts)
-		if len(parts) == amazonMusicExpectedSplitParts {
-			title = strings.TrimSpace(parts[0])
-			artist = strings.TrimSpace(parts[1])
-		}
-	} else {
-		// If no separator, treat the whole thing as the title.
-		title = titleText
-	}
-
-	return title, artist
+	// Amazon Music title format: "Song Title by Artist Name on Amazon Music".
+	return extractTitleAndArtistFromTitleTag(html, " on Amazon Music", " by ")
 }

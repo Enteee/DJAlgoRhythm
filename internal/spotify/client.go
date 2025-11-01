@@ -340,7 +340,7 @@ func (c *Client) SearchTrackByISRC(ctx context.Context, isrc string) (*core.Trac
 	}
 
 	// Build ISRC search query.
-	query := fmt.Sprintf("isrc:%s", isrc)
+	query := "isrc:" + isrc
 
 	results, err := c.searchWithFiltering(ctx, query, spotify.SearchTypeTrack)
 	if err != nil {

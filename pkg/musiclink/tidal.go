@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -17,8 +16,6 @@ const (
 	TidalRequestTimeout = 10 * time.Second
 	// TidalMaxReadSize limits the amount of HTML we read.
 	TidalMaxReadSize = 102400 // 100 KB should be enough for metadata.
-	// tidalExpectedSplitParts is the expected number of parts when splitting title/artist strings.
-	tidalExpectedSplitParts = 2
 )
 
 // TidalResolver resolves Tidal links to track information via HTML scraping.
@@ -49,12 +46,17 @@ func (r *TidalResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from a Tidal URL by scraping the HTML.
 func (r *TidalResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not a Tidal URL.")
+		return nil, errors.New("not a Tidal URL")
 	}
 
+	return r.resolveTrackURL(ctx, rawURL, "/track/")
+}
+
+// resolveTrackURL handles the common pattern of validating track URL, fetching HTML, and extracting info.
+func (r *TidalResolver) resolveTrackURL(ctx context.Context, rawURL, trackPath string) (*TrackInfo, error) {
 	// Check if this is a track URL.
-	if !strings.Contains(rawURL, "/track/") {
-		return nil, errors.New("not a Tidal track URL (only /track/ URLs are supported).")
+	if !strings.Contains(rawURL, trackPath) {
+		return nil, fmt.Errorf("not a Tidal track URL (only %s URLs are supported)", trackPath)
 	}
 
 	// Fetch the HTML page.
@@ -77,37 +79,7 @@ func (r *TidalResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo,
 
 // fetchHTML fetches the HTML content of a Tidal page.
 func (r *TidalResolver) fetchHTML(ctx context.Context, pageURL string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
-	if err != nil {
-		return "", err
-	}
-
-	// Set realistic browser headers.
-	req.Header.Set("User-Agent",
-		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "+
-			"(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Tidal returned status %d", resp.StatusCode)
-	}
-
-	// Read response body (limited to avoid excessive memory use).
-	limitedReader := io.LimitReader(resp.Body, TidalMaxReadSize)
-	bodyBytes, err := io.ReadAll(limitedReader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	return string(bodyBytes), nil
+	return fetchHTMLFromURL(ctx, r.client, pageURL, "Tidal", TidalMaxReadSize)
 }
 
 // extractTrackInfo extracts track title and artist from Tidal HTML.
@@ -124,7 +96,7 @@ func (r *TidalResolver) extractTrackInfo(html string) (title, artist string, err
 		return title, artist, nil
 	}
 
-	return "", "", errors.New("could not extract track information from Tidal page.")
+	return "", "", errors.New("could not extract track information from Tidal page")
 }
 
 // extractFromMetaTags extracts track info from OpenGraph or Twitter meta tags.
@@ -141,8 +113,8 @@ func (r *TidalResolver) extractFromMetaTags(html string) (title, artist string) 
 		desc := matches[1]
 		// Description often contains "By Artist Name" or similar.
 		if strings.Contains(strings.ToLower(desc), "by ") {
-			parts := strings.SplitN(desc, "by ", tidalExpectedSplitParts)
-			if len(parts) == tidalExpectedSplitParts {
+			parts := strings.SplitN(desc, "by ", expectedSplitParts)
+			if len(parts) == expectedSplitParts {
 				artist = strings.TrimSpace(parts[1])
 			}
 		}
@@ -156,7 +128,7 @@ func (r *TidalResolver) extractFromTitleTag(html string) (title, artist string) 
 	// Tidal title format is often: "Track Title – Artist Name | TIDAL" or similar.
 	titleTagRegex := regexp.MustCompile(`<title>([^<]+)</title>`)
 	matches := titleTagRegex.FindStringSubmatch(html)
-	if len(matches) < 2 {
+	if len(matches) < minTitleTagMatches {
 		return "", ""
 	}
 
@@ -169,12 +141,12 @@ func (r *TidalResolver) extractFromTitleTag(html string) (title, artist string) 
 	// Split by " – " (en dash) or " - " (hyphen).
 	var parts []string
 	if strings.Contains(titleText, " – ") {
-		parts = strings.SplitN(titleText, " – ", tidalExpectedSplitParts)
+		parts = strings.SplitN(titleText, " – ", expectedSplitParts)
 	} else if strings.Contains(titleText, " - ") {
-		parts = strings.SplitN(titleText, " - ", tidalExpectedSplitParts)
+		parts = strings.SplitN(titleText, " - ", expectedSplitParts)
 	}
 
-	if len(parts) == tidalExpectedSplitParts {
+	if len(parts) == expectedSplitParts {
 		title = strings.TrimSpace(parts[0])
 		artist = strings.TrimSpace(parts[1])
 	} else {

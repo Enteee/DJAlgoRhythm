@@ -61,7 +61,7 @@ func (r *AppleMusicResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from an Apple Music URL using iTunes API.
 func (r *AppleMusicResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not an Apple Music URL.")
+		return nil, errors.New("not an Apple Music URL")
 	}
 
 	// Extract track ID from the URL.
@@ -109,7 +109,7 @@ func (r *AppleMusicResolver) extractTrackID(rawURL string) (string, error) {
 		}
 	}
 
-	return "", errors.New("no track ID found in Apple Music URL (album links without ?i= are not supported).")
+	return "", errors.New("no track ID found in Apple Music URL (album links without ?i= are not supported)")
 }
 
 // fetchTrackData fetches track metadata from iTunes lookup API.
@@ -140,7 +140,7 @@ func (r *AppleMusicResolver) fetchTrackData(ctx context.Context, trackID string)
 	}
 
 	if lookupResp.ResultCount == 0 || len(lookupResp.Results) == 0 {
-		return nil, errors.New("no track found in iTunes API response.")
+		return nil, errors.New("no track found in iTunes API response")
 	}
 
 	return &lookupResp.Results[0], nil
