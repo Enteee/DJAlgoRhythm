@@ -6,6 +6,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This project uses **devenv** (Nix-based development environment) for consistent development setup across machines.
 
+### Claude Code Settings
+
+This repository includes Claude Code settings in the `.claude/` directory that control what operations Claude can perform.
+
+**Settings Structure:**
+
+- **`.claude/settings.json`** - Base permissions for all environments (local + CI/CD)
+- **`.claude/settings.local.json`** - Your local overrides (gitignored)
+- **`.claude/settings.local.json.example`** - Template for creating local settings
+
+**Precedence Hierarchy:**
+
+```
+settings.local.json → settings.json → ~/.claude/settings.json
+(highest)                              (lowest)
+```
+
+Settings are automatically merged, with local settings overriding base settings.
+
+**Creating Local Overrides:**
+
+If you need additional permissions for local development:
+
+```bash
+cp .claude/settings.local.json.example .claude/settings.local.json
+# Edit .claude/settings.local.json to add your permissions
+```
+
+Your local settings are gitignored and won't affect other developers or CI/CD.
+
+**Documentation:** See `.claude/README.md` for detailed information about the settings system.
+
 ### Essential Commands
 
 - `devenv shell` - Enter the development environment
