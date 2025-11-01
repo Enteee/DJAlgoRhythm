@@ -102,6 +102,15 @@ jobs:
           echo "- Update vulnerable dependencies if fixes are available" >> $GITHUB_STEP_SUMMARY
           echo "- Assess whether vulnerabilities affect your deployment" >> $GITHUB_STEP_SUMMARY
 
+      - name: Fix duplicate CVE tags in SARIF (workaround for golang/go#75890)
+        if: always()
+        run: |
+          # Deduplicate tags arrays in SARIF output to fix govulncheck bug
+          # See: https://github.com/golang/go/issues/75890
+          jq '.runs[]?.tool.driver.rules[]?.properties.tags |= unique' \
+            govulncheck.sarif > govulncheck-clean.sarif
+          mv govulncheck-clean.sarif govulncheck.sarif
+
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
         if: always()
