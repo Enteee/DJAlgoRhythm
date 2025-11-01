@@ -97,7 +97,7 @@ jobs:
         uses: ./.github/actions/setup-devenv
 
       - name: Run govulncheck with SARIF output
-        run: govulncheck -format sarif -out govulncheck.sarif ./...
+        run: govulncheck -format sarif ./... > govulncheck.sarif
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
