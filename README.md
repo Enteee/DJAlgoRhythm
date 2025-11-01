@@ -291,8 +291,11 @@ On first startup, DJAlgoRhythm will guide you through Spotify OAuth:
 > **Supported Music Platforms:** YouTube, YouTube Music, Apple Music, Tidal, Beatport, Amazon Music, SoundCloud
 >
 > **Technical Details:**
-> - **API-Based Providers** (reliable, fast): YouTube (oEmbed), SoundCloud (oEmbed), Apple Music (iTunes Lookup API with ISRC support)
-> - **HTML Scraping Providers** (may break if provider changes page structure): Tidal, Beatport, Amazon Music
+>
+> - **API-Based Providers** (reliable, fast): YouTube (oEmbed), SoundCloud (oEmbed),
+>   Apple Music (iTunes Lookup API with ISRC support)
+> - **HTML Scraping Providers** (may break if provider changes page structure):
+>   Tidal, Beatport, Amazon Music
 > - All providers include graceful fallback to AI disambiguation on failure
 
 ### 💡 **Real Examples**

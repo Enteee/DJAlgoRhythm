@@ -118,9 +118,9 @@ func TestAmazonMusicResolver_extractArtistFromDescription(t *testing.T) {
 			expected: "Artist Name",
 		},
 		{
-			name:     "Case sensitive by",
+			name:     "Case insensitive by (uppercase BY)",
 			desc:     "Track BY Artist Name on Amazon Music",
-			expected: "",
+			expected: "Artist Name",
 		},
 	}
 

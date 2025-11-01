@@ -38,7 +38,7 @@ var (
 func newHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: defaultHTTPTimeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 			if len(via) >= maxHTTPRedirects {
 				return ErrTooManyRedirects
 			}
