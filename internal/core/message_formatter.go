@@ -123,6 +123,14 @@ func (d *Dispatcher) replyError(ctx context.Context, msgCtx *MessageContext, ori
 	d.reactError(ctx, msgCtx, originalMsg, message)
 }
 
+// replyHelp sends a help message to the user explaining how to use the bot.
+func (d *Dispatcher) replyHelp(ctx context.Context, originalMsg *chat.Message) {
+	helpMessage := d.localizer.T("bot.help_message")
+	if _, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, helpMessage); err != nil {
+		d.logger.Error("Failed to send help message", zap.Error(err))
+	}
+}
+
 // reactProcessing adds a processing reaction to show the message is being handled.
 func (d *Dispatcher) reactProcessing(ctx context.Context, msg *chat.Message) {
 	if err := d.frontend.React(ctx, msg.ChatID, msg.ID, "👀"); err != nil {

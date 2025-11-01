@@ -139,6 +139,7 @@ type LLMProvider interface {
 	RankTracks(ctx context.Context, searchQuery string, tracks []Track) []Track
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
+	IsHelpRequest(ctx context.Context, text string) (bool, error)
 	GenerateTrackMood(ctx context.Context, tracks []Track) (string, error)
 	ExtractSongQuery(ctx context.Context, userText string) (string, error)
 }

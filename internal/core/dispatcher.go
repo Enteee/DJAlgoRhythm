@@ -182,6 +182,17 @@ func (d *Dispatcher) processMessage(ctx context.Context, msgCtx *MessageContext,
 		if d.isNotMusicRequest(ctx, msgCtx.Input.Text) {
 			d.logger.Debug("Message filtered out as chatter",
 				zap.String("text", msgCtx.Input.Text))
+			// Check if this is a help request
+			if d.isHelpRequest(ctx, msgCtx.Input.Text) {
+				d.logger.Debug("Help request detected",
+					zap.String("text", msgCtx.Input.Text))
+				// React with OK hand emoji to acknowledge the help request
+				if err := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, "👌"); err != nil {
+					d.logger.Debug("Failed to add OK hand reaction", zap.Error(err))
+				}
+				d.replyHelp(ctx, originalMsg)
+				return
+			}
 			d.reactIgnored(ctx, originalMsg)
 			return
 		}
@@ -239,6 +250,25 @@ func (d *Dispatcher) isNotMusicRequest(ctx context.Context, text string) bool {
 	}
 
 	return isNotMusicRequest
+}
+
+// isHelpRequest checks if a message is asking for help or instructions.
+func (d *Dispatcher) isHelpRequest(ctx context.Context, text string) bool {
+	// If no LLM provider is available, always return false
+	if d.llm == nil {
+		return false
+	}
+
+	// Use LLM to determine if this is a help request
+	isHelpRequest, err := d.llm.IsHelpRequest(ctx, text)
+	if err != nil {
+		d.logger.Warn("LLM help request detection failed, defaulting to false",
+			zap.Error(err),
+			zap.String("text", text))
+		return false
+	}
+
+	return isHelpRequest
 }
 
 const (

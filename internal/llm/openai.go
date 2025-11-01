@@ -32,6 +32,7 @@ const (
 	maxTokensRanking      = 1000
 	maxTokensChatter      = 200
 	maxTokensPriority     = 200
+	maxTokensHelpRequest  = 200
 	maxTokensSearchQuery  = 50
 	maxTokensTrackRanking = 100
 	maxTokensExtraction   = 500 // For song extraction response
@@ -175,6 +176,64 @@ func (o *OpenAIClient) IsPriorityRequest(ctx context.Context, text string) (bool
 		zap.String("reasoning", response.Reasoning))
 
 	return response.IsPriorityRequest, nil
+}
+
+// HelpRequestDetectionResponse represents the response from OpenAI for help request detection.
+type HelpRequestDetectionResponse struct {
+	IsHelpRequest bool    `json:"is_help_request"`
+	Confidence    float64 `json:"confidence"`
+	Reasoning     string  `json:"reasoning,omitempty"`
+}
+
+// IsHelpRequest determines if the given text is a help request using OpenAI.
+//
+//nolint:dupl // Similar structure to IsNotMusicRequest but different response types
+func (o *OpenAIClient) IsHelpRequest(ctx context.Context, text string) (bool, error) {
+	if strings.TrimSpace(text) == "" {
+		return false, errors.New("empty text provided")
+	}
+
+	prompt := o.buildHelpRequestPrompt()
+
+	o.logger.Debug("Calling OpenAI for help request detection",
+		zap.String("text", text),
+		zap.String("model", o.config.Model))
+
+	resp, err := o.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(prompt),
+			openai.UserMessage(text),
+		},
+		Model:       o.getModel(),
+		Temperature: openai.Float(defaultTemperature),
+		MaxTokens:   openai.Int(maxTokensHelpRequest),
+	})
+	if err != nil {
+		o.logger.Error("OpenAI API call failed for help request detection", zap.Error(err))
+		return false, fmt.Errorf("OpenAI API call failed: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return false, errors.New("no response from OpenAI")
+	}
+
+	content := resp.Choices[0].Message.Content
+	o.logger.Debug("OpenAI help request detection response received", zap.String("content", content))
+
+	var response HelpRequestDetectionResponse
+	if err := json.Unmarshal([]byte(content), &response); err != nil {
+		o.logger.Error("Failed to parse OpenAI help request detection response",
+			zap.Error(err),
+			zap.String("content", content))
+		return false, fmt.Errorf("failed to parse OpenAI response: %w", err)
+	}
+
+	o.logger.Debug("Help request detection completed",
+		zap.Bool("is_help_request", response.IsHelpRequest),
+		zap.Float64("confidence", response.Confidence),
+		zap.String("reasoning", response.Reasoning))
+
+	return response.IsHelpRequest, nil
 }
 
 // GenerateTrackMood generates a mood description for the given tracks using OpenAI.
@@ -493,4 +552,51 @@ Examples:
 - "upbeat pop hits"
 - "dark electronic beats"
 - "classic jazz standards"`
+}
+
+func (o *OpenAIClient) buildHelpRequestPrompt() string {
+	return `You are analyzing messages to detect if someone is asking for help or instructions about a music bot.
+
+Your task is to determine if a message is asking how the bot works, what it can do, or requesting help/instructions.
+
+Respond with a JSON object in this exact format:
+{
+  "is_help_request": true/false,
+  "confidence": 0.85,
+  "reasoning": "Brief explanation of the decision"
+}
+
+Rules:
+1. confidence should be between 0.0 and 1.0
+2. Set is_help_request to TRUE if the message is asking for help, instructions, or information about bot capabilities
+3. Set is_help_request to FALSE if it's regular chatter or a music request
+4. When in doubt, return FALSE
+
+Examples of is_help_request = TRUE (HELP REQUEST):
+- "help"
+- "what can you do?"
+- "how does this work?"
+- "what commands are available?"
+- "how do I use this bot?"
+- "what are the commands?"
+- "how can I add songs?"
+- "?"
+- "how to use"
+- "instructions please"
+- "what's this bot for?"
+- "how do I request music?"
+- "can you help me?"
+
+Examples of is_help_request = FALSE (NOT HELP):
+- "Hello everyone"
+- "Good morning!"
+- "Play Bohemian Rhapsody"
+- "Add some Taylor Swift"
+- "Great song choice"
+- "LOL that's funny"
+- "Thanks for the help" (expressing thanks, not asking for help)
+- "This is helpful" (commenting, not asking)
+- Regular conversation or music requests
+
+IMPORTANT: Only mark as TRUE when explicitly asking for help/instructions. Default to FALSE when uncertain.`
 }

@@ -26,6 +26,7 @@ type Client interface {
 	RankTracks(ctx context.Context, searchQuery string, tracks []core.Track) []core.Track
 	IsNotMusicRequest(ctx context.Context, text string) (bool, error)
 	IsPriorityRequest(ctx context.Context, text string) (bool, error)
+	IsHelpRequest(ctx context.Context, text string) (bool, error)
 	GenerateTrackMood(ctx context.Context, tracks []core.Track) (string, error)
 	ExtractSongQuery(ctx context.Context, userText string) (string, error)
 }
@@ -73,6 +74,11 @@ func (p *Provider) IsNotMusicRequest(ctx context.Context, text string) (bool, er
 // IsPriorityRequest determines if the given text represents a priority request that should skip the queue.
 func (p *Provider) IsPriorityRequest(ctx context.Context, text string) (bool, error) {
 	return p.client.IsPriorityRequest(ctx, text)
+}
+
+// IsHelpRequest determines if the given text is asking for help or instructions.
+func (p *Provider) IsHelpRequest(ctx context.Context, text string) (bool, error) {
+	return p.client.IsHelpRequest(ctx, text)
 }
 
 // GenerateTrackMood generates a mood description for the given tracks using the LLM.

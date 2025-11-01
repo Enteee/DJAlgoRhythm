@@ -59,6 +59,23 @@ var berneseGermanMessages = map[string]string{
 	// Bot status messages
 	"bot.startup":  "🎵 Ig bi jetzt online und bereit för öii Musigwünsch!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 Ig ga offline. Bis spöter!\n\n📀 Aui Lieder vo dere Session: %s",
+	"bot.help_message": "🎵 DJAlgoRhythm Musig Bot Hiuf\n\n" +
+		"Ig cha dir häufe Lieder zur Playlist hinzuzfüege! So geit's:\n\n" +
+		"📍 Spotify Links schicke:\n" +
+		"Eifach e Spotify Track Link schicke und ig füeges sofort hinzu.\n\n" +
+		"🔗 Anderi Musig Links schicke:\n" +
+		"YouTube, Apple Music, etc. - Ig finde z'passende Lied uf Spotify.\n\n" +
+		"✍️ Freitextwünsch:\n" +
+		"Schriib eifach was de wosch ghöre:\n" +
+		"• \"Spiel Arctic Monkeys\"\n" +
+		"• \"Füeg Bohemian Rhapsody vo Queen hinzu\"\n" +
+		"• \"En bitzeli chili Lofi Beats\"\n\n" +
+		"⚡ Prioritätswünsch (Admins):\n" +
+		"Mit \"prio:\" wird's als nächsts gspielt:\n" +
+		"• \"prio: Song Name\"\n\n" +
+		"👥 Approval System:\n" +
+		"Gwüssi Lieder bruche Admin-Freigab oder Community Votes.\n\n" +
+		"Schick eifach din Wunsch und ig kümmer mi drum! 🎶",
 
 	// Queue management messages
 	"bot.queue_management": "🤖 D Playlist wird chlii läär! Hinzuegfüegt: %s - %s\n%s\n\n" +

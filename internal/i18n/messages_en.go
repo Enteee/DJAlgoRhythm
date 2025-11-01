@@ -59,6 +59,23 @@ var englishMessages = map[string]string{
 	// Bot status messages
 	"bot.startup":  "🎵 I am now online and ready to add music to your playlist!\n\n📀 Playlist: %s",
 	"bot.shutdown": "🎵 I am going offline. See you later!\n\n📀 All songs from this session: %s",
+	"bot.help_message": "🎵 DJAlgoRhythm Music Bot Help\n\n" +
+		"I can help you add songs to the playlist! Here's how:\n\n" +
+		"📍 Send Spotify Links:\n" +
+		"Just paste a Spotify track link and I'll add it immediately.\n\n" +
+		"🔗 Send Other Music Links:\n" +
+		"YouTube, Apple Music, etc. - I'll find the matching song on Spotify.\n\n" +
+		"✍️ Free Text Requests:\n" +
+		"Just write what you want to hear:\n" +
+		"• \"Play Arctic Monkeys\"\n" +
+		"• \"Add Bohemian Rhapsody by Queen\"\n" +
+		"• \"Some chill lofi beats\"\n\n" +
+		"⚡ Priority Requests (Admins):\n" +
+		"Prefix with \"prio:\" to play next:\n" +
+		"• \"prio: Song Name\"\n\n" +
+		"👥 Approval System:\n" +
+		"Some songs may require admin approval or community votes.\n\n" +
+		"Just send your request and I'll take care of the rest! 🎶",
 
 	// Queue management messages
 	"bot.queue_management": "🤖 Playlist is running low! Added: %s - %s\n%s\n\n" +
