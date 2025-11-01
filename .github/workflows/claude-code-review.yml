@@ -1,8 +1,9 @@
 name: Claude Code Review
 
 'on':
+  # Only run on freshly opened pull requests
   pull_request:
-    types: [opened, synchronize]
+    types: [opened]
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
@@ -10,17 +11,42 @@ name: Claude Code Review
     #   - "src/**/*.js"
     #   - "src/**/*.jsx"
 
+  # Allow manual review requests from maintainers via comments
+  # Use: /review or @review in a PR comment
+  issue_comment:
+    types: [created]
+
+  # Allow manual review requests from maintainers
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull Request number to review'
+        required: true
+        type: number
+
+  # Trigger when maintainers request review
+  pull_request_review:
+    types: [submitted]
+
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Only run if:
+    # 1. PR was just opened (automatic), OR
+    # 2. Manual comment trigger (/review or @review) from collaborator on a PR, OR
+    # 3. Manual workflow_dispatch trigger from collaborator, OR
+    # 4. Review submitted by collaborator
+    if: |
+      (github.event_name == 'pull_request' && github.event.action == 'opened') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       (contains(github.event.comment.body, '/review') || contains(github.event.comment.body, '@review')) &&
+       contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.triggering_actor)) ||
+      (github.event_name == 'pull_request_review' && contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.review.author_association))
 
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write  # Required for Claude to run bash commands (make, go test, etc.)
       pull-requests: read
       issues: read
       id-token: write
@@ -38,7 +64,7 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
 
             Please review this pull request and provide feedback on:
             - Code quality and best practices
