@@ -53,7 +53,7 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Explicitly use the repository's Claude Code settings file
-          # This ensures Claude has the correct permissions for make check and other dev tools
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/configuration.md
-          settings: '.claude/settings.json'
+          # Allow all Bash commands (wildcard patterns like Bash(*) don't work per Issue #462)
+          # This enables Claude to run make check, go test, and other dev commands
+          # See https://github.com/anthropics/claude-code/issues/462
+          claude_args: '--allowed-tools "Bash"'
