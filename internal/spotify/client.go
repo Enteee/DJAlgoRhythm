@@ -333,6 +333,59 @@ func (c *Client) SearchTrack(ctx context.Context, query string) ([]core.Track, e
 	return c.rankTracks(tracks, query), nil
 }
 
+// SearchTrackByISRC searches for a track on Spotify using an ISRC code.
+func (c *Client) SearchTrackByISRC(ctx context.Context, isrc string) (*core.Track, error) {
+	if c.client == nil {
+		return nil, errors.New("client not authenticated")
+	}
+
+	// Build ISRC search query.
+	query := "isrc:" + isrc
+
+	results, err := c.searchWithFiltering(ctx, query, spotify.SearchTypeTrack)
+	if err != nil {
+		return nil, fmt.Errorf("ISRC search failed: %w", err)
+	}
+
+	if results.Tracks == nil || len(results.Tracks.Tracks) == 0 {
+		return nil, errors.New("no track found for ISRC")
+	}
+
+	// Log warning if multiple tracks found for the same ISRC.
+	if len(results.Tracks.Tracks) > 1 {
+		c.logger.Warn("Multiple tracks found for ISRC, using first result",
+			zap.String("isrc", isrc),
+			zap.Int("count", len(results.Tracks.Tracks)))
+	}
+
+	// ISRC should return exactly one match.
+	coreTrack := c.convertSpotifyTrack(&results.Tracks.Tracks[0])
+	return &coreTrack, nil
+}
+
+// SearchTrackByTitleArtist searches for a track on Spotify using title and artist.
+func (c *Client) SearchTrackByTitleArtist(ctx context.Context, title, artist string) (*core.Track, error) {
+	if c.client == nil {
+		return nil, errors.New("client not authenticated")
+	}
+
+	// Build query combining title and artist.
+	query := fmt.Sprintf("%s %s", title, artist)
+
+	results, err := c.searchWithFiltering(ctx, query, spotify.SearchTypeTrack)
+	if err != nil {
+		return nil, fmt.Errorf("title/artist search failed: %w", err)
+	}
+
+	if results.Tracks == nil || len(results.Tracks.Tracks) == 0 {
+		return nil, errors.New("no track found for title/artist")
+	}
+
+	// Return the top result (most relevant).
+	coreTrack := c.convertSpotifyTrack(&results.Tracks.Tracks[0])
+	return &coreTrack, nil
+}
+
 // SearchPlaylist searches for playlists based on a query string.
 func (c *Client) SearchPlaylist(ctx context.Context, query string) ([]core.Playlist, error) {
 	results, err := c.searchWithFiltering(ctx, query, spotify.SearchTypePlaylist)

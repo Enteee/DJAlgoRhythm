@@ -42,7 +42,7 @@ Spotify link into your Telegram group, and watch as the bot automatically adds i
 ### 🎵 **Smart Music Detection**
 
 - **Spotify Links** → Instant playlist addition
-- **YouTube/Apple Music** → AI-powered song matching
+- **Cross-Platform Links** → Smart matching with confirmation (YouTube, Apple Music, Tidal, Beatport, Amazon Music, SoundCloud)
 - **Free Text** → *"play some chill lofi beats"* → Perfect track selection
 
 ### 🤖 **AI-Powered Disambiguation**
@@ -283,10 +283,20 @@ On first startup, DJAlgoRhythm will guide you through Spotify OAuth:
 | Type | Example | What Happens |
 |------|---------|--------------|
 | **🔗 Spotify Link** | `https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC` | ⚡ **Instant add** (if not duplicate) |
-| **🎥 YouTube/Apple Music** | `https://www.youtube.com/watch?v=dQw4w9WgXcQ` | 🤔 **"Which song do you mean?"** |
+| **🎥 Cross-Platform Link** | `https://www.youtube.com/watch?v=dQw4w9WgXcQ` | 🔍 **Resolves → Shows match** → 👍 confirm |
 | **💬 Natural Language** | `"play some chill arctic monkeys"` | 🤖 **AI figures it out** → 👍 confirm |
 
 </div>
+
+> **Supported Music Platforms:** YouTube, YouTube Music, Apple Music, Tidal, Beatport, Amazon Music, SoundCloud
+>
+> **Technical Details:**
+>
+> - **API-Based Providers** (reliable, fast): YouTube (oEmbed), SoundCloud (oEmbed),
+>   Apple Music (iTunes Lookup API with ISRC support)
+> - **HTML Scraping Providers** (may break if provider changes page structure):
+>   Tidal, Beatport, Amazon Music
+> - All providers include graceful fallback to AI disambiguation on failure
 
 ### 💡 **Real Examples**
 
@@ -305,11 +315,20 @@ Bot: 🎵 Did you mean Taylor Swift - Anti-Hero (2022)?
      React 👍 to add or 👎 to skip
 ```
 
-#### YouTube/Apple Music → Smart conversion
+#### Cross-Platform Links → Smart Matching
 
 ```text
 User: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-Bot: 🤔 I found a YouTube link! Which track do you want from it?
+Bot: 🎵 Found: Rick Astley - Never Gonna Give You Up (1987)
+     React 👍 to add or 👎 to skip
+
+User: https://www.beatport.com/track/love-songs-feat-kosmo-kint/21977538
+Bot: 🎵 Found: Prospa, Kosmo Kint - Love Songs (feat. Kosmo Kint) (Extended Mix)
+     React 👍 to add or 👎 to skip
+
+User: https://soundcloud.com/rick-astley-official/never-gonna-give-you-up-4
+Bot: 🎵 Found: Rick Astley - Never Gonna Give You Up
+     React 👍 to add or 👎 to skip
 ```
 
 ### 🎮 **How Users Interact**
@@ -326,22 +345,25 @@ Bot: 🤔 I found a YouTube link! Which track do you want from it?
 graph TD
     A["💬 User sends message"] --> B{"🤔 What type?"}
     B -->|"🔗 Spotify Link"| C1["🔍 Check for duplicates"]
-    B -->|"🎥 YouTube/Apple"| D["💬 Ask: Which song?"]
+    B -->|"🎥 Cross-Platform Link"| C3["🔍 Resolve & match to Spotify"]
     B -->|"💭 Free text"| E["🤖 4-stage LLM disambiguation"]
 
-    C1 -->|"New track"| C2{"🛡️ Admin approval required?"}
-    C1 -->|"Duplicate"| REJECT["❌ Already in playlist"]
+    C3 -->|"Success"| CONFIRM["👍 User confirms track?"]
+    C3 -->|"Failed"| D["💬 Ask: Which song?"]
 
-    E --> F["📋 LLM provides ranked candidates"]
-    F --> G["👍 User confirms track?"]
-    G -->|"Yes"| C2
-    G -->|"No"| D
+    C1 -->|"New track"| C2{"🛡️ Admin approval required?"}
+    C1 -->|"Duplicate"| REJECT_DUP["❌ Duplicate track"]
+
+    E --> CONFIRM
+
+    CONFIRM -->|"Yes"| C1
+    CONFIRM -->|"No"| D
 
     C2 -->|"Yes"| ADMIN["⏳ Await admin/community approval"]
-    C2 -->|"No (or approved)"| PRIORITY{"👑 Admin priority request?"}
+    C2 -->|"No"| PRIORITY{"👑 Admin priority request?"}
 
     ADMIN -->|"Approved"| PRIORITY
-    ADMIN -->|"Denied"| REJECT
+    ADMIN -->|"Denied"| REJECT_DENY["❌ Track rejected"]
 
     PRIORITY -->|"Yes"| QUEUE["⚡ Add to queue (play next)"]
     PRIORITY -->|"No"| PLAYLIST["➕ Add to playlist"]
@@ -353,7 +375,10 @@ graph TD
     style QUEUE fill:#FF6B35
     style J fill:#1DB954
     style A fill:#26A5E4
-    style REJECT fill:#FF4444
+    style REJECT_DUP fill:#FF4444
+    style REJECT_DENY fill:#FF4444
+    style CONFIRM fill:#E67E22
+    style C3 fill:#9B59B6
 ```
 
 ## Configuration

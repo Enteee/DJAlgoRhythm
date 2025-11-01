@@ -18,6 +18,11 @@ import (
 func (d *Dispatcher) askWhichSong(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	msgCtx.State = StateAskWhichSong
 
+	// React with thumbs down to indicate clarification needed.
+	if err := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsDownReaction); err != nil {
+		d.logger.Debug("Failed to react with thumbs down", zap.Error(err))
+	}
+
 	message := d.formatMessageWithMention(originalMsg, d.localizer.T("prompt.which_song"))
 	_, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, message)
 	if err != nil {
@@ -125,7 +130,7 @@ func (d *Dispatcher) performTargetedSpotifySearch(ctx context.Context, rankedTra
 			break
 		}
 
-		tracks := d.searchSpotifyForTrack(ctx, &track)
+		tracks := d.searchSpotifyForLLMCandidate(ctx, &track)
 		allSpotifyTracks = append(allSpotifyTracks, tracks...)
 	}
 
@@ -135,8 +140,8 @@ func (d *Dispatcher) performTargetedSpotifySearch(ctx context.Context, rankedTra
 	return allSpotifyTracks
 }
 
-// searchSpotifyForTrack searches Spotify for a specific track and returns top results.
-func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, track *Track) []Track {
+// searchSpotifyForLLMCandidate searches Spotify for a specific track and returns top results.
+func (d *Dispatcher) searchSpotifyForLLMCandidate(ctx context.Context, track *Track) []Track {
 	searchQuery := fmt.Sprintf("%s %s", track.Artist, track.Title)
 	d.logger.Debug("Searching Spotify", zap.String("query", searchQuery))
 
