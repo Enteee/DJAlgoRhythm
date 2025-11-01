@@ -101,8 +101,38 @@ func (r *BeatportResolver) extractTrackInfo(html string) (title, artist string, 
 
 // extractFromTitleTag extracts track info from the HTML <title> tag.
 func (r *BeatportResolver) extractFromTitleTag(html string) (title, artist string) {
-	// Beatport title format: "Track Title (Original Mix) by Artist1, Artist2 on Beatport".
-	return extractTitleAndArtistFromTitleTag(html, " on Beatport", " by ")
+	// Beatport title format: "Artist1, Artist2 - Track Title | Music & Downloads on Beatport".
+	// Note: Artist comes BEFORE the track title, separated by " - ".
+	titleTagRegex := regexp.MustCompile(`<title[^>]*>([^<]+)</title>`)
+	matches := titleTagRegex.FindStringSubmatch(html)
+	if len(matches) < minTitleTagMatches {
+		return "", ""
+	}
+
+	titleText := matches[1]
+
+	// Remove Beatport suffix (can include HTML entities like &amp;).
+	const beatportSuffixPattern = ` \| Music (&amp;|&) Downloads on Beatport`
+	suffixRegex := regexp.MustCompile(beatportSuffixPattern)
+	titleText = suffixRegex.ReplaceAllString(titleText, "")
+	titleText = strings.TrimSpace(titleText)
+
+	// Split by " - " to separate artist(s) from track title.
+	if !strings.Contains(titleText, " - ") {
+		// No separator found, can't parse this format.
+		return "", ""
+	}
+
+	parts := strings.SplitN(titleText, " - ", expectedSplitParts)
+	if len(parts) != expectedSplitParts {
+		return "", ""
+	}
+
+	// In Beatport format: Artist(s) - Track Title.
+	artist = strings.TrimSpace(parts[0])
+	title = strings.TrimSpace(parts[1])
+
+	return title, artist
 }
 
 // extractFromMetaTags extracts track info from OpenGraph or Twitter meta tags.
