@@ -86,6 +86,30 @@ func getParseMessageTestData() []struct {
 			core.MessageTypeNonSpotifyLink,
 			[]string{"https://music.apple.com/us/album/nevermind/1440783617"},
 		},
+		{
+			"YouTube Music link",
+			"https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+			core.MessageTypeNonSpotifyLink,
+			[]string{"https://music.youtube.com/watch?v=dQw4w9WgXcQ"},
+		},
+		{
+			"Tidal link",
+			"https://tidal.com/browse/track/123456",
+			core.MessageTypeNonSpotifyLink,
+			[]string{"https://tidal.com/browse/track/123456"},
+		},
+		{
+			"Beatport link",
+			"https://www.beatport.com/track/example/123456",
+			core.MessageTypeNonSpotifyLink,
+			[]string{"https://www.beatport.com/track/example/123456"},
+		},
+		{
+			"Amazon Music link",
+			"https://music.amazon.com/albums/B123456",
+			core.MessageTypeNonSpotifyLink,
+			[]string{"https://music.amazon.com/albums/B123456"},
+		},
 		{"Free text song request", "play never gonna give you up by rick astley", core.MessageTypeFreeText, []string{}},
 		{
 			"Text with regular URL",

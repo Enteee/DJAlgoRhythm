@@ -83,7 +83,7 @@ func (d *Dispatcher) promptEnhancedApproval(ctx context.Context, msgCtx *Message
 	if approved {
 		d.handleEnhancedApproval(ctx, msgCtx, originalMsg)
 	} else {
-		d.handleRejection(ctx, msgCtx, originalMsg)
+		d.askWhichSong(ctx, msgCtx, originalMsg)
 	}
 }
 
@@ -124,16 +124,6 @@ func (d *Dispatcher) handleEnhancedApproval(ctx context.Context, msgCtx *Message
 	}
 
 	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
-}
-
-// handleRejection processes user rejection.
-func (d *Dispatcher) handleRejection(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
-	// React with thumbs down to provide visual feedback for rejection
-	if reactErr := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsDownReaction); reactErr != nil {
-		d.logger.Error("Failed to react with thumbs down", zap.Error(reactErr))
-	}
-
-	d.askWhichSong(ctx, msgCtx, originalMsg)
 }
 
 // isAdminApprovalRequired checks if admin approval is enabled.

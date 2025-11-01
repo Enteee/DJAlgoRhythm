@@ -343,8 +343,11 @@ func initializeServices(ctx context.Context) (*services, error) {
 		return nil, fmt.Errorf("failed to authenticate with Spotify: %w", authErr)
 	}
 
+	// Create music link manager for multi-provider support.
+	musicLinkMgr := core.NewMusicLinkManagerAdapter()
+
 	httpServer := httpserver.NewServer(&config.Server, logger.Named("http"))
-	dispatcher := core.NewDispatcher(config, frontend, spotifyClient, llmProvider, dedup,
+	dispatcher := core.NewDispatcher(config, frontend, spotifyClient, llmProvider, dedup, musicLinkMgr,
 		logger.Named("dispatcher"))
 
 	return &services{
