@@ -282,7 +282,7 @@ func (d *Dispatcher) handleNonSpotifyLink(ctx context.Context, msgCtx *MessageCo
 	}
 
 	// Try to find the track on Spotify.
-	trackID, err := d.searchSpotifyForTrack(ctx, trackInfo)
+	track, err := d.searchSpotifyForTrack(ctx, trackInfo)
 	if err != nil {
 		d.logger.Warn("Failed to find track on Spotify, falling back to AI disambiguation",
 			zap.String("url", linkURL),
@@ -294,17 +294,18 @@ func (d *Dispatcher) handleNonSpotifyLink(ctx context.Context, msgCtx *MessageCo
 	}
 
 	// Check for duplicates.
-	if d.dedup.Has(trackID) {
+	if d.dedup.Has(track.ID) {
 		d.reactDuplicate(ctx, msgCtx, originalMsg)
 		return
 	}
 
-	// Add to playlist.
-	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
+	// Store track and prompt for user approval.
+	msgCtx.Candidates = []Track{*track}
+	d.promptEnhancedApproval(ctx, msgCtx, originalMsg, track)
 }
 
 // searchSpotifyForTrack searches for a track on Spotify using the provided track information.
-func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *MusicLinkTrackInfo) (string, error) {
+func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *MusicLinkTrackInfo) (*Track, error) {
 	// If we have an ISRC, use that for exact matching.
 	if trackInfo.ISRC != "" {
 		// Check if the Spotify client supports ISRC search.
@@ -318,7 +319,7 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 					zap.String("trackID", track.ID),
 					zap.String("title", track.Title),
 					zap.String("artist", track.Artist))
-				return track.ID, nil
+				return track, nil
 			}
 			d.logger.Debug("ISRC search failed, falling back to title/artist search",
 				zap.String("isrc", trackInfo.ISRC),
@@ -328,7 +329,7 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 
 	// Fall back to title/artist search.
 	if trackInfo.Title == "" {
-		return "", errors.New("no title available for search")
+		return nil, errors.New("no title available for search")
 	}
 
 	// Check if the Spotify client supports title/artist search.
@@ -337,10 +338,10 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 	}); ok {
 		track, err := spotifyClient.SearchTrackByTitleArtist(ctx, trackInfo.Title, trackInfo.Artist)
 		if err != nil {
-			return "", fmt.Errorf("title/artist search failed: %w", err)
+			return nil, fmt.Errorf("title/artist search failed: %w", err)
 		}
 		if track == nil {
-			return "", errors.New("no track found for title/artist")
+			return nil, errors.New("no track found for title/artist")
 		}
 
 		d.logger.Info("Found track on Spotify using title/artist",
@@ -350,10 +351,10 @@ func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *Music
 			zap.String("foundTitle", track.Title),
 			zap.String("foundArtist", track.Artist))
 
-		return track.ID, nil
+		return track, nil
 	}
 
-	return "", errors.New("spotify client does not support enhanced search methods")
+	return nil, errors.New("spotify client does not support enhanced search methods")
 }
 
 // cleanupContext removes message context from memory.
