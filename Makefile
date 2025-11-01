@@ -396,7 +396,11 @@ release: ## Build and push release with GoReleaser
 
 docker-tag-latest: ## Tag snapshot Docker images as latest
 	@echo "Tagging snapshot images as latest..."
-	@SNAPSHOT_TAG=$$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.0")-$$(git rev-parse --short HEAD); \
+	@if [ ! -f dist/metadata.json ]; then \
+		echo "ERROR: dist/metadata.json not found. Run 'make snapshot-release' first."; \
+		exit 1; \
+	fi
+	@SNAPSHOT_TAG=$$(jq -r '.version' dist/metadata.json); \
 	echo "Snapshot tag: $$SNAPSHOT_TAG"; \
 	docker buildx imagetools create \
 		-t enteee/djalgorhythm:latest \

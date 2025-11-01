@@ -32,6 +32,9 @@ let
     # Make
     gnumake
 
+    # jq
+    jq
+
     # Go development tools
     go-tools
     gotools
