@@ -402,10 +402,12 @@ docker-tag-latest: ## Tag snapshot Docker images as latest
 	fi
 	@SNAPSHOT_TAG=$$(jq -r '.version' dist/metadata.json); \
 	echo "Snapshot tag: $$SNAPSHOT_TAG"; \
+	echo "Creating multi-arch manifest from platform-specific images..."; \
 	docker buildx imagetools create \
 		-t enteee/djalgorhythm:latest \
 		-t ghcr.io/enteee/djalgorhythm:latest \
-		enteee/djalgorhythm:$$SNAPSHOT_TAG || true
+		enteee/djalgorhythm:$$SNAPSHOT_TAG-amd64 \
+		enteee/djalgorhythm:$$SNAPSHOT_TAG-arm64 || true
 
 ci-build: ## Build for CI
 	@echo "Building for CI..."
