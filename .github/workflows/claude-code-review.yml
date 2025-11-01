@@ -11,8 +11,7 @@ name: Claude Code Review
     #   - "src/**/*.js"
     #   - "src/**/*.jsx"
 
-  # Allow manual review requests from maintainers via comments
-  # Use: /review or @review in a PR comment
+  # Allow manual review requests via /review in PR comments
   issue_comment:
     types: [created]
 
@@ -24,26 +23,11 @@ name: Claude Code Review
         required: true
         type: number
 
-  # Trigger when maintainers request review
-  pull_request_review:
-    types: [submitted]
-
 jobs:
   claude-review:
-    # Only run if:
-    # 1. PR was just opened (automatic), OR
-    # 2. Manual comment trigger (/review or @review) from collaborator on a PR, OR
-    # 3. Manual workflow_dispatch trigger from collaborator, OR
-    # 4. Review submitted by collaborator
-    if: |
-      (github.event_name == 'pull_request' && github.event.action == 'opened') ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       (contains(github.event.comment.body, '/review') || contains(github.event.comment.body, '@review')) &&
-       contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'workflow_dispatch' && contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.triggering_actor)) ||
-      (github.event_name == 'pull_request_review' && contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.review.author_association))
-
+    # Automatically reviews newly opened PRs
+    # Can also be manually triggered via /review in PR comments
+    # The claude-code-action handles trigger phrase filtering internally
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for Claude to run bash commands (make, go test, etc.)
@@ -62,6 +46,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          trigger_phrase: '/review'
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
