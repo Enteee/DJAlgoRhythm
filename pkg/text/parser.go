@@ -53,9 +53,6 @@ var (
 		"beatport.com":      true,
 		"music.amazon.com":  true, // Amazon Music (various TLDs handled by prefix check).
 		"soundcloud.com":    true,
-		"bandcamp.com":      true,
-		"tiktok.com":        true,
-		"instagram.com":     true,
 	}
 )
 
