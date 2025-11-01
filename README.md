@@ -342,8 +342,7 @@ graph TD
     C1 -->|"New track"| C2{"🛡️ Admin approval required?"}
     C1 -->|"Duplicate"| REJECT["❌ Already in playlist"]
 
-    E --> F["📋 LLM provides ranked candidates"]
-    F --> CONFIRM
+    E --> CONFIRM
 
     CONFIRM -->|"Yes"| C1
     CONFIRM -->|"No"| D
