@@ -8,12 +8,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const (
-	// BeatportRequestTimeout is the timeout for Beatport page requests.
-	BeatportRequestTimeout = 10 * time.Second
 	// BeatportMaxReadSize limits the amount of HTML we read.
 	BeatportMaxReadSize = 102400 // 100 KB should be enough for metadata.
 )
@@ -26,9 +23,7 @@ type BeatportResolver struct {
 // NewBeatportResolver creates a new Beatport link resolver.
 func NewBeatportResolver() *BeatportResolver {
 	return &BeatportResolver{
-		client: &http.Client{
-			Timeout: BeatportRequestTimeout,
-		},
+		client: newHTTPClient(),
 	}
 }
 

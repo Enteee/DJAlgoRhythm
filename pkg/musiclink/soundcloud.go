@@ -2,20 +2,16 @@ package musiclink
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const (
 	// SoundCloudOEmbedURL is the SoundCloud oEmbed API endpoint.
 	SoundCloudOEmbedURL = "https://soundcloud.com/oembed"
-	// SoundCloudRequestTimeout is the timeout for SoundCloud API requests.
-	SoundCloudRequestTimeout = 10 * time.Second
 	// soundcloudExpectedSplitParts is the expected number of parts when splitting title by " by ".
 	soundcloudExpectedSplitParts = 2
 )
@@ -35,9 +31,7 @@ type SoundCloudResolver struct {
 // NewSoundCloudResolver creates a new SoundCloud link resolver.
 func NewSoundCloudResolver() *SoundCloudResolver {
 	return &SoundCloudResolver{
-		client: &http.Client{
-			Timeout: SoundCloudRequestTimeout,
-		},
+		client: newHTTPClient(),
 	}
 }
 
@@ -79,34 +73,11 @@ func (r *SoundCloudResolver) Resolve(ctx context.Context, rawURL string) (*Track
 }
 
 // fetchOEmbed fetches metadata from SoundCloud's oEmbed API.
-//
-//nolint:dupl // oEmbed fetching logic intentionally similar across resolvers; platform-specific response types prevent extraction.
 func (r *SoundCloudResolver) fetchOEmbed(ctx context.Context, trackURL string) (*SoundCloudOEmbedResponse, error) {
-	// Build oEmbed request URL.
-	reqURL := fmt.Sprintf("%s?url=%s&format=json", SoundCloudOEmbedURL, url.QueryEscape(trackURL))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oEmbed API returned status %d", resp.StatusCode)
-	}
-
 	var oembedResp SoundCloudOEmbedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&oembedResp); err != nil {
-		return nil, fmt.Errorf("failed to decode oEmbed response: %w", err)
+	if err := fetchOEmbedJSON(ctx, r.client, SoundCloudOEmbedURL, trackURL, &oembedResp); err != nil {
+		return nil, err
 	}
-
 	return &oembedResp, nil
 }
 

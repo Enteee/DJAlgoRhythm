@@ -8,12 +8,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const (
-	// TidalRequestTimeout is the timeout for Tidal page requests.
-	TidalRequestTimeout = 10 * time.Second
 	// TidalMaxReadSize limits the amount of HTML we read.
 	TidalMaxReadSize = 102400 // 100 KB should be enough for metadata.
 )
@@ -26,9 +23,7 @@ type TidalResolver struct {
 // NewTidalResolver creates a new Tidal link resolver.
 func NewTidalResolver() *TidalResolver {
 	return &TidalResolver{
-		client: &http.Client{
-			Timeout: TidalRequestTimeout,
-		},
+		client: newHTTPClient(),
 	}
 }
 

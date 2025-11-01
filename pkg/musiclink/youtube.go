@@ -2,21 +2,17 @@ package musiclink
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const (
 	// YouTubeOEmbedURL is the YouTube oEmbed API endpoint.
 	YouTubeOEmbedURL = "https://www.youtube.com/oembed"
-	// YouTubeRequestTimeout is the timeout for YouTube API requests.
-	YouTubeRequestTimeout = 10 * time.Second
 	// youtubeExpectedSplitParts is the expected number of parts when splitting title/artist strings.
 	youtubeExpectedSplitParts = 2
 	// youtubeShortDomain is the shortened YouTube domain.
@@ -37,9 +33,7 @@ type YouTubeResolver struct {
 // NewYouTubeResolver creates a new YouTube link resolver.
 func NewYouTubeResolver() *YouTubeResolver {
 	return &YouTubeResolver{
-		client: &http.Client{
-			Timeout: YouTubeRequestTimeout,
-		},
+		client: newHTTPClient(),
 	}
 }
 
@@ -117,34 +111,11 @@ func (r *YouTubeResolver) extractVideoID(rawURL string) (string, error) {
 }
 
 // fetchOEmbed fetches metadata from YouTube's oEmbed API.
-//
-//nolint:dupl // oEmbed fetching logic intentionally similar across resolvers; platform-specific response types prevent extraction.
 func (r *YouTubeResolver) fetchOEmbed(ctx context.Context, videoURL string) (*YouTubeOEmbedResponse, error) {
-	// Build oEmbed request URL.
-	reqURL := fmt.Sprintf("%s?url=%s&format=json", YouTubeOEmbedURL, url.QueryEscape(videoURL))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("oEmbed API returned status %d", resp.StatusCode)
-	}
-
 	var oembedResp YouTubeOEmbedResponse
-	if err := json.NewDecoder(resp.Body).Decode(&oembedResp); err != nil {
-		return nil, fmt.Errorf("failed to decode oEmbed response: %w", err)
+	if err := fetchOEmbedJSON(ctx, r.client, YouTubeOEmbedURL, videoURL, &oembedResp); err != nil {
+		return nil, err
 	}
-
 	return &oembedResp, nil
 }
 

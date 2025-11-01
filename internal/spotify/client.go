@@ -351,6 +351,13 @@ func (c *Client) SearchTrackByISRC(ctx context.Context, isrc string) (*core.Trac
 		return nil, errors.New("no track found for ISRC")
 	}
 
+	// Log warning if multiple tracks found for the same ISRC.
+	if len(results.Tracks.Tracks) > 1 {
+		c.logger.Warn("Multiple tracks found for ISRC, using first result",
+			zap.String("isrc", isrc),
+			zap.Int("count", len(results.Tracks.Tracks)))
+	}
+
 	// ISRC should return exactly one match.
 	coreTrack := c.convertSpotifyTrack(&results.Tracks.Tracks[0])
 	return &coreTrack, nil

@@ -8,14 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 const (
 	// iTunesLookupURL is the iTunes/Apple Music API lookup endpoint.
 	iTunesLookupURL = "https://itunes.apple.com/lookup"
-	// AppleMusicRequestTimeout is the timeout for Apple Music API requests.
-	AppleMusicRequestTimeout = 10 * time.Second
 )
 
 // iTunesLookupResponse represents the response from iTunes lookup API.
@@ -40,9 +37,7 @@ type AppleMusicResolver struct {
 // NewAppleMusicResolver creates a new Apple Music link resolver.
 func NewAppleMusicResolver() *AppleMusicResolver {
 	return &AppleMusicResolver{
-		client: &http.Client{
-			Timeout: AppleMusicRequestTimeout,
-		},
+		client: newHTTPClient(),
 	}
 }
 

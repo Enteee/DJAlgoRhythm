@@ -8,12 +8,9 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const (
-	// AmazonMusicRequestTimeout is the timeout for Amazon Music page requests.
-	AmazonMusicRequestTimeout = 10 * time.Second
 	// AmazonMusicMaxReadSize limits the amount of HTML we read.
 	AmazonMusicMaxReadSize = 102400 // 100 KB should be enough for metadata.
 )
@@ -26,9 +23,7 @@ type AmazonMusicResolver struct {
 // NewAmazonMusicResolver creates a new Amazon Music link resolver.
 func NewAmazonMusicResolver() *AmazonMusicResolver {
 	return &AmazonMusicResolver{
-		client: &http.Client{
-			Timeout: AmazonMusicRequestTimeout,
-		},
+		client: newHTTPClient(),
 	}
 }
 
@@ -111,19 +106,25 @@ func (r *AmazonMusicResolver) extractFromMetaTags(html string) (title, artist st
 // extractArtistFromDescription extracts artist name from og:description meta tag content.
 func (r *AmazonMusicResolver) extractArtistFromDescription(desc string) string {
 	// Description often contains artist info (e.g., "Song by Artist on Amazon Music").
-	if !strings.Contains(strings.ToLower(desc), " by ") {
+	// Use case-insensitive search.
+	lowerDesc := strings.ToLower(desc)
+	if !strings.Contains(lowerDesc, " by ") {
 		return ""
 	}
 
-	parts := strings.SplitN(desc, " by ", expectedSplitParts)
-	if len(parts) != expectedSplitParts {
+	// Find the position of " by " (case-insensitive) in the original string.
+	byIndex := strings.Index(lowerDesc, " by ")
+	if byIndex == -1 {
 		return ""
 	}
 
-	// Further split on " on Amazon Music" if present.
-	artistPart := parts[1]
-	if strings.Contains(artistPart, " on Amazon Music") {
-		artistPart = strings.SplitN(artistPart, " on Amazon Music", expectedSplitParts)[0]
+	// Extract artist part after " by " from original string (preserves case).
+	artistPart := desc[byIndex+4:] // +4 to skip " by ".
+
+	// Remove " on Amazon Music" suffix if present (case-insensitive).
+	lowerArtist := strings.ToLower(artistPart)
+	if idx := strings.Index(lowerArtist, " on amazon music"); idx != -1 {
+		artistPart = artistPart[:idx]
 	}
 
 	return strings.TrimSpace(artistPart)
