@@ -49,6 +49,5 @@ jobs:
 
           # Explicitly use the repository's Claude Code settings file
           # This ensures Claude has the correct permissions for make check and other dev tools
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
-          claude_args: '--settings .claude/settings.json'
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/configuration.md
+          settings: '.claude/settings.json'
