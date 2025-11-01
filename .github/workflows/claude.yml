@@ -12,24 +12,7 @@ name: Claude Code
 
 jobs:
   claude:
-    # Only run if @claude is mentioned AND the user is a repository member/collaborator/owner
-    if: |
-      (github.event_name == 'issue_comment' &&
-       contains(github.event.comment.body, '@claude') &&
-       contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review_comment' &&
-       contains(github.event.comment.body, '@claude') &&
-       contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.comment.author_association)) ||
-      (github.event_name == 'pull_request_review' &&
-       contains(github.event.review.body, '@claude') &&
-       contains(fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'), github.event.review.author_association)) ||
-      (github.event_name == 'issues' &&
-       (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
-       contains(
-         fromJSON('["COLLABORATOR", "MEMBER", "OWNER"]'),
-         github.event.sender.type == 'User' && github.actor == github.event.issue.user.login ?
-           github.event.issue.author_association : 'NONE'
-       ))
+    # The claude-code-action handles trigger phrase filtering internally
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for Claude to run bash commands (make, go test, etc.)
