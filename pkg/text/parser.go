@@ -44,13 +44,18 @@ var (
 	}
 
 	nonSpotifyMusicDomains = map[string]bool{
-		"youtube.com":     true,
-		"youtu.be":        true,
-		"music.apple.com": true,
-		"soundcloud.com":  true,
-		"bandcamp.com":    true,
-		"tiktok.com":      true,
-		"instagram.com":   true,
+		"youtube.com":       true,
+		"youtu.be":          true,
+		"music.youtube.com": true, // YouTube Music.
+		"music.apple.com":   true,
+		"itunes.apple.com":  true, // Legacy Apple Music/iTunes.
+		"tidal.com":         true,
+		"beatport.com":      true,
+		"music.amazon.com":  true, // Amazon Music (various TLDs handled by prefix check).
+		"soundcloud.com":    true,
+		"bandcamp.com":      true,
+		"tiktok.com":        true,
+		"instagram.com":     true,
 	}
 )
 
@@ -196,15 +201,37 @@ func (p *Parser) isMusicURL(rawURL string) bool {
 
 	hostname := strings.ToLower(u.Hostname())
 
+	// Normalize various YouTube domains.
 	if hostname == "www.youtube.com" || hostname == "m.youtube.com" {
 		hostname = "youtube.com"
 	}
 
+	// Normalize TikTok domains.
 	if hostname == "www.tiktok.com" || hostname == "vm.tiktok.com" {
 		hostname = "tiktok.com"
 	}
 
-	return nonSpotifyMusicDomains[hostname]
+	// Normalize Tidal domain.
+	if hostname == "www.tidal.com" {
+		hostname = "tidal.com"
+	}
+
+	// Normalize Beatport domain.
+	if hostname == "www.beatport.com" {
+		hostname = "beatport.com"
+	}
+
+	// Check exact match in the whitelist.
+	if nonSpotifyMusicDomains[hostname] {
+		return true
+	}
+
+	// Check for Amazon Music domains (music.amazon.*).
+	if strings.HasPrefix(hostname, "music.amazon.") {
+		return true
+	}
+
+	return false
 }
 
 // resolveShortURL resolves shortened URLs to their final destination.

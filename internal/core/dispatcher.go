@@ -12,15 +12,31 @@ import (
 	"djalgorhythm/internal/i18n"
 )
 
+// MusicLinkResolver defines the interface for resolving music links from various providers.
+type MusicLinkResolver interface {
+	// Resolve attempts to resolve a music link to track information.
+	Resolve(ctx context.Context, url string) (*MusicLinkTrackInfo, error)
+	// CanResolve checks if this resolver can handle the given URL.
+	CanResolve(url string) bool
+}
+
+// MusicLinkTrackInfo holds track information extracted from a music provider link.
+type MusicLinkTrackInfo struct {
+	Title  string // Track title.
+	Artist string // Artist name(s).
+	ISRC   string // International Standard Recording Code (if available).
+}
+
 // Dispatcher handles messages from any chat frontend using the unified interface.
 type Dispatcher struct {
-	config    *Config
-	frontend  chat.Frontend
-	spotify   SpotifyClient
-	llm       LLMProvider
-	dedup     DedupStore
-	logger    *zap.Logger
-	localizer *i18n.Localizer
+	config         *Config
+	frontend       chat.Frontend
+	spotify        SpotifyClient
+	llm            LLMProvider
+	dedup          DedupStore
+	logger         *zap.Logger
+	localizer      *i18n.Localizer
+	musicLinkMgr   MusicLinkResolver // Music link resolver for multi-provider support.
 
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
@@ -57,6 +73,7 @@ func NewDispatcher(
 	spotify SpotifyClient,
 	llm LLMProvider,
 	dedup DedupStore,
+	musicLinkMgr MusicLinkResolver,
 	logger *zap.Logger,
 ) *Dispatcher {
 	d := &Dispatcher{
@@ -65,6 +82,7 @@ func NewDispatcher(
 		spotify:                 spotify,
 		llm:                     llm,
 		dedup:                   dedup,
+		musicLinkMgr:            musicLinkMgr,
 		logger:                  logger,
 		localizer:               i18n.NewLocalizer(config.App.Language),
 		warningManager:          NewAdminWarningManager(frontend, logger),
@@ -176,7 +194,7 @@ func (d *Dispatcher) processMessage(ctx context.Context, msgCtx *MessageContext,
 	case MessageTypeSpotifyLink:
 		d.handleSpotifyLink(ctx, msgCtx, originalMsg)
 	case MessageTypeNonSpotifyLink:
-		d.askWhichSong(ctx, msgCtx, originalMsg)
+		d.handleNonSpotifyLink(ctx, msgCtx, originalMsg)
 	case MessageTypeFreeText:
 		// Filter out obvious chatter
 		if d.isNotMusicRequest(ctx, msgCtx.Input.Text) {
@@ -224,6 +242,117 @@ func (d *Dispatcher) handleSpotifyLink(ctx context.Context, msgCtx *MessageConte
 	}
 
 	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
+}
+
+// handleNonSpotifyLink processes non-Spotify music links by resolving them to Spotify tracks.
+func (d *Dispatcher) handleNonSpotifyLink(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
+	if len(msgCtx.Input.URLs) == 0 {
+		d.logger.Debug("No URLs found in non-Spotify link message")
+		d.askWhichSong(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	// Try to resolve the first URL (handle one link at a time).
+	linkURL := msgCtx.Input.URLs[0]
+
+	// If no music link manager is available, fall back to AI disambiguation.
+	if d.musicLinkMgr == nil {
+		d.logger.Debug("No music link manager available, falling back to AI disambiguation")
+		d.askWhichSong(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	// Check if we can resolve this link.
+	if !d.musicLinkMgr.CanResolve(linkURL) {
+		d.logger.Debug("Music link manager cannot resolve this URL, falling back to AI disambiguation",
+			zap.String("url", linkURL))
+		d.askWhichSong(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	// Resolve the link to track information.
+	trackInfo, err := d.musicLinkMgr.Resolve(ctx, linkURL)
+	if err != nil {
+		d.logger.Warn("Failed to resolve music link, falling back to AI disambiguation",
+			zap.String("url", linkURL),
+			zap.Error(err))
+		d.askWhichSong(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	// Try to find the track on Spotify.
+	trackID, err := d.searchSpotifyForTrack(ctx, trackInfo)
+	if err != nil {
+		d.logger.Warn("Failed to find track on Spotify, falling back to AI disambiguation",
+			zap.String("url", linkURL),
+			zap.String("title", trackInfo.Title),
+			zap.String("artist", trackInfo.Artist),
+			zap.Error(err))
+		d.askWhichSong(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	// Check for duplicates.
+	if d.dedup.Has(trackID) {
+		d.reactDuplicate(ctx, msgCtx, originalMsg)
+		return
+	}
+
+	// Add to playlist.
+	d.addToPlaylist(ctx, msgCtx, originalMsg, trackID)
+}
+
+// searchSpotifyForTrack searches for a track on Spotify using the provided track information.
+func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, trackInfo *MusicLinkTrackInfo) (string, error) {
+	// If we have an ISRC, use that for exact matching.
+	if trackInfo.ISRC != "" {
+		// Check if the Spotify client supports ISRC search.
+		if spotifyClient, ok := d.spotify.(interface {
+			SearchTrackByISRC(ctx context.Context, isrc string) (*Track, error)
+		}); ok {
+			track, err := spotifyClient.SearchTrackByISRC(ctx, trackInfo.ISRC)
+			if err == nil && track != nil {
+				d.logger.Info("Found track on Spotify using ISRC",
+					zap.String("isrc", trackInfo.ISRC),
+					zap.String("trackID", track.ID),
+					zap.String("title", track.Title),
+					zap.String("artist", track.Artist))
+				return track.ID, nil
+			}
+			d.logger.Debug("ISRC search failed, falling back to title/artist search",
+				zap.String("isrc", trackInfo.ISRC),
+				zap.Error(err))
+		}
+	}
+
+	// Fall back to title/artist search.
+	if trackInfo.Title == "" {
+		return "", fmt.Errorf("no title available for search")
+	}
+
+	// Check if the Spotify client supports title/artist search.
+	if spotifyClient, ok := d.spotify.(interface {
+		SearchTrackByTitleArtist(ctx context.Context, title, artist string) (*Track, error)
+	}); ok {
+		track, err := spotifyClient.SearchTrackByTitleArtist(ctx, trackInfo.Title, trackInfo.Artist)
+		if err != nil {
+			return "", fmt.Errorf("title/artist search failed: %w", err)
+		}
+		if track == nil {
+			return "", fmt.Errorf("no track found for title/artist")
+		}
+
+		d.logger.Info("Found track on Spotify using title/artist",
+			zap.String("title", trackInfo.Title),
+			zap.String("artist", trackInfo.Artist),
+			zap.String("trackID", track.ID),
+			zap.String("foundTitle", track.Title),
+			zap.String("foundArtist", track.Artist))
+
+		return track.ID, nil
+	}
+
+	return "", fmt.Errorf("Spotify client does not support enhanced search methods")
 }
 
 // cleanupContext removes message context from memory.
