@@ -157,3 +157,187 @@ func TestYouTubeResolver_cleanTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestYouTubeResolver_extractArtist(t *testing.T) {
+	t.Helper()
+
+	resolver := NewYouTubeResolver()
+
+	tests := []struct {
+		name       string
+		title      string
+		authorName string
+		expected   string
+	}{
+		{
+			name:       "VEVO channel",
+			title:      "Never Gonna Give You Up",
+			authorName: "RickAstleyVEVO",
+			expected:   "Rick Astley",
+		},
+		{
+			name:       "Topic channel",
+			title:      "Some Song",
+			authorName: "Artist Name - Topic",
+			expected:   "Artist Name",
+		},
+		{
+			name:       "Title with separator - first part is artist",
+			title:      "Rick Astley - Never Gonna Give You Up",
+			authorName: "RickAstleyVEVO",
+			expected:   "Rick Astley",
+		},
+		{
+			name:       "Title with separator from non-VEVO channel",
+			title:      "Artist Name - Track Title",
+			authorName: "Random Channel",
+			expected:   "Artist Name",
+		},
+		{
+			name:       "No separator returns authorName",
+			title:      "Just a song title",
+			authorName: "Channel Name",
+			expected:   "Channel Name",
+		},
+		{
+			name:       "Multiple separators takes first",
+			title:      "Artist - Song - Extended Mix",
+			authorName: "Music Channel",
+			expected:   "Artist",
+		},
+		{
+			name:       "VEVO with CamelCase",
+			title:      "Some Track",
+			authorName: "JohnDoeVEVO",
+			expected:   "John Doe",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolver.extractArtist(tt.title, tt.authorName)
+			if result != tt.expected {
+				t.Errorf("extractArtist() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestYouTubeResolver_splitCamelCase(t *testing.T) {
+	t.Helper()
+
+	resolver := NewYouTubeResolver()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple CamelCase",
+			input:    "RickAstley",
+			expected: "Rick Astley",
+		},
+		{
+			name:     "Multiple words",
+			input:    "JohnDoeSmith",
+			expected: "John Doe Smith",
+		},
+		{
+			name:     "Already spaced",
+			input:    "Rick Astley",
+			expected: "Rick Astley",
+		},
+		{
+			name:     "Single word",
+			input:    "Artist",
+			expected: "Artist",
+		},
+		{
+			name:     "All lowercase",
+			input:    "rickastley",
+			expected: "rickastley",
+		},
+		{
+			name:     "Multiple consecutive capitals - no change",
+			input:    "ABCTest",
+			expected: "ABCTest",
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolver.splitCamelCase(tt.input)
+			if result != tt.expected {
+				t.Errorf("splitCamelCase() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestYouTubeResolver_parseTrackInfo(t *testing.T) {
+	t.Helper()
+
+	resolver := NewYouTubeResolver()
+
+	tests := []struct {
+		name           string
+		response       *YouTubeOEmbedResponse
+		expectedTitle  string
+		expectedArtist string
+	}{
+		{
+			name: "Standard video with VEVO channel",
+			response: &YouTubeOEmbedResponse{
+				Title:      "Rick Astley - Never Gonna Give You Up (Official Video)",
+				AuthorName: "RickAstleyVEVO",
+			},
+			expectedTitle:  "Rick Astley - Never Gonna Give You Up",
+			expectedArtist: "Rick Astley",
+		},
+		{
+			name: "Topic channel",
+			response: &YouTubeOEmbedResponse{
+				Title:      "Some Song Title",
+				AuthorName: "Artist Name - Topic",
+			},
+			expectedTitle:  "Some Song Title",
+			expectedArtist: "Artist Name",
+		},
+		{
+			name: "Title with separators and markers",
+			response: &YouTubeOEmbedResponse{
+				Title:      "Artist - Track Title (Official Music Video) [4K]",
+				AuthorName: "Music Channel",
+			},
+			expectedTitle:  "Artist - Track Title",
+			expectedArtist: "Artist",
+		},
+		{
+			name: "Clean title no markers",
+			response: &YouTubeOEmbedResponse{
+				Title:      "Simple Title",
+				AuthorName: "Channel Name",
+			},
+			expectedTitle:  "Simple Title",
+			expectedArtist: "Channel Name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			title, artist := resolver.parseTrackInfo(tt.response)
+			if title != tt.expectedTitle {
+				t.Errorf("parseTrackInfo() title = %v, want %v", title, tt.expectedTitle)
+			}
+			if artist != tt.expectedArtist {
+				t.Errorf("parseTrackInfo() artist = %v, want %v", artist, tt.expectedArtist)
+			}
+		})
+	}
+}
