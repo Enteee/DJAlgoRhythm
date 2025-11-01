@@ -24,8 +24,8 @@ jobs:
       - name: Setup devenv
         uses: ./.github/actions/setup-devenv
 
-      - name: Run tests
-        run: go test -race ./...
+      - name: Run tests with coverage
+        run: make test-ci
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -45,7 +45,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser
-        run: goreleaser release --clean
+        run: make release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CLI_EXPERIMENTAL: enabled

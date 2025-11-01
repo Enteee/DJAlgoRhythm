@@ -41,11 +41,8 @@ jobs:
       - name: Setup devenv
         uses: ./.github/actions/setup-devenv
 
-      - name: Verify dependencies
-        run: go mod verify
-
-      - name: Run tests
-        run: go test -race -coverprofile=coverage.out ./...
+      - name: Run tests with coverage
+        run: make test-ci
 
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest'
@@ -98,42 +95,28 @@ jobs:
         uses: ./.github/actions/setup-devenv
 
       - name: Run govulncheck with SARIF output
-        run: |
-          # Run govulncheck and capture exit code
-          govulncheck -format sarif ./... > govulncheck.sarif || EXIT_CODE=$?
+        run: make audit-sarif
 
-          # Check if vulnerabilities were found
-          if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" -ne 0 ]; then
-            echo "::warning::Vulnerabilities detected by govulncheck. Check the Security tab for details."
-            echo "VULNS_FOUND=true" >> $GITHUB_ENV
-          else
-            echo "No vulnerabilities found."
-            echo "VULNS_FOUND=false" >> $GITHUB_ENV
-          fi
-
-          # Always exit successfully to show as passed with warning
-          exit 0
-
-      - name: Create job summary
-        if: env.VULNS_FOUND == 'true'
-        run: |
-          echo "## ⚠️ Security Vulnerabilities Detected" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "govulncheck found potential vulnerabilities in dependencies." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📋 **Next Steps:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Review findings in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
-          echo "- Update vulnerable dependencies if fixes are available" >> $GITHUB_STEP_SUMMARY
-          echo "- Assess whether vulnerabilities affect your deployment" >> $GITHUB_STEP_SUMMARY
-
-      - name: Fix duplicate CVE tags in SARIF (workaround for golang/go#75890)
+      - name: Check for vulnerabilities and create summary
         if: always()
         run: |
-          # Deduplicate tags arrays in SARIF output to fix govulncheck bug
-          # See: https://github.com/golang/go/issues/75890
-          jq '.runs[]?.tool.driver.rules[]?.properties.tags |= unique' \
-            govulncheck.sarif > govulncheck-clean.sarif
-          mv govulncheck-clean.sarif govulncheck.sarif
+          # Check if SARIF file has vulnerabilities
+          if [ -f govulncheck.sarif ]; then
+            VULN_COUNT=$(jq '.runs[0].results | length' govulncheck.sarif 2>/dev/null || echo "0")
+            if [ "$VULN_COUNT" -gt 0 ]; then
+              echo "::warning::Vulnerabilities detected by govulncheck. Check the Security tab for details."
+              echo "## ⚠️ Security Vulnerabilities Detected" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "govulncheck found $VULN_COUNT potential vulnerabilities in dependencies." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "📋 **Next Steps:**" >> $GITHUB_STEP_SUMMARY
+              echo "- Review findings in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
+              echo "- Update vulnerable dependencies if fixes are available" >> $GITHUB_STEP_SUMMARY
+              echo "- Assess whether vulnerabilities affect your deployment" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "No vulnerabilities found."
+            fi
+          fi
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
@@ -179,20 +162,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push snapshot with GoReleaser
-        run: goreleaser release --snapshot --clean
+        run: make snapshot-release
         env:
           DOCKER_CLI_EXPERIMENTAL: enabled
 
       - name: Tag and push latest images
-        run: |
-          # Get the snapshot version from GoReleaser
-          SNAPSHOT_TAG=$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.0")-$(git rev-parse --short HEAD)
-
-          # Tag and push to latest for both registries
-          docker buildx imagetools create \
-            -t enteee/djalgorhythm:latest \
-            -t ghcr.io/enteee/djalgorhythm:latest \
-            enteee/djalgorhythm:${SNAPSHOT_TAG} || true
+        run: make docker-tag-latest
 
       - name: Upload snapshot artifacts
         uses: actions/upload-artifact@v4

@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-snapshot goreleaser-check
+.PHONY: help build test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-snapshot goreleaser-check test-ci audit-sarif snapshot-release release docker-tag-latest
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -315,7 +315,7 @@ dev-status: ## Show development environment status
 	@echo "Docker: $(shell docker --version 2>/dev/null || echo 'not found')"
 	@echo "Docker Compose: $(shell docker-compose --version 2>/dev/null || echo 'not found')"
 
-# CI/CD helpers
+# CI/CD targets
 ci-deps: ## Install CI dependencies
 	@echo "Installing CI dependencies..."
 	go mod download
@@ -323,10 +323,53 @@ ci-deps: ## Install CI dependencies
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 
-ci-test: ## Run CI tests
+test-ci: ## Run tests with coverage for CI (includes go mod verify)
 	@echo "Running CI tests..."
+	go mod verify
 	go test -race -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out
+
+audit-sarif: ## Run govulncheck with SARIF output for CI
+	@echo "Running govulncheck with SARIF output..."
+	@if command -v govulncheck > /dev/null; then \
+		govulncheck -format sarif ./... > govulncheck.sarif || true; \
+		if command -v jq > /dev/null; then \
+			jq '.runs[]?.tool.driver.rules[]?.properties.tags |= unique' govulncheck.sarif > govulncheck-clean.sarif; \
+			mv govulncheck-clean.sarif govulncheck.sarif; \
+		else \
+			echo "jq not found. Skipping SARIF cleanup."; \
+		fi; \
+	else \
+		echo "govulncheck not found. Install with: go install golang.org/x/vuln/cmd/govulncheck@latest"; \
+		exit 1; \
+	fi
+
+snapshot-release: ## Build and push snapshot release with GoReleaser
+	@echo "Building snapshot release with GoReleaser..."
+	@if command -v goreleaser > /dev/null; then \
+		goreleaser release --snapshot --clean; \
+	else \
+		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
+		exit 1; \
+	fi
+
+release: ## Build and push release with GoReleaser
+	@echo "Building release with GoReleaser..."
+	@if command -v goreleaser > /dev/null; then \
+		goreleaser release --clean; \
+	else \
+		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
+		exit 1; \
+	fi
+
+docker-tag-latest: ## Tag snapshot Docker images as latest
+	@echo "Tagging snapshot images as latest..."
+	@SNAPSHOT_TAG=$$(git describe --tags --always --dirty 2>/dev/null || echo "0.0.0")-$$(git rev-parse --short HEAD); \
+	echo "Snapshot tag: $$SNAPSHOT_TAG"; \
+	docker buildx imagetools create \
+		-t enteee/djalgorhythm:latest \
+		-t ghcr.io/enteee/djalgorhythm:latest \
+		enteee/djalgorhythm:$$SNAPSHOT_TAG || true
 
 ci-build: ## Build for CI
 	@echo "Building for CI..."
