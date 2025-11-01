@@ -17,8 +17,8 @@ const (
 	BeatportRequestTimeout = 10 * time.Second
 	// BeatportMaxReadSize limits the amount of HTML we read.
 	BeatportMaxReadSize = 102400 // 100 KB should be enough for metadata.
-	// expectedSplitParts is the expected number of parts when splitting title/artist strings.
-	expectedSplitParts = 2
+	// beatportExpectedSplitParts is the expected number of parts when splitting title/artist strings.
+	beatportExpectedSplitParts = 2
 )
 
 // BeatportResolver resolves Beatport links to track information via HTML scraping.
@@ -144,8 +144,8 @@ func (r *BeatportResolver) extractFromTitleTag(html string) (title, artist strin
 
 	// Split by " by " to separate track title from artist(s).
 	if strings.Contains(titleText, " by ") {
-		parts := strings.SplitN(titleText, " by ", expectedSplitParts)
-		if len(parts) == expectedSplitParts {
+		parts := strings.SplitN(titleText, " by ", beatportExpectedSplitParts)
+		if len(parts) == beatportExpectedSplitParts {
 			title = strings.TrimSpace(parts[0])
 			artist = strings.TrimSpace(parts[1])
 		}
@@ -171,8 +171,8 @@ func (r *BeatportResolver) extractFromMetaTags(html string) (title, artist strin
 		desc := matches[1]
 		// Description might contain artist info.
 		if strings.Contains(desc, " by ") {
-			parts := strings.SplitN(desc, " by ", expectedSplitParts)
-			if len(parts) == expectedSplitParts {
+			parts := strings.SplitN(desc, " by ", beatportExpectedSplitParts)
+			if len(parts) == beatportExpectedSplitParts {
 				artist = strings.TrimSpace(parts[1])
 			}
 		}

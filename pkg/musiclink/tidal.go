@@ -17,8 +17,8 @@ const (
 	TidalRequestTimeout = 10 * time.Second
 	// TidalMaxReadSize limits the amount of HTML we read.
 	TidalMaxReadSize = 102400 // 100 KB should be enough for metadata.
-	// expectedSplitParts is the expected number of parts when splitting title/artist strings.
-	expectedSplitParts = 2
+	// tidalExpectedSplitParts is the expected number of parts when splitting title/artist strings.
+	tidalExpectedSplitParts = 2
 )
 
 // TidalResolver resolves Tidal links to track information via HTML scraping.
@@ -141,8 +141,8 @@ func (r *TidalResolver) extractFromMetaTags(html string) (title, artist string) 
 		desc := matches[1]
 		// Description often contains "By Artist Name" or similar.
 		if strings.Contains(strings.ToLower(desc), "by ") {
-			parts := strings.SplitN(desc, "by ", expectedSplitParts)
-			if len(parts) == expectedSplitParts {
+			parts := strings.SplitN(desc, "by ", tidalExpectedSplitParts)
+			if len(parts) == tidalExpectedSplitParts {
 				artist = strings.TrimSpace(parts[1])
 			}
 		}
@@ -169,12 +169,12 @@ func (r *TidalResolver) extractFromTitleTag(html string) (title, artist string) 
 	// Split by " – " (en dash) or " - " (hyphen).
 	var parts []string
 	if strings.Contains(titleText, " – ") {
-		parts = strings.SplitN(titleText, " – ", expectedSplitParts)
+		parts = strings.SplitN(titleText, " – ", tidalExpectedSplitParts)
 	} else if strings.Contains(titleText, " - ") {
-		parts = strings.SplitN(titleText, " - ", expectedSplitParts)
+		parts = strings.SplitN(titleText, " - ", tidalExpectedSplitParts)
 	}
 
-	if len(parts) == expectedSplitParts {
+	if len(parts) == tidalExpectedSplitParts {
 		title = strings.TrimSpace(parts[0])
 		artist = strings.TrimSpace(parts[1])
 	} else {

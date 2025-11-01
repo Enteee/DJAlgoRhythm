@@ -2,7 +2,7 @@ package musiclink
 
 import (
 	"context"
-	"encoding/json">
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,7 +20,7 @@ const (
 
 // iTunesLookupResponse represents the response from iTunes lookup API.
 type iTunesLookupResponse struct {
-	ResultCount int                `json:"resultCount"`
+	ResultCount int                 `json:"resultCount"`
 	Results     []iTunesTrackResult `json:"results"`
 }
 

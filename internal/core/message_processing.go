@@ -125,7 +125,7 @@ func (d *Dispatcher) performTargetedSpotifySearch(ctx context.Context, rankedTra
 			break
 		}
 
-		tracks := d.searchSpotifyForTrack(ctx, &track)
+		tracks := d.searchSpotifyForLLMCandidate(ctx, &track)
 		allSpotifyTracks = append(allSpotifyTracks, tracks...)
 	}
 
@@ -135,8 +135,8 @@ func (d *Dispatcher) performTargetedSpotifySearch(ctx context.Context, rankedTra
 	return allSpotifyTracks
 }
 
-// searchSpotifyForTrack searches Spotify for a specific track and returns top results.
-func (d *Dispatcher) searchSpotifyForTrack(ctx context.Context, track *Track) []Track {
+// searchSpotifyForLLMCandidate searches Spotify for a specific track and returns top results.
+func (d *Dispatcher) searchSpotifyForLLMCandidate(ctx context.Context, track *Track) []Track {
 	searchQuery := fmt.Sprintf("%s %s", track.Artist, track.Title)
 	d.logger.Debug("Searching Spotify", zap.String("query", searchQuery))
 

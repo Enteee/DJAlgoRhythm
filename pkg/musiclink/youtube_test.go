@@ -58,10 +58,10 @@ func TestYouTubeResolver_extractVideoID(t *testing.T) {
 	resolver := NewYouTubeResolver()
 
 	tests := []struct {
-		name      string
-		url       string
+		name       string
+		url        string
 		expectedID string
-		wantError bool
+		wantError  bool
 	}{
 		{
 			name:       "Standard YouTube URL",

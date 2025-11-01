@@ -29,14 +29,14 @@ type MusicLinkTrackInfo struct {
 
 // Dispatcher handles messages from any chat frontend using the unified interface.
 type Dispatcher struct {
-	config         *Config
-	frontend       chat.Frontend
-	spotify        SpotifyClient
-	llm            LLMProvider
-	dedup          DedupStore
-	logger         *zap.Logger
-	localizer      *i18n.Localizer
-	musicLinkMgr   MusicLinkResolver // Music link resolver for multi-provider support.
+	config       *Config
+	frontend     chat.Frontend
+	spotify      SpotifyClient
+	llm          LLMProvider
+	dedup        DedupStore
+	logger       *zap.Logger
+	localizer    *i18n.Localizer
+	musicLinkMgr MusicLinkResolver // Music link resolver for multi-provider support.
 
 	messageContexts map[string]*MessageContext
 	contextMutex    sync.RWMutex
