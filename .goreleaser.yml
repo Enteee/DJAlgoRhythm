@@ -99,6 +99,7 @@ dockers_v2:
       - "{{ if not .IsSnapshot }}{{ .Tag }}{{ end }}"
       - "{{ if not .IsSnapshot }}v{{ .Major }}{{ end }}"
       - "{{ if not .IsSnapshot }}v{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if .IsSnapshot }}main{{ end }}"
       - "latest"
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
