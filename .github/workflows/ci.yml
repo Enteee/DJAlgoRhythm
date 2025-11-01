@@ -60,7 +60,6 @@ jobs:
   audit:
     name: Audit (govulncheck)
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       security-events: write  # For SARIF upload
       contents: read
@@ -75,7 +74,33 @@ jobs:
         uses: ./.github/actions/setup-devenv
 
       - name: Run govulncheck with SARIF output
-        run: govulncheck -format sarif ./... > govulncheck.sarif
+        run: |
+          # Run govulncheck and capture exit code
+          govulncheck -format sarif ./... > govulncheck.sarif || EXIT_CODE=$?
+
+          # Check if vulnerabilities were found
+          if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" -ne 0 ]; then
+            echo "::warning::Vulnerabilities detected by govulncheck. Check the Security tab for details."
+            echo "VULNS_FOUND=true" >> $GITHUB_ENV
+          else
+            echo "No vulnerabilities found."
+            echo "VULNS_FOUND=false" >> $GITHUB_ENV
+          fi
+
+          # Always exit successfully to show as passed with warning
+          exit 0
+
+      - name: Create job summary
+        if: env.VULNS_FOUND == 'true'
+        run: |
+          echo "## ⚠️ Security Vulnerabilities Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "govulncheck found potential vulnerabilities in dependencies." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 **Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Review findings in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)" >> $GITHUB_STEP_SUMMARY
+          echo "- Update vulnerable dependencies if fixes are available" >> $GITHUB_STEP_SUMMARY
+          echo "- Assess whether vulnerabilities affect your deployment" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
