@@ -379,7 +379,7 @@ audit-sarif: ## Run govulncheck with SARIF output and check for vulnerabilities
 snapshot-release: ## Build and push snapshot release with GoReleaser
 	@echo "Building snapshot release with GoReleaser..."
 	@if command -v goreleaser > /dev/null; then \
-		goreleaser release --clean --skip=validate; \
+		goreleaser release --clean --skip=validate,publish; \
 	else \
 		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
 		exit 1; \
