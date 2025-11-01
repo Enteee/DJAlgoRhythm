@@ -12,7 +12,7 @@ This directory contains Claude Code settings configuration that controls what op
 
 Claude Code uses an automatic precedence system (no file includes needed):
 
-```
+```text
 Local Settings (.claude/settings.local.json)    ← Highest precedence (your machine only)
                 ↓
 Shared Settings (.claude/settings.json)         ← Base config (committed to repo)
@@ -39,11 +39,13 @@ Settings are automatically merged, with higher precedence files overriding lower
 ## Creating Local Overrides
 
 1. Copy the example file:
+
    ```bash
    cp .claude/settings.local.json.example .claude/settings.local.json
    ```
 
 2. Edit `.claude/settings.local.json` to add your preferences:
+
    ```json
    {
      "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/settings.schema.json",

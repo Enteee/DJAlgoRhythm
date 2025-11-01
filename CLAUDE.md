@@ -18,7 +18,7 @@ This repository includes Claude Code settings in the `.claude/` directory that c
 
 **Precedence Hierarchy:**
 
-```
+```text
 settings.local.json → settings.json → ~/.claude/settings.json
 (highest)                              (lowest)
 ```
