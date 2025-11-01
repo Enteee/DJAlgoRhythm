@@ -418,11 +418,6 @@ func (d *Dispatcher) getNextPlaylistTracks(ctx context.Context) ([]Track, error)
 		return nil, err
 	}
 
-	if len(nextTracks) == 0 {
-		d.logger.Debug("No more tracks available after current track in playlist")
-		return nil, errors.New("no tracks available")
-	}
-
 	return nextTracks, nil
 }
 
