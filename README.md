@@ -348,7 +348,7 @@ graph TD
     CONFIRM -->|"No"| D
 
     C2 -->|"Yes"| ADMIN["⏳ Await admin/community approval"]
-    C2 -->|"No (or approved)"| PRIORITY{"👑 Admin priority request?"}
+    C2 -->|"No"| PRIORITY{"👑 Admin priority request?"}
 
     ADMIN -->|"Approved"| PRIORITY
     ADMIN -->|"Denied"| REJECT_DENY["❌ Track rejected"]
