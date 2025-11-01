@@ -10,6 +10,10 @@ name: Claude Code
   pull_request_review:
     types: [submitted]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   claude:
     # Filter at GitHub Actions level to avoid wasteful job runs

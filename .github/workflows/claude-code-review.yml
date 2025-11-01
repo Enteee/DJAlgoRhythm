@@ -15,6 +15,10 @@ name: Claude Code Review
   issue_comment:
     types: [created]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
     # Filter at GitHub Actions level to avoid wasteful job runs
