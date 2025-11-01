@@ -86,7 +86,6 @@ changelog:
 
 dockers_v2:
   - id: djalgorhythm-images
-    skip_push: '{{ .IsSnapshot }}'
     images:
       - enteee/djalgorhythm
       - ghcr.io/enteee/djalgorhythm
