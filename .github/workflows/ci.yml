@@ -10,6 +10,9 @@ jobs:
   check:
     name: Make Check (Unified Quality Checks)
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write  # For SARIF upload
+      contents: read
     defaults:
       run:
         shell: devenv --profile minimal shell bash -- -e {0}
@@ -25,6 +28,16 @@ jobs:
       - name: Run make check
         run: make check
 
+      - name: Run Gosec with SARIF output
+        run: gosec -fmt sarif -out gosec.sarif ./...
+        if: always()
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec.sarif
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         continue-on-error: true
@@ -33,39 +46,6 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: devenv --profile minimal shell bash -- -e {0}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup devenv
-        uses: ./.github/actions/setup-devenv
-
-      - name: Debug Go version
-        run: |
-          echo "Go version from devenv:"
-          go version
-          echo ""
-          echo "Go path:"
-          which go
-          echo ""
-          echo "All go binaries in PATH:"
-          which -a go || true
-          echo ""
-          echo "Go GOROOT:"
-          go env GOROOT
-          echo ""
-          echo "PATH:"
-          echo "$PATH" | tr ':' '\n' | head -20
-
-      - name: Run golangci-lint
-        run: golangci-lint run --timeout=5m
 
   test:
     name: Test
@@ -99,39 +79,10 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-  security:
-    name: Security
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-    defaults:
-      run:
-        shell: devenv --profile minimal shell bash -- -e {0}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup devenv
-        uses: ./.github/actions/setup-devenv
-
-      - name: Run Gosec Security Scanner
-        run: gosec -fmt sarif -out gosec.sarif ./...
-
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: gosec.sarif
-
-      - name: Run govulncheck
-        run: govulncheck ./...
-
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [check, lint, test]
+    needs: [check, test]
     strategy:
       matrix:
         goos: [linux, darwin, windows]
@@ -178,7 +129,7 @@ jobs:
   docker:
     name: Docker
     runs-on: ubuntu-latest
-    needs: [check, lint, test, security]
+    needs: [check, test]
     if: github.event_name == 'push'
     steps:
       - name: Checkout code
@@ -218,30 +169,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  notify:
-    name: Notify
-    runs-on: ubuntu-latest
-    needs: [check, lint, test, security, build, docker]
-    if: always()
-    steps:
-      - name: Notify success
-        if: |
-          needs.check.result == 'success' &&
-          needs.lint.result == 'success' &&
-          needs.test.result == 'success' &&
-          needs.security.result == 'success' &&
-          needs.build.result == 'success'
-        run: |
-          echo "✅ All CI checks passed!"
-
-      - name: Notify failure
-        if: |
-          needs.check.result == 'failure' ||
-          needs.lint.result == 'failure' ||
-          needs.test.result == 'failure' ||
-          needs.security.result == 'failure' ||
-          needs.build.result == 'failure'
-        run: |
-          echo "❌ CI checks failed!"
-          exit 1
