@@ -11,12 +11,16 @@ let
 
   pkgs-unstable = nixpkgsWithConfig inputs.nixpkgs-unstable;
 
-  # fix locale
+  # fix locale (Linux only - glibc is not available on macOS)
   use-locale = "C.UTF-8";
-  custom-locales = pkgs.pkgs.glibcLocalesUtf8.override {
-    allLocales = false;
-    locales = [ "${use-locale}/UTF-8" ];
-  };
+  custom-locales =
+    if pkgs.stdenv.isLinux then
+      pkgs.glibcLocalesUtf8.override {
+        allLocales = false;
+        locales = [ "${use-locale}/UTF-8" ];
+      }
+    else
+      null;
 
   # Minimal packages for CI/CD (essential tools only)
   # Go compiler comes from languages.go.enable, not from this list
@@ -41,23 +45,29 @@ in
     # see:
     # - https://consoledonottrack.com/
     DO_NOT_TRACK = 1;
-
-    # fix locale
-    LOCALE_ARCHIVE = "${custom-locales}/lib/locale/locale-archive";
-    LC_ALL = use-locale;
-    LC_CTYPE = use-locale;
-    LC_ADDRESS = use-locale;
-    LC_IDENTIFICATION = use-locale;
-    LC_MEASUREMENT = use-locale;
-    LC_MESSAGES = use-locale;
-    LC_MONETARY = use-locale;
-    LC_NAME = use-locale;
-    LC_NUMERIC = use-locale;
-    LC_PAPER = use-locale;
-    LC_TELEPHONE = use-locale;
-    LC_TIME = use-locale;
-    LC_COLLATE = use-locale;
-  };
+  }
+  // (
+    if pkgs.stdenv.isLinux then
+      {
+        # fix locale (Linux only)
+        LOCALE_ARCHIVE = "${custom-locales}/lib/locale/locale-archive";
+        LC_ALL = use-locale;
+        LC_CTYPE = use-locale;
+        LC_ADDRESS = use-locale;
+        LC_IDENTIFICATION = use-locale;
+        LC_MEASUREMENT = use-locale;
+        LC_MESSAGES = use-locale;
+        LC_MONETARY = use-locale;
+        LC_NAME = use-locale;
+        LC_NUMERIC = use-locale;
+        LC_PAPER = use-locale;
+        LC_TELEPHONE = use-locale;
+        LC_TIME = use-locale;
+        LC_COLLATE = use-locale;
+      }
+    else
+      { }
+  );
 
   # https://devenv.sh/profiles/
   # Define profiles for different environments
