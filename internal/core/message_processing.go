@@ -18,6 +18,11 @@ import (
 func (d *Dispatcher) askWhichSong(ctx context.Context, msgCtx *MessageContext, originalMsg *chat.Message) {
 	msgCtx.State = StateAskWhichSong
 
+	// React with thumbs down to indicate clarification needed.
+	if err := d.frontend.React(ctx, originalMsg.ChatID, originalMsg.ID, thumbsDownReaction); err != nil {
+		d.logger.Debug("Failed to react with thumbs down", zap.Error(err))
+	}
+
 	message := d.formatMessageWithMention(originalMsg, d.localizer.T("prompt.which_song"))
 	_, err := d.frontend.SendText(ctx, originalMsg.ChatID, originalMsg.ID, message)
 	if err != nil {
