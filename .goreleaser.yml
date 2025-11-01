@@ -83,14 +83,14 @@ changelog:
 
 dockers:
   - image_templates:
-      - "djalgorhythm/djalgorhythm:{{ .Tag }}"
-      - "djalgorhythm/djalgorhythm:v{{ .Major }}"
-      - "djalgorhythm/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
-      - "djalgorhythm/djalgorhythm:latest"
-      - "ghcr.io/djalgorhythm/djalgorhythm:{{ .Tag }}"
-      - "ghcr.io/djalgorhythm/djalgorhythm:v{{ .Major }}"
-      - "ghcr.io/djalgorhythm/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/djalgorhythm/djalgorhythm:latest"
+      - "enteee/djalgorhythm:{{ .Tag }}"
+      - "enteee/djalgorhythm:v{{ .Major }}"
+      - "enteee/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
+      - "enteee/djalgorhythm:latest"
+      - "ghcr.io/enteee/djalgorhythm:{{ .Tag }}"
+      - "ghcr.io/enteee/djalgorhythm:v{{ .Major }}"
+      - "ghcr.io/enteee/djalgorhythm:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/enteee/djalgorhythm:latest"
     dockerfile: Dockerfile
     use: buildx
     build_flag_templates:
@@ -122,7 +122,7 @@ release:
 
     ### Docker
     ```bash
-    docker pull djalgorhythm/djalgorhythm:{{ .Tag }}
+    docker pull enteee/djalgorhythm:{{ .Tag }}
     ```
 
     ### Go Install

@@ -128,7 +128,11 @@ go mod download
 <summary><strong>🐳 Option 3: Docker</strong></summary>
 
 ```bash
-# Build and run with Docker
+# Option A: Pull from Docker Hub (recommended for production)
+docker pull enteee/djalgorhythm:latest
+docker run --env-file .env -p 8080:8080 enteee/djalgorhythm:latest
+
+# Option B: Build from source
 docker build -t djalgorhythm .
 docker run --env-file .env -p 8080:8080 djalgorhythm
 ```
