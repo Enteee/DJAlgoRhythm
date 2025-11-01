@@ -15,19 +15,15 @@ name: Claude Code Review
   issue_comment:
     types: [created]
 
-  # Allow manual review requests from maintainers
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'Pull Request number to review'
-        required: true
-        type: number
-
 jobs:
   claude-review:
-    # Automatically reviews newly opened PRs
-    # Can also be manually triggered via /review in PR comments
-    # The claude-code-action handles trigger phrase filtering internally
+    # Filter at GitHub Actions level to avoid wasteful job runs
+    # Only start the job if:
+    # - Event is a PR being opened (auto-review)
+    # - Event is a comment containing /review trigger phrase
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '/review'))
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Required for Claude to run bash commands (make, go test, etc.)
