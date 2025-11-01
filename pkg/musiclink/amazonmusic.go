@@ -50,7 +50,7 @@ func (r *AmazonMusicResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from an Amazon Music URL by scraping the HTML.
 func (r *AmazonMusicResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not an Amazon Music URL")
+		return nil, errors.New("not an Amazon Music URL.")
 	}
 
 	// Fetch the HTML page.
@@ -120,7 +120,7 @@ func (r *AmazonMusicResolver) extractTrackInfo(html string) (title, artist strin
 		return title, artist, nil
 	}
 
-	return "", "", errors.New("could not extract track information from Amazon Music page")
+	return "", "", errors.New("could not extract track information from Amazon Music page.")
 }
 
 // extractFromMetaTags extracts track info from OpenGraph or Twitter meta tags.

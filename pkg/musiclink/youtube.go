@@ -60,7 +60,7 @@ func (r *YouTubeResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from a YouTube URL using the oEmbed API.
 func (r *YouTubeResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not a YouTube URL")
+		return nil, errors.New("not a YouTube URL.")
 	}
 
 	// Extract video ID.
@@ -101,7 +101,7 @@ func (r *YouTubeResolver) extractVideoID(rawURL string) (string, error) {
 		// Video ID is in the path.
 		path := strings.Trim(u.Path, "/")
 		if path == "" {
-			return "", errors.New("no video ID in youtu.be URL")
+			return "", errors.New("no video ID in youtu.be URL.")
 		}
 		return path, nil
 	}
@@ -109,7 +109,7 @@ func (r *YouTubeResolver) extractVideoID(rawURL string) (string, error) {
 	// Handle standard YouTube URLs (youtube.com, www.youtube.com, m.youtube.com, music.youtube.com).
 	videoID := u.Query().Get("v")
 	if videoID == "" {
-		return "", errors.New("no video ID in YouTube URL")
+		return "", errors.New("no video ID in YouTube URL.")
 	}
 	return videoID, nil
 }

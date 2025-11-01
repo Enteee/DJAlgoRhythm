@@ -31,7 +31,7 @@ func (m *Manager) Resolve(ctx context.Context, url string) (*TrackInfo, error) {
 		}
 	}
 
-	return nil, errors.New("no resolver found for URL")
+	return nil, errors.New("no resolver found for URL.")
 }
 
 // CanResolve checks if any resolver can handle the given URL.

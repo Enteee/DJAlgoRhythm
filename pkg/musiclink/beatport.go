@@ -49,12 +49,12 @@ func (r *BeatportResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from a Beatport URL by scraping the HTML.
 func (r *BeatportResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not a Beatport URL")
+		return nil, errors.New("not a Beatport URL.")
 	}
 
 	// Check if this is a track URL.
 	if !strings.Contains(rawURL, "/track/") {
-		return nil, errors.New("not a Beatport track URL (only /track/ URLs are supported)")
+		return nil, errors.New("not a Beatport track URL (only /track/ URLs are supported).")
 	}
 
 	// Fetch the HTML page.
@@ -124,7 +124,7 @@ func (r *BeatportResolver) extractTrackInfo(html string) (title, artist string, 
 		return title, artist, nil
 	}
 
-	return "", "", errors.New("could not extract track information from Beatport page")
+	return "", "", errors.New("could not extract track information from Beatport page.")
 }
 
 // extractFromTitleTag extracts track info from the HTML <title> tag.

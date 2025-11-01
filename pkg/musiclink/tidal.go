@@ -49,12 +49,12 @@ func (r *TidalResolver) CanResolve(rawURL string) bool {
 // Resolve extracts track information from a Tidal URL by scraping the HTML.
 func (r *TidalResolver) Resolve(ctx context.Context, rawURL string) (*TrackInfo, error) {
 	if !r.CanResolve(rawURL) {
-		return nil, errors.New("not a Tidal URL")
+		return nil, errors.New("not a Tidal URL.")
 	}
 
 	// Check if this is a track URL.
 	if !strings.Contains(rawURL, "/track/") {
-		return nil, errors.New("not a Tidal track URL (only /track/ URLs are supported)")
+		return nil, errors.New("not a Tidal track URL (only /track/ URLs are supported).")
 	}
 
 	// Fetch the HTML page.
@@ -124,7 +124,7 @@ func (r *TidalResolver) extractTrackInfo(html string) (title, artist string, err
 		return title, artist, nil
 	}
 
-	return "", "", errors.New("could not extract track information from Tidal page")
+	return "", "", errors.New("could not extract track information from Tidal page.")
 }
 
 // extractFromMetaTags extracts track info from OpenGraph or Twitter meta tags.
