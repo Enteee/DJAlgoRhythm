@@ -235,8 +235,23 @@ func (d *Dispatcher) GetShadowQueuePosition(trackID string) int {
 func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, error) {
 	// Get current track ID
 	currentTrackID, err := d.spotify.GetCurrentTrackID(ctx)
+	usingFallback := false
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to get current track ID: %w", err)
+		// Playback stopped/paused - try fallback to last known track
+		d.shadowQueueMutex.RLock()
+		lastKnownTrackID := d.lastCurrentTrackID
+		d.shadowQueueMutex.RUnlock()
+
+		if lastKnownTrackID == "" {
+			return nil, fmt.Errorf("failed to get current track ID and no fallback available: %w", err)
+		}
+
+		d.logger.Debug("Playback stopped, using last known track ID as fallback",
+			zap.String("lastCurrentTrackID", lastKnownTrackID),
+			zap.Error(err))
+		currentTrackID = lastKnownTrackID
+		usingFallback = true
 	}
 
 	// Check if current track is a priority track using the registry
@@ -260,16 +275,27 @@ func (d *Dispatcher) getLogicalPlaylistPosition(ctx context.Context) (*int, erro
 	// Normal track or fallback case - find current track position
 	for i, track := range playlistTracks {
 		if track.ID == currentTrackID {
-			d.logger.Debug("Normal track playing, using current position",
-				zap.String("currentTrackID", currentTrackID),
-				zap.Int("position", i))
+			if usingFallback {
+				d.logger.Debug("Using fallback track position (playback stopped)",
+					zap.String("trackID", currentTrackID),
+					zap.Int("position", i))
+			} else {
+				d.logger.Debug("Normal track playing, using current position",
+					zap.String("currentTrackID", currentTrackID),
+					zap.Int("position", i))
+			}
 			return &i, nil
 		}
 	}
 
 	// Current track not found in playlist - return nil instead of fallback
-	d.logger.Warn("Current track not found in playlist",
-		zap.String("currentTrackID", currentTrackID))
+	if usingFallback {
+		d.logger.Warn("Last known track not found in playlist (playback stopped)",
+			zap.String("lastCurrentTrackID", currentTrackID))
+	} else {
+		d.logger.Warn("Current track not found in playlist",
+			zap.String("currentTrackID", currentTrackID))
+	}
 	return nil, nil
 }
 
