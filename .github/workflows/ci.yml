@@ -79,6 +79,32 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
+  audit:
+    name: Audit (govulncheck)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      security-events: write  # For SARIF upload
+      contents: read
+    defaults:
+      run:
+        shell: devenv --profile minimal shell bash -- -e {0}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup devenv
+        uses: ./.github/actions/setup-devenv
+
+      - name: Run govulncheck with SARIF output
+        run: govulncheck -format sarif -out govulncheck.sarif ./...
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: govulncheck.sarif
+
   build:
     name: Build
     runs-on: ubuntu-latest

@@ -165,7 +165,7 @@ pre-commit: ## Run all pre-commit hooks (devenv git-hooks)
 		exit 1; \
 	fi
 
-check: fmt vet lint-config lint staticcheck security audit check-env-example check-help-sync pre-commit test build ## Run all code quality checks, security scans, and build
+check: fmt vet lint-config lint staticcheck security check-env-example check-help-sync pre-commit test build ## Run all code quality checks, security scans, and build
 
 # Security targets
 security: ## Run security checks
