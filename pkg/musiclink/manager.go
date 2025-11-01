@@ -19,6 +19,7 @@ func NewManager() *Manager {
 			NewTidalResolver(),
 			NewBeatportResolver(),
 			NewAmazonMusicResolver(),
+			NewSoundCloudResolver(),
 		},
 	}
 }

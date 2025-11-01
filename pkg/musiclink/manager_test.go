@@ -52,6 +52,11 @@ func TestManager_CanResolve(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "SoundCloud URL",
+			url:      "https://soundcloud.com/artist/track",
+			expected: true,
+		},
+		{
 			name:     "Spotify URL - not supported",
 			url:      "https://open.spotify.com/track/123",
 			expected: false,

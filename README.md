@@ -42,7 +42,7 @@ Spotify link into your Telegram group, and watch as the bot automatically adds i
 ### 🎵 **Smart Music Detection**
 
 - **Spotify Links** → Instant playlist addition
-- **Cross-Platform Links** → Smart matching with confirmation (YouTube, Apple Music, Tidal, Beatport, Amazon Music)
+- **Cross-Platform Links** → Smart matching with confirmation (YouTube, Apple Music, Tidal, Beatport, Amazon Music, SoundCloud)
 - **Free Text** → *"play some chill lofi beats"* → Perfect track selection
 
 ### 🤖 **AI-Powered Disambiguation**
@@ -288,7 +288,7 @@ On first startup, DJAlgoRhythm will guide you through Spotify OAuth:
 
 </div>
 
-> **Supported Music Platforms:** YouTube, YouTube Music, Apple Music, Tidal, Beatport, Amazon Music
+> **Supported Music Platforms:** YouTube, YouTube Music, Apple Music, Tidal, Beatport, Amazon Music, SoundCloud
 
 ### 💡 **Real Examples**
 
@@ -316,6 +316,10 @@ Bot: 🎵 Found: Rick Astley - Never Gonna Give You Up (1987)
 
 User: https://www.beatport.com/track/love-songs-feat-kosmo-kint/21977538
 Bot: 🎵 Found: Prospa, Kosmo Kint - Love Songs (feat. Kosmo Kint) (Extended Mix)
+     React 👍 to add or 👎 to skip
+
+User: https://soundcloud.com/rick-astley-official/never-gonna-give-you-up-4
+Bot: 🎵 Found: Rick Astley - Never Gonna Give You Up
      React 👍 to add or 👎 to skip
 ```
 

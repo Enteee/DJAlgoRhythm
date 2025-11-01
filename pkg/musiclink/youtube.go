@@ -117,6 +117,8 @@ func (r *YouTubeResolver) extractVideoID(rawURL string) (string, error) {
 }
 
 // fetchOEmbed fetches metadata from YouTube's oEmbed API.
+//
+//nolint:dupl // oEmbed fetching logic intentionally similar across resolvers; platform-specific response types prevent extraction.
 func (r *YouTubeResolver) fetchOEmbed(ctx context.Context, videoURL string) (*YouTubeOEmbedResponse, error) {
 	// Build oEmbed request URL.
 	reqURL := fmt.Sprintf("%s?url=%s&format=json", YouTubeOEmbedURL, url.QueryEscape(videoURL))
