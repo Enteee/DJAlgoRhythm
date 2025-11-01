@@ -340,7 +340,7 @@ graph TD
     C3 -->|"Failed"| D["💬 Ask: Which song?"]
 
     C1 -->|"New track"| C2{"🛡️ Admin approval required?"}
-    C1 -->|"Duplicate"| REJECT["❌ Already in playlist"]
+    C1 -->|"Duplicate"| REJECT_DUP["❌ Duplicate track"]
 
     E --> CONFIRM
 
@@ -351,7 +351,7 @@ graph TD
     C2 -->|"No (or approved)"| PRIORITY{"👑 Admin priority request?"}
 
     ADMIN -->|"Approved"| PRIORITY
-    ADMIN -->|"Denied"| REJECT
+    ADMIN -->|"Denied"| REJECT_DENY["❌ Track rejected"]
 
     PRIORITY -->|"Yes"| QUEUE["⚡ Add to queue (play next)"]
     PRIORITY -->|"No"| PLAYLIST["➕ Add to playlist"]
@@ -363,8 +363,10 @@ graph TD
     style QUEUE fill:#FF6B35
     style J fill:#1DB954
     style A fill:#26A5E4
-    style REJECT fill:#FF4444
+    style REJECT_DUP fill:#FF4444
+    style REJECT_DENY fill:#FF4444
     style CONFIRM fill:#E67E22
+    style C3 fill:#9B59B6
 ```
 
 ## Configuration
