@@ -290,7 +290,13 @@ func (d *Dispatcher) performQueueManagement(ctx context.Context) {
 		return
 	}
 
-	updatedDuration := d.tryFillFromPlaylistTracks(ctx, targetDuration, currentDuration)
+	updatedDuration, err := d.tryFillFromPlaylistTracks(ctx, targetDuration, currentDuration)
+	if err != nil {
+		d.logger.Warn("Failed to fill from playlist tracks, skipping autodj to avoid adding tracks when position unknown",
+			zap.Error(err))
+		return
+	}
+
 	if updatedDuration < targetDuration {
 		d.fillQueueToTargetDuration(ctx, targetDuration, updatedDuration)
 	}
@@ -313,10 +319,11 @@ func (d *Dispatcher) calculateTargetQueueDuration() time.Duration {
 	return targetDuration
 }
 
-// tryFillFromPlaylistTracks attempts to fill the queue with tracks from the existing playlist
+// tryFillFromPlaylistTracks attempts to fill the queue with tracks from the existing playlist.
 // Returns the updated duration after adding playlist tracks (may still be < targetDuration).
+// Returns an error if playlist tracks cannot be retrieved.
 func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDuration,
-	currentDuration time.Duration) time.Duration {
+	currentDuration time.Duration) (time.Duration, error) {
 	d.logger.Debug("tryFillFromPlaylistTracks called",
 		zap.Duration("targetDuration", targetDuration),
 		zap.Duration("currentDuration", currentDuration))
@@ -325,12 +332,17 @@ func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDurati
 	neededDuration := targetDuration - currentDuration
 	if neededDuration <= 0 {
 		d.logger.Debug("No additional tracks needed based on duration calculation")
-		return currentDuration
+		return currentDuration, nil
 	}
 
 	nextTracks, err := d.getNextPlaylistTracks(ctx)
-	if err != nil || len(nextTracks) == 0 {
-		return currentDuration
+	if err != nil {
+		return currentDuration, fmt.Errorf("failed to get playlist tracks: %w", err)
+	}
+
+	if len(nextTracks) == 0 {
+		d.logger.Debug("No more tracks available in playlist")
+		return currentDuration, nil
 	}
 
 	// Add tracks one by one until we reach target duration
@@ -382,7 +394,7 @@ func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDurati
 		zap.Duration("targetDuration", targetDuration),
 		zap.Bool("stillNeedsMore", finalDuration < targetDuration))
 
-	return finalDuration
+	return finalDuration, nil
 }
 
 // getNextPlaylistTracks retrieves the next tracks from the playlist based on current position.
