@@ -1,6 +1,9 @@
 # Dockerfile for DJAlgoRhythm - uses pre-built binaries
 FROM alpine:3.20
 
+# TARGETPLATFORM is automatically set by Docker buildx (e.g., linux/amd64, linux/arm64)
+ARG TARGETPLATFORM
+
 # Install runtime dependencies
 # hadolint ignore=DL3018
 RUN apk add --no-cache \
@@ -15,8 +18,7 @@ RUN adduser -D -s /bin/sh djalgorhythm
 # Set working directory
 WORKDIR /app
 
-# Copy pre-built binary
-# $TARGETPLATFORM is automatically set by Docker buildx (e.g., linux/amd64, linux/arm64)
+# Copy pre-built binary from platform-specific directory
 COPY $TARGETPLATFORM/djalgorhythm .
 
 # Create directories for data
