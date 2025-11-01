@@ -96,10 +96,10 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
     tags:
-      - "{{ .Tag }}"
-      - "v{{ .Major }}"
-      - "v{{ .Major }}.{{ .Minor }}"
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
+      - "{{ if not .IsSnapshot }}{{ .Tag }}{{ end }}"
+      - "{{ if not .IsSnapshot }}v{{ .Major }}{{ end }}"
+      - "{{ if not .IsSnapshot }}v{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "latest"
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
       "org.opencontainers.image.title": "{{.ProjectName}}"
@@ -109,6 +109,7 @@ dockers_v2:
       "org.opencontainers.image.description": "DJAlgoRhythm - Live Chat → Spotify DJ"
     flags:
       - "--pull"
+      - "--push"
       - "--cache-from=type=gha"
       - "--cache-to=type=gha,mode=max"
       - "--provenance=false"

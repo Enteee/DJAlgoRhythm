@@ -145,9 +145,6 @@ jobs:
         env:
           DOCKER_CLI_EXPERIMENTAL: enabled
 
-      - name: Tag and push latest images
-        run: make docker-tag-latest
-
       - name: Update Docker Hub Description
         uses: peter-evans/dockerhub-description@v4
         continue-on-error: true

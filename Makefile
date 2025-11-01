@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-snapshot goreleaser-check test-ci audit-sarif snapshot-release release docker-tag-latest
+.PHONY: help build test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev docker-build docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-snapshot goreleaser-check test-ci audit-sarif snapshot-release release
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -393,21 +393,6 @@ release: ## Build and push release with GoReleaser
 		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
 		exit 1; \
 	fi
-
-docker-tag-latest: ## Tag snapshot Docker images as latest
-	@echo "Tagging snapshot images as latest..."
-	@if [ ! -f dist/metadata.json ]; then \
-		echo "ERROR: dist/metadata.json not found. Run 'make snapshot-release' first."; \
-		exit 1; \
-	fi
-	@SNAPSHOT_TAG=$$(jq -r '.version' dist/metadata.json); \
-	echo "Snapshot tag: $$SNAPSHOT_TAG"; \
-	echo "Creating multi-arch manifest from platform-specific images..."; \
-	docker buildx imagetools create \
-		-t enteee/djalgorhythm:latest \
-		-t ghcr.io/enteee/djalgorhythm:latest \
-		enteee/djalgorhythm:$$SNAPSHOT_TAG-amd64 \
-		enteee/djalgorhythm:$$SNAPSHOT_TAG-arm64 || true
 
 ci-build: ## Build for CI
 	@echo "Building for CI..."
