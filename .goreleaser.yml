@@ -86,6 +86,7 @@ changelog:
 
 dockers_v2:
   - id: djalgorhythm-images
+    skip_push: '{{ .IsSnapshot }}'
     images:
       - enteee/djalgorhythm
       - ghcr.io/enteee/djalgorhythm
@@ -109,7 +110,6 @@ dockers_v2:
       "org.opencontainers.image.description": "DJAlgoRhythm - Live Chat → Spotify DJ"
     flags:
       - "--pull"
-      - "--push"
       - "--cache-from=type=gha"
       - "--cache-to=type=gha,mode=max"
       - "--provenance=false"
