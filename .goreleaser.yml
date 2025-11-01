@@ -118,7 +118,7 @@ release:
   github:
     owner: Enteee
     name: DJAlgoRhythm
-  disable: '{{ not .Tag }}'
+  disable: '{{ eq .Tag "" }}'
   draft: false
   prerelease: auto
   mode: replace
