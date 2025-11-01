@@ -25,15 +25,6 @@ jobs:
       - name: Run make check
         run: make check
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        continue-on-error: true
-        with:
-          file: ./coverage.out
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-
   test:
     name: Test
     runs-on: ${{ matrix.os }}
