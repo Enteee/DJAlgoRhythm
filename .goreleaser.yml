@@ -82,6 +82,7 @@ changelog:
       order: 999
 
 dockers:
+  # Multi-platform images for releases and main branch (always pushed)
   - image_templates:
       - "enteee/djalgorhythm:{{ .Tag }}"
       - "enteee/djalgorhythm:v{{ .Major }}"
@@ -93,6 +94,10 @@ dockers:
       - "ghcr.io/enteee/djalgorhythm:latest"
     dockerfile: Dockerfile
     use: buildx
+    ids:
+      - djalgorhythm
+    goarch: amd64
+    goarm: ""
     build_flag_templates:
       - "--pull"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -101,6 +106,9 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64,linux/arm64"
+      - "--cache-from=type=gha"
+      - "--cache-to=type=gha,mode=max"
+      - "--provenance=false"
 
 release:
   github:

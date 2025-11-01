@@ -195,10 +195,38 @@ deps-graph: ## Show dependency graph
 	fi
 
 # Docker targets
-docker-build: ## Build Docker image
+docker-build: ## Build Docker image (auto-detects buildx and CI cache)
 	@echo "Building Docker image..."
-	docker build -t $(DOCKER_IMAGE) .
-	@echo "Built: $(DOCKER_IMAGE)"
+	@if command -v docker > /dev/null 2>&1; then \
+		if docker buildx version > /dev/null 2>&1; then \
+			echo "Using buildx with caching..."; \
+			CACHE_FROM=""; \
+			CACHE_TO=""; \
+			if [ -n "$$GITHUB_ACTIONS" ]; then \
+				CACHE_FROM="--cache-from=type=gha"; \
+				CACHE_TO="--cache-to=type=gha,mode=max"; \
+			fi; \
+			docker buildx build \
+				--platform linux/amd64 \
+				--load \
+				-t $(DOCKER_IMAGE) \
+				$$CACHE_FROM \
+				$$CACHE_TO \
+				--label=org.opencontainers.image.created=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+				--label=org.opencontainers.image.title=$(BINARY_NAME) \
+				--label=org.opencontainers.image.revision=$$(git rev-parse HEAD 2>/dev/null || echo "unknown") \
+				--label=org.opencontainers.image.version=$(VERSION) \
+				--label=org.opencontainers.image.source=https://github.com/Enteee/DJAlgoRhythm \
+				.; \
+		else \
+			echo "Using standard docker build..."; \
+			docker build -t $(DOCKER_IMAGE) .; \
+		fi; \
+		echo "Built: $(DOCKER_IMAGE)"; \
+	else \
+		echo "Docker not found. Skipping build."; \
+		exit 1; \
+	fi
 
 docker-run: docker-build ## Build and run Docker container
 	@echo "Running Docker container..."
