@@ -7,7 +7,7 @@
 
 Turn your group chat into a collaborative music experience
 
-  [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://golang.org/)
+  [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://golang.org/)
   [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
   [![Telegram](https://img.shields.io/badge/Platform-Telegram-26A5E4?style=flat&logo=telegram)](https://telegram.org/)
   [![Spotify](https://img.shields.io/badge/Platform-Spotify-1DB954?style=flat&logo=spotify)](https://spotify.com/)
