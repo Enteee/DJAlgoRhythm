@@ -36,6 +36,9 @@ let
     gosec
     govulncheck
     air
+
+    # Release management
+    goreleaser
   ];
 
 in
