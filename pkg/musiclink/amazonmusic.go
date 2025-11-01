@@ -16,7 +16,9 @@ const (
 	// AmazonMusicRequestTimeout is the timeout for Amazon Music page requests.
 	AmazonMusicRequestTimeout = 10 * time.Second
 	// AmazonMusicMaxReadSize limits the amount of HTML we read.
-	AmazonMusicMaxReadSize = 100 * 1024 // 100 KB should be enough for metadata.
+	AmazonMusicMaxReadSize = 102400 // 100 KB should be enough for metadata.
+	// expectedSplitParts is the expected number of parts when splitting title/artist strings.
+	expectedSplitParts = 2
 )
 
 // AmazonMusicResolver resolves Amazon Music links to track information via HTML scraping.
@@ -135,12 +137,12 @@ func (r *AmazonMusicResolver) extractFromMetaTags(html string) (title, artist st
 		desc := matches[1]
 		// Description often contains artist info (e.g., "Song by Artist on Amazon Music").
 		if strings.Contains(strings.ToLower(desc), " by ") {
-			parts := strings.SplitN(desc, " by ", 2)
-			if len(parts) == 2 {
+			parts := strings.SplitN(desc, " by ", expectedSplitParts)
+			if len(parts) == expectedSplitParts {
 				// Further split on " on Amazon Music" if present.
 				artistPart := parts[1]
 				if strings.Contains(artistPart, " on Amazon Music") {
-					artistPart = strings.SplitN(artistPart, " on Amazon Music", 2)[0]
+					artistPart = strings.SplitN(artistPart, " on Amazon Music", expectedSplitParts)[0]
 				}
 				artist = strings.TrimSpace(artistPart)
 			}
@@ -167,8 +169,8 @@ func (r *AmazonMusicResolver) extractFromTitleTag(html string) (title, artist st
 
 	// Split by " by " to separate song title from artist.
 	if strings.Contains(titleText, " by ") {
-		parts := strings.SplitN(titleText, " by ", 2)
-		if len(parts) == 2 {
+		parts := strings.SplitN(titleText, " by ", expectedSplitParts)
+		if len(parts) == expectedSplitParts {
 			title = strings.TrimSpace(parts[0])
 			artist = strings.TrimSpace(parts[1])
 		}

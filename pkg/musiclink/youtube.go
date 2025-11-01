@@ -17,6 +17,8 @@ const (
 	YouTubeOEmbedURL = "https://www.youtube.com/oembed"
 	// YouTubeRequestTimeout is the timeout for YouTube API requests.
 	YouTubeRequestTimeout = 10 * time.Second
+	// expectedSplitParts is the expected number of parts when splitting title/artist strings.
+	expectedSplitParts = 2
 )
 
 // YouTubeOEmbedResponse represents the response from YouTube's oEmbed API.
@@ -203,8 +205,8 @@ func (r *YouTubeResolver) extractArtist(title, authorName string) string {
 	// Try to extract artist from title if it contains a separator.
 	// Common patterns: "Artist - Song Title" or "Song Title - Artist".
 	if strings.Contains(title, " - ") {
-		parts := strings.SplitN(title, " - ", 2)
-		if len(parts) == 2 {
+		parts := strings.SplitN(title, " - ", expectedSplitParts)
+		if len(parts) == expectedSplitParts {
 			// Assume first part is the artist (most common format).
 			return strings.TrimSpace(parts[0])
 		}
