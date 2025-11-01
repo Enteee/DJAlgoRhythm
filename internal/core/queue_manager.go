@@ -347,15 +347,6 @@ func (d *Dispatcher) tryFillFromPlaylistTracks(ctx context.Context, targetDurati
 			break
 		}
 
-		// Skip if track is already in dedup store (already played or queued)
-		if d.dedup.Has(track.ID) {
-			d.logger.Debug("Skipping track already in dedup store",
-				zap.String("trackID", track.ID),
-				zap.String("artist", track.Artist),
-				zap.String("title", track.Title))
-			continue
-		}
-
 		// Skip if track is already in shadow queue (already queued but not yet played)
 		if d.GetShadowQueuePosition(track.ID) >= 0 {
 			d.logger.Debug("Skipping track already in shadow queue",
