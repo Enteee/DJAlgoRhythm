@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/settings.schema.json",
+  "// Usage": "Copy this file to settings.local.json and customize for your local development needs",
+  "// Note": "settings.local.json is gitignored and will automatically merge with settings.json",
+  "// Precedence": "Permissions in settings.local.json override/extend those in settings.json",
+
+  "permissions": {
+    "allow": [
+      "// Add additional local-only permissions here",
+      "// Examples:",
+      "// \"Bash(docker:*)\",",
+      "// \"Bash(npm:*)\",",
+      "// \"WebFetch(domain:example.com)\""
+    ],
+    "deny": [
+      "// Add permissions to deny locally (overrides settings.json allows)",
+      "// Examples:",
+      "// \"Bash(rm -rf:*)\",",
+      "// \"Bash(git push --force:*)\""
+    ],
+    "ask": [
+      "// Add permissions that require confirmation",
+      "// Examples:",
+      "// \"Bash(git push:*)\",",
+      "// \"Write(**/*.env)\""
+    ]
+  }
+}
