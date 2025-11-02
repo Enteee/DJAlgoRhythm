@@ -388,40 +388,6 @@ graph TD
 
 ## Configuration
 
-### Environment Variables
-
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| **Chat Platforms** | | | |
-| `DJALGORHYTHM_TELEGRAM_ENABLED` | Enable Telegram integration | `true` | ❌ |
-| `DJALGORHYTHM_TELEGRAM_BOT_TOKEN` | Telegram bot token | - | ✅ (if enabled) |
-| `DJALGORHYTHM_TELEGRAM_GROUP_ID` | Telegram group ID (auto-detected if unset) | - | ❌ |
-| `DJALGORHYTHM_ADMIN_APPROVAL` | Require admin approval for songs | `false` | ❌ |
-| `DJALGORHYTHM_ADMIN_NEEDS_APPROVAL` | Require approval even for admins (testing) | `false` | ❌ |
-| **Spotify** | | | |
-| `DJALGORHYTHM_SPOTIFY_CLIENT_ID` | Spotify app client ID | - | ✅ |
-| `DJALGORHYTHM_SPOTIFY_CLIENT_SECRET` | Spotify app secret | - | ✅ |
-| `DJALGORHYTHM_SPOTIFY_PLAYLIST_ID` | Target playlist ID | - | ✅ |
-| **LLM** | | | |
-| `DJALGORHYTHM_LLM_PROVIDER` | AI provider (openai/anthropic/ollama) | - | ✅ |
-| `DJALGORHYTHM_LLM_API_KEY` | LLM API key (required except for ollama) | - | ✅ (conditional) |
-| `DJALGORHYTHM_LLM_MODEL` | Model name | Provider default | ❌ |
-| **General** | | | |
-| `DJALGORHYTHM_CONFIRM_TIMEOUT_SECS` | Reaction timeout (seconds) | `120` | ❌ |
-| `DJALGORHYTHM_CONFIRM_ADMIN_TIMEOUT_SECS` | Reaction timeout for admins (seconds) | `3600` | ❌ |
-| `DJALGORHYTHM_QUEUE_AHEAD_DURATION_SECS` | Target queue duration (seconds) | `90` | ❌ |
-| `DJALGORHYTHM_QUEUE_CHECK_INTERVAL_SECS` | Queue check interval (seconds) | `45` | ❌ |
-| `DJALGORHYTHM_SERVER_PORT` | HTTP server port | `8080` | ❌ |
-| `DJALGORHYTHM_LOG_LEVEL` | Logging level | `info` | ❌ |
-| `DJALGORHYTHM_LANGUAGE` | Bot language for user-facing messages | `en` | ❌ |
-| `DJALGORHYTHM_QUEUE_TRACK_APPROVAL_TIMEOUT_SECS` | Track approval timeout (seconds) | `30` | ❌ |
-| `DJALGORHYTHM_MAX_QUEUE_TRACK_REPLACEMENTS` | Maximum queue track replacements | `3` | ❌ |
-| `DJALGORHYTHM_SHADOW_QUEUE_MAINTENANCE_INTERVAL_SECS` | Shadow queue maintenance interval (seconds) | `30` | ❌ |
-| `DJALGORHYTHM_SHADOW_QUEUE_MAX_AGE_HOURS` | Maximum age of shadow queue items (hours) | `2` | ❌ |
-| `DJALGORHYTHM_QUEUE_SYNC_WARNING_TIMEOUT_MINUTES` | Queue sync warning timeout (minutes) | `30` | ❌ |
-| `DJALGORHYTHM_FLOOD_LIMIT_PER_MINUTE` | Maximum messages per user per minute | `6` | ❌ |
-| `DJALGORHYTHM_COMMUNITY_APPROVAL` | Number of community approvals required | `0` | ❌ |
-
 ### CLI Flags
 
 <!-- markdownlint-disable MD013 -->
@@ -461,30 +427,10 @@ Flags:
 ```
 <!-- markdownlint-enable MD013 -->
 
-### Example .env File
+### Environment Variables
 
-```bash
-# Chat Platform (choose one)
-DJALGORHYTHM_TELEGRAM_ENABLED=true
-DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-# DJALGORHYTHM_TELEGRAM_GROUP_ID=-100xxxxxxxxxx  # Auto-detected on first run
-
-
-# Spotify (required)
-DJALGORHYTHM_SPOTIFY_CLIENT_ID=your_spotify_client_id
-DJALGORHYTHM_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-DJALGORHYTHM_SPOTIFY_PLAYLIST_ID=37i9dQZF1DX0XUsuxWHRQd
-
-# LLM (required)
-DJALGORHYTHM_LLM_PROVIDER=openai
-DJALGORHYTHM_LLM_API_KEY=sk-...
-DJALGORHYTHM_LLM_MODEL=gpt-4o-mini
-
-# General
-DJALGORHYTHM_CONFIRM_TIMEOUT_SECS=120
-DJALGORHYTHM_SERVER_PORT=8080
-DJALGORHYTHM_LOG_LEVEL=info
-```
+All configuration options can be set via environment variables. See [`.env.example`](.env.example) for the complete list
+with detailed comments, examples, and setup guides.
 
 ## Development
 
