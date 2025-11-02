@@ -15,10 +15,6 @@ name: Claude Code Review
   issue_comment:
     types: [created]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   claude-review:
     # Filter at GitHub Actions level to avoid wasteful job runs
@@ -57,12 +53,25 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
 
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            **IMPORTANT: First run `make check` to analyze the code quality.**
+
+            1. Run `make check` and capture the full output
+            2. Analyze any issues, warnings, or failures from:
+               - Code formatting (fmt)
+               - Static analysis (vet)
+               - Linting (golangci-lint)
+               - Security checks (gosec)
+               - Tests (go test with race detection)
+               - Build verification
+               - Pre-commit hooks
+
+            3. Then review this pull request and provide feedback on:
+               - Issues detected by `make check` (if any)
+               - Code quality and best practices
+               - Potential bugs or issues
+               - Performance considerations
+               - Security concerns
+               - Test coverage
 
             Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
