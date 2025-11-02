@@ -128,13 +128,11 @@ go mod download
 <summary><strong>🐳 Option 3: Docker</strong></summary>
 
 ```bash
-# Option A: Pull from Docker Hub (recommended for production)
-docker pull enteee/djalgorhythm:latest
+# Option A: Docker Hub (recommended)
 docker run --env-file .env -p 8080:8080 enteee/djalgorhythm:latest
 
-# Option B: Build from source
-docker build -t djalgorhythm .
-docker run --env-file .env -p 8080:8080 djalgorhythm
+# Option B: GitHub Container Registry
+docker run --env-file .env -p 8080:8080 ghcr.io/enteee/djalgorhythm:latest
 ```
 
 </details>
@@ -536,37 +534,27 @@ make lint
 # Clean build artifacts
 make clean
 
-# Build Docker image (auto-detects platform)
-make docker-build
-
-# Build Docker image for specific platform
-make docker-build TARGETPLATFORM=linux/arm64
+# Build Docker images (multi-platform: linux/amd64, linux/arm64)
+make snapshot-release
 ```
 
-#### Docker Build Configuration
+#### Docker Build
 
-The `docker-build` target automatically detects your platform and builds accordingly. You can override this with the `TARGETPLATFORM` variable:
+The `snapshot-release` target uses GoReleaser to build multi-platform Docker images automatically:
 
-**Supported platforms:**
+**Built platforms:**
+
 - `linux/amd64` - Linux x86_64
-- `linux/arm64` - Linux ARM64
-- `darwin/amd64` - macOS Intel
-- `darwin/arm64` - macOS ARM64 (Apple Silicon)
+- `linux/arm64` - Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
 
-**Examples:**
+**What it does:**
 
-```bash
-# Auto-detect current platform (default)
-make docker-build
+1. Builds Go binaries for all platforms (cross-compilation)
+2. Creates Docker images for each platform
+3. Tags images as `djalgorhythm:latest`
+4. Uses GoReleaser configuration from `.goreleaser.yml`
 
-# Build for Linux ARM64 (e.g., Raspberry Pi, AWS Graviton)
-make docker-build TARGETPLATFORM=linux/arm64
-
-# Build for macOS ARM64 (Apple Silicon)
-make docker-build TARGETPLATFORM=darwin/arm64
-```
-
-The build process creates a platform-specific binary directory matching GoReleaser's structure (e.g., `linux/amd64/djalgorhythm`), which is automatically cleaned up after the Docker image is built.
+No manual platform selection needed - GoReleaser handles everything automatically!
 
 ### Testing
 
@@ -606,11 +594,8 @@ Key metrics exposed at `/metrics`:
 ### Docker
 
 ```bash
-# Build image
-docker build -t djalgorhythm:latest .
-
 # Run with environment file
-docker run --env-file .env -p 8080:8080 djalgorhythm:latest
+docker run --env-file .env -p 8080:8080 enteee/djalgorhythm:latest
 
 # Or with docker-compose
 docker-compose up -d
