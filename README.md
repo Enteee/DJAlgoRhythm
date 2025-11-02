@@ -535,7 +535,38 @@ make lint
 
 # Clean build artifacts
 make clean
+
+# Build Docker image (auto-detects platform)
+make docker-build
+
+# Build Docker image for specific platform
+make docker-build TARGETPLATFORM=linux/arm64
 ```
+
+#### Docker Build Configuration
+
+The `docker-build` target automatically detects your platform and builds accordingly. You can override this with the `TARGETPLATFORM` variable:
+
+**Supported platforms:**
+- `linux/amd64` - Linux x86_64
+- `linux/arm64` - Linux ARM64
+- `darwin/amd64` - macOS Intel
+- `darwin/arm64` - macOS ARM64 (Apple Silicon)
+
+**Examples:**
+
+```bash
+# Auto-detect current platform (default)
+make docker-build
+
+# Build for Linux ARM64 (e.g., Raspberry Pi, AWS Graviton)
+make docker-build TARGETPLATFORM=linux/arm64
+
+# Build for macOS ARM64 (Apple Silicon)
+make docker-build TARGETPLATFORM=darwin/arm64
+```
+
+The build process creates a platform-specific binary directory matching GoReleaser's structure (e.g., `linux/amd64/djalgorhythm`), which is automatically cleaned up after the Docker image is built.
 
 ### Testing
 

@@ -242,7 +242,7 @@ docker-build: build ## Build Docker image (auto-detects buildx and CI cache)
 			echo "Using standard docker build..."; \
 			docker build -t $(DOCKER_IMAGE) .; \
 		fi; \
-		rm -rf linux darwin; \
+		rm -rf $(TARGETPLATFORM); \
 		echo "Built: $(DOCKER_IMAGE)"; \
 	else \
 		echo "Docker not found. Skipping build."; \
