@@ -700,5 +700,6 @@ DJAlgoRhythm stands on the shoulders of giants:
 
 [![GitHub Stars](https://img.shields.io/github/stars/Enteee/DJAlgoRhythm?style=social)](https://github.com/Enteee/DJAlgoRhythm)
 [![Follow on GitHub](https://img.shields.io/github/followers/Enteee?style=social)](https://github.com/Enteee)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/Enteeee?style=social)](https://github.com/sponsors/Enteee)
 
 </div>
