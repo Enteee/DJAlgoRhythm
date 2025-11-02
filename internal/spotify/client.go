@@ -1317,7 +1317,7 @@ func (c *Client) startCallbackServer(codeChan chan<- string, errChan chan<- erro
 		codeChan <- code
 	})
 
-	// Parse redirect URL to get port
+	// Parse redirect URL to get port for binding
 	redirectURL := c.config.RedirectURL
 	parsedURL, err := url.Parse(redirectURL)
 	if err != nil {
@@ -1326,10 +1326,12 @@ func (c *Client) startCallbackServer(codeChan chan<- string, errChan chan<- erro
 		return nil
 	}
 
-	addr := parsedURL.Host
-	if parsedURL.Port() == "" {
-		addr = parsedURL.Host + ":80"
+	// Use OAuthBindHost for binding, extract port from RedirectURL
+	port := parsedURL.Port()
+	if port == "" {
+		port = "80"
 	}
+	addr := c.config.OAuthBindHost + ":" + port
 
 	server := &http.Server{
 		Addr:         addr,

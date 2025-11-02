@@ -84,6 +84,8 @@ func init() {
 	rootCmd.PersistentFlags().String("spotify-client-id", "", "Spotify client ID")
 	rootCmd.PersistentFlags().String("spotify-client-secret", "", "Spotify client secret")
 	rootCmd.PersistentFlags().String("spotify-playlist-id", "", "Spotify playlist ID")
+	rootCmd.PersistentFlags().String("spotify-oauth-bind-host", "",
+		"Host for OAuth callback server to bind to (defaults to server-host, use 0.0.0.0 in containers)")
 	rootCmd.PersistentFlags().String("llm-provider", "", "LLM provider (openai, anthropic, ollama) - REQUIRED")
 	rootCmd.PersistentFlags().String("llm-model", "", "LLM model name")
 	rootCmd.PersistentFlags().String("llm-api-key", "", "LLM API key")
@@ -168,6 +170,7 @@ func configureSpotify(cfg *core.Config) {
 	cfg.Spotify.ClientID = viper.GetString("spotify-client-id")
 	cfg.Spotify.ClientSecret = viper.GetString("spotify-client-secret")
 	cfg.Spotify.RedirectURL = viper.GetString("spotify-redirect-url")
+	cfg.Spotify.OAuthBindHost = viper.GetString("spotify-oauth-bind-host")
 	cfg.Spotify.PlaylistID = viper.GetString("spotify-playlist-id")
 	cfg.Spotify.TokenPath = viper.GetString("spotify-token-path")
 	if cfg.Spotify.TokenPath == "" {
@@ -181,6 +184,11 @@ func configureSpotify(cfg *core.Config) {
 			serverHost = "127.0.0.1" // Use localhost for OAuth callback
 		}
 		cfg.Spotify.RedirectURL = "http://" + net.JoinHostPort(serverHost, strconv.Itoa(cfg.Server.Port)) + "/callback"
+	}
+
+	// Default OAuth bind host to server host if not explicitly set
+	if cfg.Spotify.OAuthBindHost == "" {
+		cfg.Spotify.OAuthBindHost = cfg.Server.Host
 	}
 }
 
@@ -680,6 +688,8 @@ func generateSpotifySection(content *strings.Builder, _ *cobra.Command) {
 	fmt.Fprintf(content, "%s=your_target_playlist_id_here\n", flagToEnvVar("spotify-playlist-id"))
 	content.WriteString("## OAuth callback URL (default: auto-generated)\n")
 	fmt.Fprintf(content, "%s=http://127.0.0.1:8080/callback\n", flagToEnvVar("spotify-redirect-url"))
+	content.WriteString("## OAuth server bind address (default: same as server-host, use 0.0.0.0 in containers)\n")
+	fmt.Fprintf(content, "# %s=0.0.0.0\n", flagToEnvVar("spotify-oauth-bind-host"))
 	content.WriteString("## Token storage path (default: ./spotify_token.json)\n")
 	fmt.Fprintf(content, "%s=./spotify_token.json\n", flagToEnvVar("spotify-token-path"))
 	content.WriteString("\n")
