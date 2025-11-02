@@ -11,6 +11,22 @@ VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# Detect target platform in Docker/GoReleaser format (e.g., linux/amd64)
+DETECTED_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+DETECTED_ARCH := $(shell uname -m)
+
+# Convert architecture names to Docker/GoReleaser format
+ifeq ($(DETECTED_ARCH),x86_64)
+    DETECTED_ARCH := amd64
+else ifeq ($(DETECTED_ARCH),aarch64)
+    DETECTED_ARCH := arm64
+else ifeq ($(DETECTED_ARCH),arm64)
+    DETECTED_ARCH := arm64
+endif
+
+# Allow override via environment variable, otherwise use detected platform
+TARGETPLATFORM ?= $(DETECTED_OS)/$(DETECTED_ARCH)
+
 # Go build flags
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)
 BUILD_FLAGS := -ldflags "$(LDFLAGS)" -trimpath
@@ -197,10 +213,11 @@ deps-graph: ## Show dependency graph
 # Docker targets
 docker-build: build ## Build Docker image (auto-detects buildx and CI cache)
 	@echo "Building Docker image..."
+	@echo "Target platform: $(TARGETPLATFORM)"
 	@if command -v docker > /dev/null 2>&1; then \
 		echo "Setting up platform-specific binary directory..."; \
-		mkdir -p bin/linux/amd64; \
-		cp $(BINARY_PATH) bin/linux/amd64/djalgorhythm; \
+		mkdir -p $(TARGETPLATFORM); \
+		cp $(BINARY_PATH) $(TARGETPLATFORM)/djalgorhythm; \
 		if docker buildx version > /dev/null 2>&1; then \
 			echo "Using buildx with caching..."; \
 			CACHE_FROM=""; \
@@ -210,7 +227,7 @@ docker-build: build ## Build Docker image (auto-detects buildx and CI cache)
 				CACHE_TO="--cache-to=type=gha,mode=max"; \
 			fi; \
 			docker buildx build \
-				--platform linux/amd64 \
+				--platform $(TARGETPLATFORM) \
 				--load \
 				-t $(DOCKER_IMAGE) \
 				$$CACHE_FROM \
@@ -220,13 +237,12 @@ docker-build: build ## Build Docker image (auto-detects buildx and CI cache)
 				--label=org.opencontainers.image.revision=$$(git rev-parse HEAD 2>/dev/null || echo "unknown") \
 				--label=org.opencontainers.image.version=$(VERSION) \
 				--label=org.opencontainers.image.source=https://github.com/Enteee/DJAlgoRhythm \
-				--build-context . \
 				.; \
 		else \
 			echo "Using standard docker build..."; \
 			docker build -t $(DOCKER_IMAGE) .; \
 		fi; \
-		rm -rf bin/linux; \
+		rm -rf linux darwin; \
 		echo "Built: $(DOCKER_IMAGE)"; \
 	else \
 		echo "Docker not found. Skipping build."; \
