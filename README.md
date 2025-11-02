@@ -703,12 +703,13 @@ DJAlgoRhythm stands on the shoulders of giants:
 
 ---
 
-<iframe
-  src="https://github.com/sponsors/Enteee/card"
-  title="Sponsor Enteee"
-  height="225"
-  width="600"
-  style="border: 0;">
-</iframe>
+## 💖 Support This Project
+
+If you find DJAlgoRhythm useful, please consider supporting its development:
+
+[![Sponsor][sponsor-badge]][sponsor-link]
+
+[sponsor-badge]: https://img.shields.io/badge/Sponsor-❤️-ff69b4?style=for-the-badge&logo=github-sponsors
+[sponsor-link]: https://github.com/sponsors/Enteee
 
 </div>
