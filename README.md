@@ -448,6 +448,7 @@ Flags:
       --shadow-queue-max-age-hours int               Maximum age of shadow queue items in hours (default 2)
       --spotify-client-id string                     Spotify client ID
       --spotify-client-secret string                 Spotify client secret
+      --spotify-oauth-bind-host string               Host for OAuth callback server to bind to (defaults to server-host, use 0.0.0.0 in containers)
       --spotify-playlist-id string                   Spotify playlist ID
       --telegram-bot-token string                    Telegram bot token
       --telegram-enabled                             Enable Telegram integration (default true)

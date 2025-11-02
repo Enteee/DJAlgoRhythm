@@ -45,11 +45,12 @@ type TelegramConfig struct {
 
 // SpotifyConfig holds Spotify API configuration settings.
 type SpotifyConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURL  string
-	PlaylistID   string
-	TokenPath    string
+	ClientID      string
+	ClientSecret  string
+	RedirectURL   string
+	OAuthBindHost string // Host to bind OAuth callback server (defaults to Server.Host)
+	PlaylistID    string
+	TokenPath     string
 }
 
 // LLMConfig holds LLM provider configuration settings.
