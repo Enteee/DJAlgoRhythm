@@ -701,4 +701,14 @@ DJAlgoRhythm stands on the shoulders of giants:
 [![GitHub Stars](https://img.shields.io/github/stars/Enteee/DJAlgoRhythm?style=social)](https://github.com/Enteee/DJAlgoRhythm)
 [![Follow on GitHub](https://img.shields.io/github/followers/Enteee?style=social)](https://github.com/Enteee)
 
+---
+
+<iframe
+  src="https://github.com/sponsors/Enteee/card"
+  title="Sponsor Enteee"
+  height="225"
+  width="600"
+  style="border: 0;">
+</iframe>
+
 </div>
