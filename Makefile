@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build build-all test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example install run dev snapshot-release docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-check test-ci audit-sarif release
+.PHONY: help build build-all test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example run dev snapshot-release docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-check test-ci audit-sarif release
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -7,17 +7,10 @@ BINARY_PATH := bin/$(BINARY_NAME)
 MAIN_PATH := ./cmd/djalgorhythm
 DOCKER_IMAGE := enteee/djalgorhythm:latest
 DOCKER_REGISTRY :=
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-BUILD_TIME := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Detect current architecture for Docker platform-specific tags
 # Converts: x86_64 -> amd64, aarch64/arm64 -> arm64
 CURRENT_ARCH := $(shell uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
-
-# Go build flags
-LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildTime=$(BUILD_TIME)
-BUILD_FLAGS := -ldflags "$(LDFLAGS)" -trimpath
 
 # Default target
 help: ## Show this help message
@@ -32,11 +25,13 @@ help: ## Show this help message
 build: ## Build binary for current platform (fast, local dev)
 	@echo "Building $(BINARY_NAME) for current platform..."
 	@if command -v goreleaser > /dev/null; then \
-		goreleaser build --snapshot --clean --single-target --output bin/djalgorhythm; \
-	else \
-		echo "⚠️  goreleaser not found, falling back to go build"; \
+		goreleaser build --snapshot --clean --single-target; \
 		mkdir -p bin; \
-		go build $(BUILD_FLAGS) -o $(BINARY_PATH) $(MAIN_PATH); \
+		cp dist/djalgorhythm_*/djalgorhythm bin/djalgorhythm; \
+	else \
+		echo "❌ goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
+		echo "   Or run: devenv shell"; \
+		exit 1; \
 	fi
 	@echo "Built: $(BINARY_PATH)"
 
@@ -52,10 +47,6 @@ dev: ## Run with live reload (requires air)
 		echo "Falling back to regular run..."; \
 		$(MAKE) run; \
 	fi
-
-install: ## Install the binary to $GOPATH/bin
-	@echo "Installing $(BINARY_NAME)..."
-	go install $(BUILD_FLAGS) $(MAIN_PATH)
 
 # Testing targets
 test: ## Run tests
@@ -279,43 +270,7 @@ goreleaser-check: ## Validate GoReleaser configuration
 		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
 	fi
 
-# Development environment targets
-dev-setup: ## Set up development environment
-	@echo "Setting up development environment..."
-	@if command -v devenv > /dev/null; then \
-		echo "devenv detected. Run: devenv shell"; \
-	elif command -v nix > /dev/null; then \
-		echo "Nix detected. Install devenv: https://devenv.sh/getting-started/"; \
-	else \
-		echo "Installing development tools..."; \
-		go install github.com/cosmtrek/air@latest; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-		go install honnef.co/go/tools/cmd/staticcheck@latest; \
-		go install golang.org/x/vuln/cmd/govulncheck@latest; \
-		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
-		go install golang.org/x/tools/cmd/godoc@latest; \
-	fi
-
-dev-status: ## Show development environment status
-	@echo "Development Environment Status:"
-	@echo "==============================="
-	@echo "Go version: $(shell go version 2>/dev/null || echo 'not found')"
-	@echo "Air: $(shell air -v 2>/dev/null || echo 'not found')"
-	@echo "golangci-lint: $(shell golangci-lint version 2>/dev/null || echo 'not found')"
-	@echo "staticcheck: $(shell staticcheck -version 2>/dev/null || echo 'not found')"
-	@echo "gosec: $(shell gosec -version 2>/dev/null || echo 'not found')"
-	@echo "govulncheck: $(shell govulncheck -version 2>/dev/null || echo 'not found')"
-	@echo "Docker: $(shell docker --version 2>/dev/null || echo 'not found')"
-	@echo "Docker Compose: $(shell docker-compose --version 2>/dev/null || echo 'not found')"
-
 # CI/CD targets
-ci-deps: ## Install CI dependencies
-	@echo "Installing CI dependencies..."
-	go mod download
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install honnef.co/go/tools/cmd/staticcheck@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-
 test-ci: ## Run tests with coverage for CI (includes go mod verify)
 	@echo "Running CI tests..."
 	go mod verify
@@ -372,13 +327,3 @@ release: ## Build and push release with GoReleaser (tags required)
 		echo "goreleaser not found. Install with: go install github.com/goreleaser/goreleaser@latest"; \
 		exit 1; \
 	fi
-
-# Info targets
-version: ## Show version information
-	@echo "DJAlgoRhythm"
-	@echo "Version: $(VERSION)"
-	@echo "Commit: $(COMMIT)"
-	@echo "Built: $(BUILD_TIME)"
-	@echo "Go: $(shell go version)"
-
-info: version dev-status ## Show all information
