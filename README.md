@@ -128,13 +128,11 @@ go mod download
 <summary><strong>🐳 Option 3: Docker</strong></summary>
 
 ```bash
-# Option A: Pull from Docker Hub (recommended for production)
-docker pull enteee/djalgorhythm:latest
+# Option A: Docker Hub (recommended)
 docker run --env-file .env -p 8080:8080 enteee/djalgorhythm:latest
 
-# Option B: Build from source
-docker build -t djalgorhythm .
-docker run --env-file .env -p 8080:8080 djalgorhythm
+# Option B: GitHub Container Registry
+docker run --env-file .env -p 8080:8080 ghcr.io/enteee/djalgorhythm:latest
 ```
 
 </details>
@@ -536,7 +534,28 @@ make lint
 
 # Clean build artifacts
 make clean
+
+# Build Docker images (multi-platform: linux/amd64, linux/arm64)
+make snapshot-release
 ```
+
+#### Docker Build
+
+The `snapshot-release` target uses GoReleaser to build multi-platform Docker images automatically:
+
+**Built platforms:**
+
+- `linux/amd64` - Linux x86_64
+- `linux/arm64` - Linux ARM64 (Raspberry Pi, AWS Graviton, etc.)
+
+**What it does:**
+
+1. Builds Go binaries for all platforms (cross-compilation)
+2. Creates Docker images for each platform
+3. Tags images as `djalgorhythm:latest`
+4. Uses GoReleaser configuration from `.goreleaser.yml`
+
+No manual platform selection needed - GoReleaser handles everything automatically!
 
 ### Testing
 
@@ -576,11 +595,8 @@ Key metrics exposed at `/metrics`:
 ### Docker
 
 ```bash
-# Build image
-docker build -t djalgorhythm:latest .
-
 # Run with environment file
-docker run --env-file .env -p 8080:8080 djalgorhythm:latest
+docker run --env-file .env -p 8080:8080 enteee/djalgorhythm:latest
 
 # Or with docker-compose
 docker-compose up -d
