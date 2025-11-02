@@ -8,6 +8,13 @@ allowed-tools:
 
 This command automates the complete PR workflow for getting code ready to merge.
 
+## 🚨 CRITICAL SAFETY RULE 🚨
+
+**NEVER EVER push to the main branch!**
+
+This command includes multiple safety checks to ensure you're on a feature branch before pushing.
+If at ANY point you detect you're on the main branch when attempting to push, ABORT IMMEDIATELY.
+
 ## Workflow Steps
 
 You MUST follow these steps in order:
@@ -26,11 +33,21 @@ You MUST follow these steps in order:
 
 ### Step 2: Check Current Branch and Create Feature Branch If Needed
 
+**CRITICAL**: NEVER EVER push to the main branch. This step MUST verify we're on a feature branch.
+
 1. Run `git branch --show-current` to get the current branch name
 2. If the current branch is `main`:
+   - **STOP**: You CANNOT proceed on main branch
+   - Analyze the uncommitted changes with `git diff` and `git status`
    - Generate a descriptive branch name based on the changes (format: `feature/short-description` or `fix/short-description`)
    - Create and checkout the new branch: `git checkout -b <branch-name>`
-3. If already on a feature branch, continue with that branch
+   - Verify the branch was created: `git branch --show-current`
+   - Only proceed if confirmed NOT on main branch
+3. If already on a feature branch (NOT main):
+   - Verify it's truly not main: `git branch --show-current`
+   - Confirm before proceeding to next step
+
+**IMPORTANT**: If at ANY point you detect you're on main branch in later steps, ABORT IMMEDIATELY and inform the user.
 
 ### Step 3: Check for Changes and Create Commit
 
@@ -57,9 +74,15 @@ You MUST follow these steps in order:
 
 ### Step 4: Push Changes to Remote
 
-1. Run `git status` to check if branch tracks remote
-2. If branch doesn't track remote or is ahead:
-   - Push with: `git push -u origin <branch-name>` (or just `git push` if already tracking)
+**CRITICAL SAFETY CHECK**: Before pushing, verify we are NOT on main branch!
+
+1. Run `git branch --show-current` to verify current branch
+2. **ABORT IF ON MAIN**: If the current branch is `main`, STOP IMMEDIATELY and inform the user that pushing to main is forbidden
+3. If on a feature branch (confirmed NOT main):
+   - Run `git status` to check if branch tracks remote
+   - If branch doesn't track remote or is ahead:
+     - Push with: `git push -u origin <branch-name>` (or just `git push` if already tracking)
+   - NEVER use `--force` or `--force-with-lease` to main branch
 
 ### Step 5: Manage Pull Request
 
@@ -102,6 +125,15 @@ You MUST follow these steps in order:
 
 ## Error Handling
 
+- **If attempting to push to main branch**: ABORT IMMEDIATELY with error message explaining you cannot push to main
 - If `make check` cannot be fixed automatically, explain the issue to the user
 - If git operations fail, show the error and ask for user intervention
 - If `gh` command is not available, inform the user they need GitHub CLI
+
+## Safety Checks Summary
+
+The command performs branch verification at multiple points:
+
+1. **Step 2**: Before creating commit - ensures on feature branch
+2. **Step 4**: Before pushing - double-checks NOT on main branch
+3. **Throughout**: If main branch detected at any point, abort with error
