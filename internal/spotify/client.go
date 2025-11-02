@@ -1243,7 +1243,7 @@ func (c *Client) startOAuthFlow(ctx context.Context) error {
 	fmt.Printf("Please visit the following URL to authorize:\n\n")
 	fmt.Printf("  %s\n\n", authURL)
 	fmt.Printf("Waiting for authorization...\n")
-	fmt.Printf("(The browser will redirect to localhost:8080/callback)\n")
+	fmt.Printf("(The browser will redirect to 127.0.0.1:8080/callback)\n")
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 
 	// Wait for callback or timeout
