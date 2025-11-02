@@ -28,8 +28,9 @@ own risk and have fun with it!
 
 ## 🎯 **What is DJAlgoRhythm?**
 
-DJAlgoRhythm transforms your group chat into an intelligent music curator. Simply drop a song name, artist, or
-Spotify link into your Telegram group, and watch as the bot automatically adds it to your shared Spotify playlist.
+DJAlgoRhythm transforms your group chat into an intelligent music curator. Simply drop a song name, artist, Spotify link,
+or even cross-platform music links (YouTube, Apple Music, Tidal, etc.) into your Telegram group, and watch as the bot
+automatically adds it to your shared Spotify playlist.
 
 **✨ The magic happens when someone says:** *"Play some Arctic Monkeys"* and the AI figures out exactly which song they meant!
 
@@ -47,9 +48,9 @@ Spotify link into your Telegram group, and watch as the bot automatically adds i
 
 ### 🤖 **AI-Powered Disambiguation**
 
-- **OpenAI GPT** for intelligent song matching
-- **Anthropic Claude** for nuanced understanding
-- **Local Ollama** for privacy-focused setups
+- **OpenAI GPT** for intelligent song matching (fully implemented)
+- **Anthropic Claude** (interface only - not yet implemented)
+- **Local Ollama** (interface only - not yet implemented)
 
 </td>
 <td width="50%">
@@ -85,10 +86,10 @@ Spotify link into your Telegram group, and watch as the bot automatically adds i
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|
-| 🐹 **Go 1.24+** | ✅ Required | For building from source |
-| 📱 **Telegram Bot** | ✅ Recommended | Create with [@BotFather](https://t.me/botfather) |
+| 🐹 **Go 1.25+** | ✅ Required | For building from source |
+| 📱 **Telegram Bot** | ✅ Required | Create with [@BotFather](https://t.me/botfather) |
 | 💚 **Spotify Premium** | ✅ Required | Free accounts can't control playback |
-| 🤖 **AI Provider** | ✅ Required | OpenAI GPT (primary), Anthropic and Ollama (experimental) |
+| 🤖 **AI Provider** | ✅ Required | OpenAI GPT (fully supported), Anthropic and Ollama (stubs only) |
 
 ### ⚡ **Installation**
 
@@ -116,7 +117,7 @@ direnv allow
 <summary><strong>🛠️ Option 2: Manual Go Setup</strong></summary>
 
 ```bash
-# Ensure you have Go 1.24+ installed
+# Ensure you have Go 1.25+ installed
 git clone https://github.com/Enteee/DJAlgoRhythm.git
 cd DJAlgoRhythm
 go mod download
@@ -204,7 +205,7 @@ DJALGORHYTHM_TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 
 Choose your AI provider for smart song disambiguation:
 
-##### OpenAI (Recommended)
+##### OpenAI (Recommended - Fully Supported)
 
 ```bash
 DJALGORHYTHM_LLM_PROVIDER=openai
@@ -212,17 +213,23 @@ DJALGORHYTHM_LLM_API_KEY=sk-...
 DJALGORHYTHM_LLM_MODEL=gpt-4o-mini  # Cost-effective choice
 ```
 
-##### Anthropic Claude
+##### Anthropic Claude (Not Yet Implemented)
+
+**Note:** Anthropic provider is currently only a stub interface. Implementation coming soon!
 
 ```bash
+# NOT CURRENTLY WORKING - Interface only
 DJALGORHYTHM_LLM_PROVIDER=anthropic
 DJALGORHYTHM_LLM_API_KEY=sk-ant-...
 DJALGORHYTHM_LLM_MODEL=claude-3-haiku-20240307  # Fast & cheap
 ```
 
-##### Local Ollama (Privacy-focused)
+##### Local Ollama (Not Yet Implemented)
+
+**Note:** Ollama provider is currently only a stub interface. Implementation coming soon!
 
 ```bash
+# NOT CURRENTLY WORKING - Interface only
 DJALGORHYTHM_LLM_PROVIDER=ollama
 DJALGORHYTHM_LLM_BASE_URL=http://localhost:11434
 DJALGORHYTHM_LLM_MODEL=llama3.2  # Install with: ollama pull llama3.2
@@ -484,18 +491,21 @@ DJALGORHYTHM_LOG_LEVEL=info
 ### Project Structure
 
 ```text
-cmd/djalgorhythm/           # Main application
+cmd/djalgorhythm/           # Main application entry point
 internal/
   ├── chat/           # Unified chat frontend interface
-  │   ├── telegram/   # Telegram Bot API client
+  │   └── telegram/   # Telegram Bot API client
   ├── core/           # Domain types and message dispatcher
-  ├── spotify/        # Spotify client (zmb3/spotify)
-  ├── llm/            # LLM providers (OpenAI, Anthropic, Ollama)
-  ├── store/          # Dedup store (Bloom + LRU)
-  └── http/           # HTTP server and metrics
+  ├── spotify/        # Spotify Web API client (zmb3/spotify)
+  ├── llm/            # LLM providers (OpenAI, Anthropic stub, Ollama stub)
+  ├── store/          # Dedup store (Bloom filter + LRU cache)
+  ├── http/           # HTTP server, metrics, and web UI
+  ├── flood/          # Flood protection and rate limiting
+  └── i18n/           # Internationalization (en, ch_be)
 pkg/
   ├── text/           # Message parsing and URL detection
-  └── fuzzy/          # String similarity and normalization
+  ├── fuzzy/          # String similarity and normalization
+  └── musiclink/      # Cross-platform music link resolvers
 ```
 
 ### Development Environment
@@ -529,8 +539,8 @@ make build
 # Run tests
 make test
 
-# Run linting
-make lint
+# Run all quality checks (fmt, vet, lint, test, build)
+make check
 
 # Clean build artifacts
 make clean
@@ -664,7 +674,7 @@ DJALGORHYTHM_LOG_LEVEL=debug ./bin/djalgorhythm
 - Follow Go conventions and idioms
 - Add tests for new functionality
 - Update documentation for user-facing changes
-- Run `make lint` before committing
+- Run `make check` before committing (runs fmt, vet, lint, tests, and build)
 - Use conventional commit messages
 
 ## License
