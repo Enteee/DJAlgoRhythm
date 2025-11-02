@@ -477,6 +477,14 @@ func promptForTelegramGroup() (int64, error) {
 		return 0, errors.New("no groups found. Please add the bot to a group first and send some messages")
 	}
 
+	// Auto-select if only one group (unambiguous - no need to prompt)
+	if len(groups) == 1 {
+		selectedGroup := groups[0]
+		fmt.Printf("\n✅ Auto-selected group: %s (ID: %d)\n", selectedGroup.Title, selectedGroup.ID)
+		fmt.Printf("💡 To skip discovery, set: DJALGORHYTHM_TELEGRAM_GROUP_ID=%d\n\n", selectedGroup.ID)
+		return selectedGroup.ID, nil
+	}
+
 	// Display available groups
 	fmt.Println("\n📋 Available groups:")
 	for i, group := range groups {
@@ -487,7 +495,12 @@ func promptForTelegramGroup() (int64, error) {
 	fmt.Printf("\nSelect a group (1-%d): ", len(groups))
 	var selection int
 	if _, err := fmt.Scanln(&selection); err != nil {
-		return 0, fmt.Errorf("failed to read selection: %w", err)
+		// EOF or other read error (e.g., no TTY available)
+		fmt.Println() // Newline for formatting
+		return 0, fmt.Errorf(
+			"failed to read selection (stdin not available): %w\n\n"+
+				"Multiple groups found. Set DJALGORHYTHM_TELEGRAM_GROUP_ID to one of the group IDs listed above",
+			err)
 	}
 
 	if selection < 1 || selection > len(groups) {
