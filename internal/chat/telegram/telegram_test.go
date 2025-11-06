@@ -1,25 +1,16 @@
 package telegram
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"go.uber.org/zap"
-
-	"djalgorhythm/internal/chat"
-)
-
-const (
-	telegramDisabledError = "telegram frontend is disabled"
 )
 
 func TestNewFrontend(t *testing.T) {
 	config := &Config{
 		BotToken:            "test-token",
 		GroupID:             -123456789,
-		Enabled:             true,
 		FloodLimitPerMinute: 10,
 	}
 
@@ -50,121 +41,6 @@ func TestNewFrontend(t *testing.T) {
 	}
 	if stats.WindowSeconds != 60 {
 		t.Errorf("Expected flood window 60 seconds, got %d", stats.WindowSeconds)
-	}
-}
-
-func TestStartDisabled(t *testing.T) {
-	config := &Config{
-		Enabled: false,
-	}
-
-	logger := zap.NewNop()
-	frontend := NewFrontend(config, logger)
-
-	ctx := context.Background()
-	err := frontend.Start(ctx)
-
-	if err != nil {
-		t.Errorf("Start with disabled config should not return error, got: %v", err)
-	}
-}
-
-func TestListenDisabled(t *testing.T) {
-	config := &Config{
-		Enabled: false,
-	}
-
-	logger := zap.NewNop()
-	frontend := NewFrontend(config, logger)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	messageReceived := false
-	err := frontend.Listen(ctx, func(_ *chat.Message) {
-		messageReceived = true
-	})
-
-	if err != nil {
-		t.Errorf("Listen with disabled config should not return error, got: %v", err)
-	}
-
-	if messageReceived {
-		t.Error("Should not receive messages when disabled")
-	}
-}
-
-func TestSendTextDisabled(t *testing.T) {
-	config := &Config{
-		Enabled: false,
-	}
-
-	logger := zap.NewNop()
-	frontend := NewFrontend(config, logger)
-
-	ctx := context.Background()
-	_, err := frontend.SendText(ctx, "123", "456", "test message")
-
-	if err == nil {
-		t.Error("SendText with disabled config should return error")
-	}
-
-	expectedError := telegramDisabledError
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
-}
-
-func TestReactDisabled(t *testing.T) {
-	config := &Config{
-		Enabled: false,
-	}
-
-	logger := zap.NewNop()
-	frontend := NewFrontend(config, logger)
-
-	ctx := context.Background()
-	err := frontend.React(ctx, "123", "456", chat.ReactionThumbsUp)
-
-	if err == nil {
-		t.Error("React with disabled config should return error")
-	}
-
-	expectedError := telegramDisabledError
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
-	}
-}
-
-func TestAwaitApprovalDisabled(t *testing.T) {
-	config := &Config{
-		Enabled: false,
-	}
-
-	logger := zap.NewNop()
-	frontend := NewFrontend(config, logger)
-
-	ctx := context.Background()
-	msg := chat.Message{
-		ID:       "123",
-		ChatID:   "-456",
-		SenderID: "789",
-		Text:     "test",
-	}
-
-	approved, err := frontend.AwaitApproval(ctx, &msg, "test prompt", 10)
-
-	if err == nil {
-		t.Error("AwaitApproval with disabled config should return error")
-	}
-
-	if approved {
-		t.Error("AwaitApproval should not return approved when disabled")
-	}
-
-	expectedError := telegramDisabledError
-	if err.Error() != expectedError {
-		t.Errorf("Expected error '%s', got '%s'", expectedError, err.Error())
 	}
 }
 

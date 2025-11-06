@@ -21,10 +21,6 @@ func TestDefaultConfig(t *testing.T) {
 	if config.LLM.Provider != "" {
 		t.Errorf("Expected default LLM provider to be empty (requiring explicit configuration), got %s", config.LLM.Provider)
 	}
-
-	if config.Telegram.Enabled != true {
-		t.Errorf("Expected Telegram to be enabled by default")
-	}
 }
 
 func TestLanguageConfiguration(t *testing.T) {

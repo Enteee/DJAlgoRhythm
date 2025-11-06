@@ -208,10 +208,9 @@ func (d *Dispatcher) sendShutdownMessage(ctx context.Context) {
 	}
 }
 
-// getGroupID returns the appropriate group ID based on enabled frontends.
+// getGroupID returns the Telegram group ID.
 func (d *Dispatcher) getGroupID() string {
-	// Use the configuration to determine the group ID based on enabled frontend
-	if d.config.Telegram.Enabled && d.config.Telegram.GroupID != 0 {
+	if d.config.Telegram.GroupID != 0 {
 		return strconv.FormatInt(d.config.Telegram.GroupID, 10)
 	}
 	return ""

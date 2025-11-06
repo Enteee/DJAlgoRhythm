@@ -37,7 +37,6 @@ type Config struct {
 type TelegramConfig struct {
 	BotToken           string
 	GroupID            int64
-	Enabled            bool
 	AdminApproval      bool
 	AdminNeedsApproval bool
 	CommunityApproval  int
@@ -94,7 +93,7 @@ type AppConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Telegram: TelegramConfig{
-			Enabled: true, // Enabled by default
+			// Telegram is always required
 		},
 		Spotify: SpotifyConfig{
 			RedirectURL: "", // Will be dynamically generated based on server config

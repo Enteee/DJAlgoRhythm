@@ -93,13 +93,8 @@ before proceeding or considering the task complete. This command runs:
 **Running the application:**
 
 ```bash
-# Quick run with test credentials (disabled integrations)
-env DJALGORHYTHM_LANGUAGE=en go run \
-  ./cmd/djalgorhythm \
-    --telegram-enabled=false \
-    --spotify-client-id=test \
-    --spotify-client-secret=test \
-    --spotify-playlist-id=test
+# Quick run requires real credentials
+# See .env.example for required Telegram, Spotify, and LLM configuration
 
 # Run with debug logging
 go run ./cmd/djalgorhythm --log-level=debug
@@ -134,7 +129,7 @@ go run ./cmd/djalgorhythm --help
 go run ./cmd/djalgorhythm --config=.env --help
 
 # Test with different languages
-env DJALGORHYTHM_LANGUAGE=ch_be go run ./cmd/djalgorhythm --telegram-enabled=false
+env DJALGORHYTHM_LANGUAGE=ch_be go run ./cmd/djalgorhythm
 ```
 
 ## Go Development Best Practices

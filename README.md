@@ -55,10 +55,10 @@ automatically adds it to your shared Spotify playlist.
 </td>
 <td width="50%">
 
-### 💬 **Multi-Platform Chat Support**
+### 💬 **Telegram Integration**
 
-- **Telegram** → Primary platform with rich features
 - **Interactive Group Selection** → No more manual setup headaches
+- **Rich Bot Features** → Reactions, inline buttons, group management
 
 ### 🛡️ **Smart Safeguards**
 
@@ -422,7 +422,6 @@ Flags:
       --spotify-oauth-bind-host string               Host for OAuth callback server to bind to (defaults to server-host, use 0.0.0.0 in containers)
       --spotify-playlist-id string                   Spotify playlist ID
       --telegram-bot-token string                    Telegram bot token
-      --telegram-enabled                             Enable Telegram integration (default true)
       --telegram-group-id int                        Telegram group ID
 ```
 <!-- markdownlint-enable MD013 -->
