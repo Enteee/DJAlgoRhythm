@@ -3,7 +3,6 @@
   "permissions": {
     "allow": [
       "Bash(docker:*)",
-      "Bash(docker-compose:*)",
       "Bash(npm:*)",
       "Bash(yarn:*)",
       "Bash(pnpm:*)"

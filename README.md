@@ -74,7 +74,7 @@ automatically adds it to your shared Spotify playlist.
 ### 🔧 **Developer-Friendly**
 
 - **📊 Observability** → Prometheus metrics, health checks, structured logging
-- **🐳 Containerized** → Docker support with docker-compose
+- **🐳 Containerized** → Docker support
 - **⚡ Performance** → Efficient API usage with smart caching
 - **🔄 Resilient** → Automatic retries, graceful shutdown, comprehensive error handling
 
@@ -553,9 +553,6 @@ Key metrics exposed at `/metrics`:
 ```bash
 # Run with environment file
 docker run --env-file .env -p 8080:8080 enteee/djalgorhythm:latest
-
-# Or with docker-compose
-docker-compose up -d
 ```
 
 ### Production Considerations

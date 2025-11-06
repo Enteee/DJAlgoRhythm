@@ -1,5 +1,5 @@
 # DJAlgoRhythm Makefile
-.PHONY: help build build-all test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example run dev snapshot-release docker-run docker-compose-up docker-compose-down deps audit security lint-config goreleaser-check test-ci audit-sarif release
+.PHONY: help build build-all test clean lint fmt vet staticcheck check check-env-example check-help-sync update-env-example run dev snapshot-release docker-run deps audit security lint-config goreleaser-check test-ci audit-sarif release
 
 # Variables
 BINARY_NAME := djalgorhythm
@@ -218,14 +218,6 @@ docker-run: snapshot-release ## Build and run Docker container
 		-p 8080:8080 \
 		--name djalgorhythm \
 		$(DOCKER_IMAGE)
-
-docker-compose-up: ## Start services with docker-compose
-	@echo "Starting services with docker-compose..."
-	docker-compose up -d
-
-docker-compose-down: ## Stop services with docker-compose
-	@echo "Stopping services with docker-compose..."
-	docker-compose down
 
 # Cleanup targets
 clean: ## Clean build artifacts
