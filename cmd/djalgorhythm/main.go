@@ -78,7 +78,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .env)")
 	rootCmd.PersistentFlags().String("log-level", "info", "log level (debug, info, warn, error)")
 	rootCmd.PersistentFlags().String("log-format", "text", "log format (json, text)")
-	rootCmd.PersistentFlags().Bool("telegram-enabled", true, "Enable Telegram integration")
 	rootCmd.PersistentFlags().String("telegram-bot-token", "", "Telegram bot token")
 	rootCmd.PersistentFlags().Int64("telegram-group-id", 0, "Telegram group ID")
 	rootCmd.PersistentFlags().String("spotify-client-id", "", "Spotify client ID")
@@ -158,7 +157,6 @@ func buildConfig() *core.Config {
 }
 
 func configureTelegram(cfg *core.Config) {
-	cfg.Telegram.Enabled = viper.GetBool("telegram-enabled")
 	cfg.Telegram.BotToken = viper.GetString("telegram-bot-token")
 	cfg.Telegram.GroupID = viper.GetInt64("telegram-group-id")
 	cfg.Telegram.AdminApproval = viper.GetBool("admin-approval")
@@ -309,8 +307,7 @@ func runDJAlgoRhythm(cmd *cobra.Command, _ []string) error {
 	logger.Info("Starting DJAlgoRhythm",
 		zap.String("version", "2.0.0"),
 		zap.String("llm_provider", config.LLM.Provider),
-		zap.String("spotify_playlist", config.Spotify.PlaylistID),
-		zap.Bool("telegram_enabled", config.Telegram.Enabled))
+		zap.String("spotify_playlist", config.Spotify.PlaylistID))
 
 	if err := validateConfig(); err != nil {
 		return fmt.Errorf("configuration validation failed: %w", err)
@@ -336,10 +333,7 @@ type services struct {
 func initializeServices(ctx context.Context) (*services, error) {
 	dedup := store.NewDedupStore(defaultDedupStoreCapacity, defaultDedupStoreFalsePositiveRate)
 
-	frontend, err := createChatFrontend()
-	if err != nil {
-		return nil, err
-	}
+	frontend := createChatFrontend()
 
 	llmProvider, err := createLLMProvider()
 	if err != nil {
@@ -368,30 +362,25 @@ func initializeServices(ctx context.Context) (*services, error) {
 	}, nil
 }
 
-func createChatFrontend() (chat.Frontend, error) {
-	if config.Telegram.Enabled {
-		telegramConfig := &telegram.Config{
-			BotToken:            config.Telegram.BotToken,
-			GroupID:             config.Telegram.GroupID,
-			Enabled:             config.Telegram.Enabled,
-			AdminApproval:       config.Telegram.AdminApproval,
-			AdminNeedsApproval:  config.Telegram.AdminNeedsApproval,
-			CommunityApproval:   config.Telegram.CommunityApproval,
-			Language:            config.App.Language,
-			FloodLimitPerMinute: config.App.FloodLimitPerMinute,
-		}
-		frontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
-
-		// Pass pointer to core config's GroupID to enable automatic migration sync
-		frontend.SetCoreGroupIDPointer(&config.Telegram.GroupID)
-
-		logger.Info("Using Telegram as primary chat frontend",
-			zap.Bool("admin_approval", config.Telegram.AdminApproval),
-			zap.String("language", config.App.Language))
-		return frontend, nil
+func createChatFrontend() chat.Frontend {
+	telegramConfig := &telegram.Config{
+		BotToken:            config.Telegram.BotToken,
+		GroupID:             config.Telegram.GroupID,
+		AdminApproval:       config.Telegram.AdminApproval,
+		AdminNeedsApproval:  config.Telegram.AdminNeedsApproval,
+		CommunityApproval:   config.Telegram.CommunityApproval,
+		Language:            config.App.Language,
+		FloodLimitPerMinute: config.App.FloodLimitPerMinute,
 	}
+	frontend := telegram.NewFrontend(telegramConfig, logger.Named("telegram"))
 
-	return nil, errors.New("no chat frontend enabled - enable Telegram")
+	// Pass pointer to core config's GroupID to enable automatic migration sync
+	frontend.SetCoreGroupIDPointer(&config.Telegram.GroupID)
+
+	logger.Info("Using Telegram as chat frontend",
+		zap.Bool("admin_approval", config.Telegram.AdminApproval),
+		zap.String("language", config.App.Language))
+	return frontend
 }
 
 func createLLMProvider() (core.LLMProvider, error) {
@@ -451,7 +440,6 @@ func promptForTelegramGroup() (int64, error) {
 	telegramConfig := &telegram.Config{
 		BotToken:            config.Telegram.BotToken,
 		GroupID:             0, // Temporary - we'll set this after selection
-		Enabled:             true,
 		AdminApproval:       config.Telegram.AdminApproval,
 		AdminNeedsApproval:  config.Telegram.AdminNeedsApproval,
 		CommunityApproval:   config.Telegram.CommunityApproval,
@@ -531,25 +519,18 @@ func validateConfig() error {
 }
 
 func validateChatFrontends() error {
-	// Ensure Telegram frontend is enabled
-	if !config.Telegram.Enabled {
-		return errors.New("telegram frontend must be enabled")
+	// Validate Telegram configuration (required)
+	if config.Telegram.BotToken == "" {
+		return errors.New("telegram bot token is required")
 	}
-
-	// Validate Telegram configuration if enabled
-	if config.Telegram.Enabled {
-		if config.Telegram.BotToken == "" {
-			return errors.New("telegram bot token is required when Telegram is enabled")
+	if config.Telegram.GroupID == 0 {
+		// Interactive group selection if group ID not provided
+		groupID, err := promptForTelegramGroup()
+		if err != nil {
+			return fmt.Errorf("failed to select Telegram group: %w", err)
 		}
-		if config.Telegram.GroupID == 0 {
-			// Interactive group selection if group ID not provided
-			groupID, err := promptForTelegramGroup()
-			if err != nil {
-				return fmt.Errorf("failed to select Telegram group: %w", err)
-			}
-			config.Telegram.GroupID = groupID
-			logger.Info("Selected Telegram group interactively", zap.Int64("groupID", groupID))
-		}
+		config.Telegram.GroupID = groupID
+		logger.Info("Selected Telegram group interactively", zap.Int64("groupID", groupID))
 	}
 
 	return nil
@@ -627,7 +608,7 @@ func generateEnvExampleContent(cmd *cobra.Command) string {
 	content.WriteString("## CLI equivalent: --<section>-<setting>\n")
 	content.WriteString("#\n")
 	content.WriteString("## =============================================================================\n")
-	content.WriteString("## CHAT PLATFORMS - Choose one primary platform\n")
+	content.WriteString("## TELEGRAM CONFIGURATION - Required\n")
 	content.WriteString("## =============================================================================\n\n")
 
 	// Generate sections
@@ -655,19 +636,14 @@ func getDefaultValueString(cmd *cobra.Command, flagName string) string {
 
 func generateTelegramSection(content *strings.Builder, cmd *cobra.Command) {
 	content.WriteString("## -----------------------------------------------------------------------------\n")
-	content.WriteString("## Telegram Configuration (Recommended - Default enabled)\n")
+	content.WriteString("## Telegram Bot Setup\n")
 	content.WriteString("## -----------------------------------------------------------------------------\n")
-	content.WriteString("## CLI: --telegram-enabled, --telegram-bot-token, --telegram-group-id\n")
+	content.WriteString("## CLI: --telegram-bot-token, --telegram-group-id\n")
 
-	// Get flag defaults
-	enabledDefault := getDefaultValueString(cmd, "telegram-enabled")
-
-	fmt.Fprintf(content, "## Enable Telegram bot (default: %s)\n", enabledDefault)
-	fmt.Fprintf(content, "%s=%s\n", flagToEnvVar("telegram-enabled"), enabledDefault)
-	content.WriteString("## Bot token from @BotFather\n")
+	content.WriteString("## Bot token from @BotFather (REQUIRED)\n")
 	fmt.Fprintf(content, "%s=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11\n",
 		flagToEnvVar("telegram-bot-token"))
-	content.WriteString("## Group ID (get from @userinfobot)\n")
+	content.WriteString("## Group ID (auto-detected if not set, get from @userinfobot)\n")
 	fmt.Fprintf(content, "%s=-100xxxxxxxxxx\n", flagToEnvVar("telegram-group-id"))
 	content.WriteString("\n")
 	content.WriteString("## Admin and Community Approval\n")

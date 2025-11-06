@@ -38,8 +38,7 @@ const (
 // Config holds Telegram-specific configuration.
 type Config struct {
 	BotToken            string
-	GroupID             int64 // Chat ID of the group to monitor
-	Enabled             bool
+	GroupID             int64  // Chat ID of the group to monitor
 	AdminApproval       bool   // Whether admin approval is required for songs
 	AdminNeedsApproval  bool   // Whether admins also need approval (for testing)
 	CommunityApproval   int    // Number of 👍 reactions needed to bypass admin approval (0 disables)
@@ -137,11 +136,6 @@ func (f *Frontend) SetCoreGroupIDPointer(groupIDPtr *int64) {
 
 // Start initializes the Telegram bot and begins listening for updates.
 func (f *Frontend) Start(ctx context.Context) error {
-	if !f.config.Enabled {
-		f.logger.Info("Telegram frontend is disabled, skipping initialization")
-		return nil
-	}
-
 	f.logger.Info("Starting Telegram frontend",
 		zap.String("group_id", strconv.FormatInt(f.config.GroupID, 10)))
 
@@ -197,10 +191,6 @@ func (f *Frontend) Start(ctx context.Context) error {
 
 // Listen starts listening for messages and calls the handler for each message.
 func (f *Frontend) Listen(ctx context.Context, handler func(*chat.Message)) error {
-	if !f.config.Enabled {
-		return nil // Do nothing if disabled
-	}
-
 	f.messageHandler = handler
 
 	// Start the bot
@@ -211,10 +201,6 @@ func (f *Frontend) Listen(ctx context.Context, handler func(*chat.Message)) erro
 
 // SendText sends a text message to the specified chat, optionally as a reply.
 func (f *Frontend) SendText(ctx context.Context, chatID, replyToID, message string) (string, error) {
-	if !f.config.Enabled {
-		return "", errors.New("telegram frontend is disabled")
-	}
-
 	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid chat ID: %w", err)
@@ -252,10 +238,6 @@ func (f *Frontend) SendText(ctx context.Context, chatID, replyToID, message stri
 
 // DeleteMessage deletes a message by its ID.
 func (f *Frontend) DeleteMessage(ctx context.Context, chatID, msgID string) error {
-	if !f.config.Enabled {
-		return errors.New("telegram frontend is disabled")
-	}
-
 	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid chat ID: %w", err)
@@ -281,10 +263,6 @@ func (f *Frontend) DeleteMessage(ctx context.Context, chatID, msgID string) erro
 
 // React adds an emoji reaction to a message.
 func (f *Frontend) React(ctx context.Context, chatID, msgID string, r chat.Reaction) error {
-	if !f.config.Enabled {
-		return errors.New("telegram frontend is disabled")
-	}
-
 	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid chat ID: %w", err)
@@ -322,10 +300,6 @@ func (f *Frontend) React(ctx context.Context, chatID, msgID string, r chat.React
 // AwaitApproval waits for user approval via reaction or inline buttons.
 func (f *Frontend) AwaitApproval(ctx context.Context, origin *chat.Message, prompt string,
 	timeoutSec int) (bool, error) {
-	if !f.config.Enabled {
-		return false, errors.New("telegram frontend is disabled")
-	}
-
 	chatIDInt, originalUserID, err := f.parseMessageIDs(origin)
 	if err != nil {
 		return false, err
@@ -867,15 +841,11 @@ func (f *Frontend) getUserDisplayName(user *models.User) string {
 
 // IsAdminApprovalEnabled returns whether admin approval is enabled.
 func (f *Frontend) IsAdminApprovalEnabled() bool {
-	return f.config.AdminApproval && f.config.Enabled
+	return f.config.AdminApproval
 }
 
 // GetGroupAdmins returns a list of admin user IDs for the configured group.
 func (f *Frontend) GetGroupAdmins(ctx context.Context) ([]int64, error) {
-	if !f.config.Enabled {
-		return nil, errors.New("telegram frontend is disabled")
-	}
-
 	admins, err := f.bot.GetChatAdministrators(ctx, &bot.GetChatAdministratorsParams{
 		ChatID: f.config.GroupID,
 	})
@@ -927,10 +897,6 @@ func extractAdminUser(admin *models.ChatMember) *models.User {
 // AwaitAdminApproval requests approval from group administrators.
 func (f *Frontend) AwaitAdminApproval(
 	ctx context.Context, origin *chat.Message, songInfo, songURL, trackMood string, timeoutSec int) (bool, error) {
-	if !f.config.Enabled {
-		return false, errors.New("telegram frontend is disabled")
-	}
-
 	// Get group administrators
 	adminIDs, err := f.GetGroupAdmins(ctx)
 	if err != nil {
@@ -1276,10 +1242,6 @@ func (f *Frontend) isUserAdmin(userID int64, adminList []int64) bool {
 
 // IsUserAdmin implements the chat.Frontend interface to check if a user is an admin.
 func (f *Frontend) IsUserAdmin(ctx context.Context, chatID, userID string) (bool, error) {
-	if !f.config.Enabled {
-		return false, errors.New("telegram frontend is disabled")
-	}
-
 	// Parse user ID
 	userIDInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {
@@ -1308,10 +1270,6 @@ func (f *Frontend) IsUserAdmin(ctx context.Context, chatID, userID string) (bool
 
 // GetAdminUserIDs implements the chat.Frontend interface to get admin user IDs as strings.
 func (f *Frontend) GetAdminUserIDs(ctx context.Context, chatID string) ([]string, error) {
-	if !f.config.Enabled {
-		return nil, errors.New("telegram frontend is disabled")
-	}
-
 	// Parse chat ID
 	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
 	if err != nil {
@@ -1340,10 +1298,6 @@ func (f *Frontend) GetAdminUserIDs(ctx context.Context, chatID string) ([]string
 
 // SendDirectMessage implements the chat.Frontend interface to send direct messages to users.
 func (f *Frontend) SendDirectMessage(ctx context.Context, userID, message string) (string, error) {
-	if !f.config.Enabled {
-		return "", errors.New("telegram frontend is disabled")
-	}
-
 	// Parse user ID
 	userIDInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {
@@ -1617,10 +1571,6 @@ func (f *Frontend) logDiscoveryResults(groups []GroupInfo) {
 // AwaitCommunityApproval waits for enough community 👍 reactions to bypass admin approval.
 func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, requiredReactions, timeoutSec int,
 	requesterUserID int64) (bool, error) {
-	if !f.config.Enabled {
-		return false, errors.New("telegram frontend is disabled")
-	}
-
 	// If community approval is disabled (0), return false immediately
 	if f.config.CommunityApproval <= 0 || requiredReactions <= 0 {
 		return false, nil
@@ -1683,10 +1633,6 @@ func (f *Frontend) AwaitCommunityApproval(ctx context.Context, msgID string, req
 
 // SendQueueTrackApproval sends a queue track approval message with approve/deny buttons.
 func (f *Frontend) SendQueueTrackApproval(ctx context.Context, chatID, trackID, message string) (string, error) {
-	if !f.config.Enabled {
-		return "", nil
-	}
-
 	chatIDInt, err := strconv.ParseInt(chatID, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid chat ID: %w", err)
@@ -1773,10 +1719,6 @@ func (f *Frontend) EditMessage(ctx context.Context, chatID, messageID, newText s
 
 // GetMe returns information about the bot user.
 func (f *Frontend) GetMe(ctx context.Context) (*chat.User, error) {
-	if !f.config.Enabled {
-		return nil, errors.New("telegram frontend is disabled")
-	}
-
 	me, err := f.bot.GetMe(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bot user info: %w", err)
@@ -1793,10 +1735,6 @@ func (f *Frontend) GetMe(ctx context.Context) (*chat.User, error) {
 
 // GetChatMember returns information about a chat member.
 func (f *Frontend) GetChatMember(ctx context.Context, chatID, userID int64) (*chat.ChatMember, error) {
-	if !f.config.Enabled {
-		return nil, errors.New("telegram frontend is disabled")
-	}
-
 	member, err := f.bot.GetChatMember(ctx, &bot.GetChatMemberParams{
 		ChatID: chatID,
 		UserID: userID,
